@@ -1,0 +1,156 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$basePath = dirname(__DIR__);
+$app = require $basePath . '/bootstrap/app.php';
+
+use App\Core\Database;
+use App\Core\Logger;
+use App\Core\Migrator;
+use App\Core\SeederRunner;
+use App\Services\Cron\CronRunner;
+use App\Services\Finance\ChargeService;
+use App\Services\Finance\FeeStructureService;
+use App\Services\Notifications\NotificationProcessor;
+use App\Services\Notifications\NotificationQueueService;
+use Tests\TestRunner;
+
+$command = $argv[1] ?? 'help';
+$container = $app->container();
+$db = $container->get(Database::class);
+$logger = $container->get(Logger::class);
+
+try {
+    switch ($command) {
+        case 'migrate':
+            $m = new Migrator($db->pdo(), $basePath . '/database/migrations');
+            $ran = $m->migrate();
+            echo 'Migrated ' . count($ran) . " file(s).\n";
+            break;
+
+        case 'migrate:rollback':
+            $steps = (int) ($argv[2] ?? 1);
+            $m = new Migrator($db->pdo(), $basePath . '/database/migrations');
+            $rolled = $m->rollback($steps);
+            echo 'Rolled back ' . count($rolled) . " migration(s).\n";
+            break;
+
+        case 'seed':
+            (new SeederRunner($db->pdo()))->runDemo();
+            echo "Seed complete.\n";
+            break;
+
+        case 'test':
+            $_ENV['APP_ENV'] = 'testing';
+            $ok = (new TestRunner($basePath . '/tests'))->run();
+            exit($ok ? 0 : 1);
+
+        case 'cron:run':
+            cronRunner($container)->runAll();
+            echo "Cron complete.\n";
+            break;
+
+        case 'notifications:process':
+            $n = $container->get(NotificationQueueService::class)->processDue();
+            echo "Processed {$n} notification(s).\n";
+            break;
+
+        case 'charges:generate':
+            $period = (new DateTimeImmutable('first day of this month', new DateTimeZone('UTC')))->format('Y-m-d');
+            $cs = $container->get(ChargeService::class);
+            $total = 0;
+            foreach ($db->fetchAll("SELECT id FROM stokvels WHERE status = 'active'") as $s) {
+                $total += count($cs->generateRecurringCharges((int) $s['id'], $period));
+            }
+            echo "Generated {$total} charge(s).\n";
+            break;
+
+        case 'charges:overdue':
+            $cs = $container->get(ChargeService::class);
+            $total = 0;
+            foreach ($db->fetchAll("SELECT id FROM stokvels WHERE status = 'active'") as $s) {
+                $total += $cs->markOverdue((int) $s['id']);
+            }
+            echo "Marked {$total} charge(s) overdue.\n";
+            break;
+
+        case 'penalties:calculate':
+            $cs = $container->get(ChargeService::class);
+            $total = 0;
+            foreach ($db->fetchAll("SELECT id FROM stokvels WHERE status = 'active'") as $s) {
+                $total += $cs->calculatePenalties((int) $s['id']);
+            }
+            echo "Updated {$total} penalty charge(s).\n";
+            break;
+
+        case 'loans:instalments':
+        case 'loans:arrears':
+        case 'payouts:process':
+        case 'tokens:expire':
+        case 'cleanup:sessions':
+        case 'jobs:detect-failed':
+            cronRunner($container)->runTask($command, static function () use ($command, $container) {
+                cronRunner($container)->runAll();
+            });
+            echo "{$command} complete.\n";
+            break;
+
+        case 'serve':
+            $host = $argv[2] ?? '127.0.0.1';
+            $port = $argv[3] ?? '8080';
+            echo "Stovel dev server http://{$host}:{$port}\n";
+            passthru(sprintf(
+                '%s -S %s:%s -t %s/public %s/public/index.php',
+                PHP_BINARY,
+                escapeshellarg($host),
+                escapeshellarg($port),
+                escapeshellarg($basePath),
+                escapeshellarg($basePath)
+            ));
+            break;
+
+        case 'help':
+        default:
+            echo <<<HELP
+Stovel console
+
+  migrate                 Run pending migrations
+  migrate:rollback [n]    Roll back migrations
+  seed                    Run DemoSeeder
+  test                    Run test suite
+  cron:run                Run all scheduled tasks
+  notifications:process   Process notification queue
+  charges:generate        Generate recurring charges
+  charges:overdue         Mark overdue charges
+  penalties:calculate     Calculate meeting penalties
+  loans:instalments       Advance loan instalment statuses
+  loans:arrears           Mark loan arrears
+  payouts:process         Process scheduled payouts
+  tokens:expire           Purge expired reset tokens
+  cleanup:sessions        Remove stale session files
+  jobs:detect-failed      Record permanently failed jobs
+  serve [host] [port]     PHP built-in server
+
+HELP;
+            exit($command === 'help' ? 0 : 1);
+    }
+} catch (Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . PHP_EOL);
+    if (filter_var(env('APP_DEBUG', false), FILTER_VALIDATE_BOOL)) {
+        fwrite(STDERR, $e->getTraceAsString() . PHP_EOL);
+    }
+    exit(1);
+}
+
+function cronRunner(\App\Core\Container $container): CronRunner
+{
+    return new CronRunner(
+        $container->get(Database::class),
+        $container->get(Logger::class),
+        $container->get(ChargeService::class),
+        $container->get(NotificationQueueService::class),
+        (int) config('app.cron_lock_ttl', 300)
+    );
+}

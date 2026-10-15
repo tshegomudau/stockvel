@@ -1,0 +1,18 @@
+<ul class="notification-list">
+    <?php foreach ($paginator->items as $note): ?>
+        <li class="notification-item<?= empty($note['read_at']) ? ' is-unread' : '' ?>">
+            <div>
+                <strong><?= e($note['title'] ?? '') ?></strong>
+                <p><?= e($note['body'] ?? '') ?></p>
+                <small><?= e(sa_datetime($note['created_at'] ?? '')) ?></small>
+            </div>
+            <?php if (empty($note['read_at'])): ?>
+                <form method="post" action="<?= e(url('/member/notifications/' . ($note['id'] ?? '') . '/read')) ?>">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="btn btn-sm">Mark read</button>
+                </form>
+            <?php endif; ?>
+        </li>
+    <?php endforeach; ?>
+</ul>
+<?= view('partials/pagination', ['paginator' => $paginator], null) ?>

@@ -1,0 +1,135 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers\Stokvel;
+
+use App\Controllers\Controller;
+use App\Core\Paginator;
+use App\Core\Request;
+use App\Core\Response;
+use App\Core\Session;
+use App\Core\Validator;
+
+final class RuleController extends Controller
+{
+    public function index(Request $request): Response
+    {
+        $this->requirePermission('rules.manage');
+        $sid = $this->requireStokvel();
+        $page = $this->page($request);
+        $perPage = $this->perPage($request);
+        $paginator = Paginator::fromQuery(
+            $this->db(),
+            'SELECT COUNT(*) AS c FROM stokvel_rules WHERE stokvel_id = :sid',
+            'SELECT * FROM stokvel_rules WHERE stokvel_id = :sid ORDER BY created_at DESC',
+            ['sid' => $sid],
+            $page,
+            $perPage,
+            url('/app/rules')
+        );
+        return $this->render('stokvel/rules/index', [
+            'title' => 'Rules',
+            'activeNav' => 'rules',
+            'navContext' => 'app',
+            'paginator' => $paginator,
+        ]);
+    }
+
+    public function create(Request $request): Response
+    {
+        $this->requirePermission('rules.manage');
+        return $this->render('stokvel/rules/create', [
+            'title' => 'New Rule',
+            'activeNav' => 'rules',
+            'navContext' => 'app',
+        ]);
+    }
+
+    public function store(Request $request): Response
+    {
+        $this->requirePermission('rules.manage');
+        $sid = $this->requireStokvel();
+        $data = $request->all();
+        unset($data['_token'], $data['_method']);
+        $data['stokvel_id'] = $sid;
+        $data['created_at'] = now_utc();
+        $data['updated_at'] = now_utc();
+        $this->service(\App\Services\Stokvel\RuleService::class, fn ($db) => new class($db) {
+            public function __construct(private $db) {}
+            public function create(array $data): int
+            {
+                $cols = array_keys($data);
+                $ph = array_map(static fn ($c) => ':' . $c, $cols);
+                $sql = 'INSERT INTO stokvel_rules (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $ph) . ')';
+                return (int) $this->db->insert($sql, $data);
+            }
+        })->create($data);
+        Session::flash('success', 'Rule saved.');
+        return $this->redirect('/app/rules');
+    }
+
+    public function show(Request $request, string $id): Response
+    {
+        $this->requirePermission('rules.manage');
+        $sid = $this->requireStokvel();
+        $row = $this->db()->fetch('SELECT * FROM stokvel_rules WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        if (!$row) {
+            return $this->redirect('/app/rules');
+        }
+        return $this->render('stokvel/rules/show', [
+            'title' => 'Rule #' . $id,
+            'activeNav' => 'rules',
+            'navContext' => 'app',
+            'item' => $row,
+        ]);
+    }
+
+    public function edit(Request $request, string $id): Response
+    {
+        $this->requirePermission('rules.manage');
+        $sid = $this->requireStokvel();
+        $row = $this->db()->fetch('SELECT * FROM stokvel_rules WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        if (!$row) {
+            return $this->redirect('/app/rules');
+        }
+        return $this->render('stokvel/rules/edit', [
+            'title' => 'Edit Rule',
+            'activeNav' => 'rules',
+            'navContext' => 'app',
+            'item' => $row,
+        ]);
+    }
+
+    public function update(Request $request, string $id): Response
+    {
+        $this->requirePermission('rules.manage');
+        $sid = $this->requireStokvel();
+        $data = $request->all();
+        unset($data['_token'], $data['_method'], $data['stokvel_id']);
+        $data['updated_at'] = now_utc();
+        $sets = [];
+        foreach (array_keys($data) as $col) {
+            $sets[] = "{$col} = :{$col}";
+        }
+        $data['id'] = (int) $id;
+        $data['sid'] = $sid;
+        $this->db()->exec('UPDATE stokvel_rules SET ' . implode(', ', $sets) . ' WHERE id = :id AND stokvel_id = :sid', $data);
+        Session::flash('success', 'Rule updated.');
+        return $this->redirect('/app/rules/' . $id);
+    }
+
+    public function destroy(Request $request, string $id): Response
+    {
+        $this->requirePermission('rules.manage');
+        $sid = $this->requireStokvel();
+        $this->db()->exec('UPDATE stokvel_rules SET deleted_at = :da, updated_at = :ua WHERE id = :id AND stokvel_id = :sid', [
+            'da' => now_utc(),
+            'ua' => now_utc(),
+            'id' => (int) $id,
+            'sid' => $sid,
+        ]);
+        Session::flash('success', 'Rule removed.');
+        return $this->redirect('/app/rules');
+    }
+}
