@@ -22,7 +22,7 @@ return static function (TestRunner $runner): void {
             $loggedIn = $auth->login($email, 'Password123!');
             test_assert((int) $loggedIn['id'] === (int) $user['id']);
         });
-    });
+    }, 'integration');
 
     $runner->add('Password reset token flow', function (): void {
         test_transaction(function () {
@@ -43,5 +43,5 @@ return static function (TestRunner $runner): void {
             $reset->consume($token, 'NewPassword123!');
             test_assert($auth->attempt($email, 'NewPassword123!') !== null);
         });
-    });
+    }, 'integration');
 };

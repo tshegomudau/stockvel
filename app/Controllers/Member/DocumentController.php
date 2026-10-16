@@ -7,6 +7,8 @@ namespace App\Controllers\Member;
 use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Exceptions\HttpException;
+use App\Services\Documents\DocumentService;
 
 final class DocumentController extends Controller
 {
@@ -15,7 +17,9 @@ final class DocumentController extends Controller
         $this->requireAuth();
         $sid = $this->requireStokvel();
         $documents = $this->db()->fetchAll(
-            "SELECT * FROM documents WHERE stokvel_id = :sid AND deleted_at IS NULL AND visibility IN ('members','public') ORDER BY created_at DESC LIMIT 100",
+            "SELECT * FROM documents
+             WHERE stokvel_id = :sid AND status = 'active'
+             ORDER BY created_at DESC LIMIT 100",
             ['sid' => $sid]
         );
 
@@ -31,15 +35,21 @@ final class DocumentController extends Controller
     {
         $this->requireAuth();
         $sid = $this->requireStokvel();
-        $doc = $this->db()->fetch(
-            "SELECT * FROM documents WHERE id = :id AND stokvel_id = :sid AND visibility IN ('members','public') AND deleted_at IS NULL LIMIT 1",
-            ['id' => (int) $id, 'sid' => $sid]
-        );
-        if (!$doc) {
+
+        try {
+            /** @var DocumentService $documents */
+            $documents = app()->container()->get(DocumentService::class);
+            $resolved = $documents->resolveDownloadPath((int) $id, 1, $sid);
+            if (($resolved['document']['status'] ?? '') !== 'active') {
+                throw new HttpException(404, 'Document not found.');
+            }
+            return Response::download(
+                $resolved['path'],
+                (string) ($resolved['document']['title'] ?? $resolved['file_name']),
+                (string) $resolved['mime_type']
+            );
+        } catch (HttpException) {
             return $this->redirect('/member/documents');
         }
-
-        $path = app()->basePath('storage/documents/' . ($doc['stored_path'] ?? ''));
-        return \App\Core\Response::download($path, (string) ($doc['title'] ?? 'document'), (string) ($doc['mime_type'] ?? 'application/octet-stream'));
     }
 }

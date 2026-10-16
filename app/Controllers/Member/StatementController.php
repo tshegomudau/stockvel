@@ -24,10 +24,26 @@ final class StatementController extends Controller
             return $this->redirect('/member');
         }
 
-        $lines = $this->db()->fetchAll(
-            'SELECT * FROM member_ledger_entries WHERE stokvel_id = :sid AND member_id = :mid ORDER BY entry_date DESC LIMIT 200',
-            ['sid' => $sid, 'mid' => $membership['id']]
+        $membershipId = (int) $membership['id'];
+        $charges = $this->db()->fetchAll(
+            "SELECT due_date AS entry_date, description, amount, 'charge' AS entry_type, charge_code AS reference
+             FROM member_charges
+             WHERE stokvel_id = :sid AND membership_id = :mid
+             ORDER BY due_date DESC, id DESC LIMIT 100",
+            ['sid' => $sid, 'mid' => $membershipId]
         );
+        $payments = $this->db()->fetchAll(
+            "SELECT paid_at AS entry_date, CONCAT('Payment ', COALESCE(payment_method, '')) AS description,
+                    amount, 'payment' AS entry_type, COALESCE(transaction_ref, CAST(id AS CHAR)) AS reference
+             FROM payment_transactions
+             WHERE stokvel_id = :sid AND membership_id = :mid
+               AND status IN ('posted','completed','allocated','confirmed')
+             ORDER BY paid_at DESC, id DESC LIMIT 100",
+            ['sid' => $sid, 'mid' => $membershipId]
+        );
+        $lines = array_merge($charges, $payments);
+        usort($lines, static fn (array $a, array $b): int => strcmp((string) ($b['entry_date'] ?? ''), (string) ($a['entry_date'] ?? '')));
+        $lines = array_slice($lines, 0, 200);
 
         $layout = $request->query('print') ? 'layouts/print' : 'layouts/app';
 

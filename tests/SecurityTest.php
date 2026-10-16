@@ -31,7 +31,7 @@ return static function (TestRunner $runner): void {
         test_transaction(function () {
             $db = test_db();
             $row = $db->fetch('SELECT id FROM users WHERE email = :email LIMIT 1', [
-                'email' => "admin@stovel.local' OR '1'='1",
+                'email' => "admin@stockvel.local' OR '1'='1",
             ]);
             test_assert($row === null);
         });

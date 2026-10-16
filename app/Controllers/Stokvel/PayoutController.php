@@ -10,6 +10,8 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
+use App\Exceptions\FinanceException;
+use App\Services\Payouts\PayoutService;
 
 final class PayoutController extends Controller
 {
@@ -21,8 +23,8 @@ final class PayoutController extends Controller
         $perPage = $this->perPage($request);
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM payouts WHERE stokvel_id = :sid',
-            'SELECT * FROM payouts WHERE stokvel_id = :sid ORDER BY created_at DESC',
+            'SELECT COUNT(*) AS c FROM payout_cycles WHERE stokvel_id = :sid',
+            'SELECT * FROM payout_cycles WHERE stokvel_id = :sid ORDER BY created_at DESC',
             ['sid' => $sid],
             $page,
             $perPage,
@@ -39,10 +41,20 @@ final class PayoutController extends Controller
     public function create(Request $request): Response
     {
         $this->requirePermission('payouts.manage');
+        $sid = $this->requireStokvel();
+        $members = $this->db()->fetchAll(
+            'SELECT sm.id, p.first_name, p.last_name FROM memberships sm
+             JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             WHERE sm.stokvel_id = :sid AND sm.status = :st
+             ORDER BY p.last_name, p.first_name',
+            ['sid' => $sid, 'st' => 'active']
+        );
         return $this->render('stokvel/payouts/create', [
             'title' => 'New Payout',
             'activeNav' => 'payouts',
             'navContext' => 'app',
+            'members' => $members,
         ]);
     }
 
@@ -50,22 +62,48 @@ final class PayoutController extends Controller
     {
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method']);
-        $data['stokvel_id'] = $sid;
-        $data['created_at'] = now_utc();
-        $data['updated_at'] = now_utc();
-        $this->service(\App\Services\Stokvel\PayoutService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function create(array $data): int
-            {
-                $cols = array_keys($data);
-                $ph = array_map(static fn ($c) => ':' . $c, $cols);
-                $sql = 'INSERT INTO payouts (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $ph) . ')';
-                return (int) $this->db->insert($sql, $data);
-            }
-        })->create($data);
-        Session::flash('success', 'Payout saved.');
+        $data = [
+            'name' => trim((string) $request->input('name', 'Payout cycle')),
+            'member_id' => (int) $request->input('member_id', 0),
+            'amount' => (string) $request->input('amount', ''),
+            'scheduled_at' => (string) $request->input('scheduled_at', date('Y-m-d')),
+        ];
+        $validator = Validator::make($data, [
+            'name' => 'required|string',
+            'member_id' => 'required|integer',
+            'amount' => 'required|numeric',
+            'scheduled_at' => 'required|date',
+        ]);
+        if ($validator->fails() || $data['member_id'] < 1) {
+            $this->flashOld($request);
+            Session::flash('error', 'Invalid payout details.');
+            return $this->redirect('/app/payouts/create');
+        }
+
+        try {
+            /** @var PayoutService $payouts */
+            $payouts = app()->container()->get(PayoutService::class);
+            $cycleId = $payouts->createRotationCycle(
+                $sid,
+                $data['name'],
+                $data['scheduled_at'],
+                null,
+                (int) $this->userId()
+            );
+            $payouts->scheduleMemberPayout(
+                $sid,
+                $cycleId,
+                $data['member_id'],
+                $data['amount'],
+                $data['scheduled_at']
+            );
+        } catch (FinanceException $e) {
+            $this->flashOld($request);
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/payouts/create');
+        }
+
+        Session::flash('success', 'Payout cycle saved.');
         return $this->redirect('/app/payouts');
     }
 
@@ -73,15 +111,28 @@ final class PayoutController extends Controller
     {
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch('SELECT * FROM payouts WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        $row = $this->db()->fetch(
+            'SELECT * FROM payout_cycles WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         if (!$row) {
             return $this->redirect('/app/payouts');
         }
+        $schedule = $this->db()->fetchAll(
+            'SELECT ps.*, p.first_name, p.last_name FROM payout_schedule ps
+             INNER JOIN memberships m ON m.id = ps.membership_id
+             INNER JOIN users u ON u.id = m.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             WHERE ps.stokvel_id = :sid AND ps.payout_cycle_id = :cid
+             ORDER BY ps.sequence_number ASC',
+            ['sid' => $sid, 'cid' => (int) $id]
+        );
         return $this->render('stokvel/payouts/show', [
-            'title' => 'Payout #' . $id,
+            'title' => 'Payout cycle #' . $id,
             'activeNav' => 'payouts',
             'navContext' => 'app',
             'item' => $row,
+            'schedule' => $schedule,
         ]);
     }
 
@@ -89,12 +140,15 @@ final class PayoutController extends Controller
     {
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch('SELECT * FROM payouts WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        $row = $this->db()->fetch(
+            'SELECT * FROM payout_cycles WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         if (!$row) {
             return $this->redirect('/app/payouts');
         }
         return $this->render('stokvel/payouts/edit', [
-            'title' => 'Edit Payout',
+            'title' => 'Edit Payout cycle',
             'activeNav' => 'payouts',
             'navContext' => 'app',
             'item' => $row,
@@ -105,17 +159,24 @@ final class PayoutController extends Controller
     {
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method'], $data['stokvel_id']);
-        $data['updated_at'] = now_utc();
-        $sets = [];
-        foreach (array_keys($data) as $col) {
-            $sets[] = "{$col} = :{$col}";
+        $name = trim((string) $request->input('name', ''));
+        $amount = $request->input('payout_amount');
+        if ($name === '') {
+            Session::flash('error', 'Name is required.');
+            return $this->redirect('/app/payouts/' . $id . '/edit');
         }
-        $data['id'] = (int) $id;
-        $data['sid'] = $sid;
-        $this->db()->exec('UPDATE payouts SET ' . implode(', ', $sets) . ' WHERE id = :id AND stokvel_id = :sid', $data);
-        Session::flash('success', 'Payout updated.');
+        $this->db()->exec(
+            'UPDATE payout_cycles SET name = :name, payout_amount = :amount, updated_at = :ua
+             WHERE id = :id AND stokvel_id = :sid',
+            [
+                'name' => $name,
+                'amount' => $amount !== null && $amount !== '' ? $amount : null,
+                'ua' => now_utc(),
+                'id' => (int) $id,
+                'sid' => $sid,
+            ]
+        );
+        Session::flash('success', 'Payout cycle updated.');
         return $this->redirect('/app/payouts/' . $id);
     }
 
@@ -123,13 +184,11 @@ final class PayoutController extends Controller
     {
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
-        $this->db()->exec('UPDATE payouts SET deleted_at = :da, updated_at = :ua WHERE id = :id AND stokvel_id = :sid', [
-            'da' => now_utc(),
-            'ua' => now_utc(),
-            'id' => (int) $id,
-            'sid' => $sid,
-        ]);
-        Session::flash('success', 'Payout removed.');
+        $this->db()->exec(
+            'UPDATE payout_cycles SET status = :status, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+            ['status' => 'cancelled', 'ua' => now_utc(), 'id' => (int) $id, 'sid' => $sid]
+        );
+        Session::flash('success', 'Payout cycle cancelled.');
         return $this->redirect('/app/payouts');
     }
 }

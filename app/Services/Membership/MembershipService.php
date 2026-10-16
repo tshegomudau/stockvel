@@ -46,32 +46,43 @@ final class MembershipService
             throw new HttpException(422, 'You are already linked to this stokvel.');
         }
 
-        return $this->db->transaction(function () use ($invitation, $userId) {
-            $membershipId = $this->memberships->insert([
-                'user_id' => $userId,
-                'member_number' => $this->memberships->nextMemberNumber(),
-                'status' => 'active',
-                'joined_at' => now_utc(),
-                'approved_at' => now_utc(),
-            ]);
+        $stokvelId = (int) $invitation['stokvel_id'];
+        $previousStokvel = $this->tenant->stokvel();
+        $previousMembership = $this->tenant->membership();
+        $previousPermissions = $this->tenant->permissions();
+        $this->tenant->setTenant(['id' => $stokvelId]);
 
-            if (!empty($invitation['role_id'])) {
-                $this->assignRole((int) $membershipId, (int) $invitation['role_id'], (int) $invitation['invited_by_user_id']);
-            }
+        try {
+            return $this->db->transaction(function () use ($invitation, $userId, $stokvelId) {
+                $membershipId = $this->memberships->insert([
+                    'stokvel_id' => $stokvelId,
+                    'user_id' => $userId,
+                    'member_number' => $this->memberships->nextMemberNumber(),
+                    'status' => 'active',
+                    'joined_at' => now_utc(),
+                    'approved_at' => now_utc(),
+                ]);
 
-            $this->transition($membershipId, null, 'active', (int) $invitation['invited_by_user_id'], 'Invitation accepted');
-            $this->memberships->updateInvitation((int) $invitation['id'], [
-                'status' => 'accepted',
-                'accepted_at' => now_utc(),
-            ]);
+                if (!empty($invitation['role_id'])) {
+                    $this->assignRole((int) $membershipId, (int) $invitation['role_id'], (int) $invitation['invited_by_user_id']);
+                }
 
-            $membership = $this->memberships->findById($membershipId);
-            $this->audit->log('membership.accepted', 'membership', $membershipId, metadata: [
-                'invitation_id' => (int) $invitation['id'],
-            ]);
+                $this->transition($membershipId, null, 'active', (int) $invitation['invited_by_user_id'], 'Invitation accepted');
+                $this->memberships->updateInvitation((int) $invitation['id'], [
+                    'status' => 'accepted',
+                    'accepted_at' => now_utc(),
+                ]);
 
-            return $membership ?? [];
-        });
+                $membership = $this->memberships->findById($membershipId);
+                $this->audit->log('membership.accepted', 'membership', $membershipId, metadata: [
+                    'invitation_id' => (int) $invitation['id'],
+                ]);
+
+                return $membership ?? [];
+            });
+        } finally {
+            $this->tenant->setTenant($previousStokvel, $previousMembership, $previousPermissions);
+        }
     }
 
     public function reject(string $token, int $userId): void
@@ -81,10 +92,19 @@ final class MembershipService
             throw new HttpException(404, 'Invitation not found.');
         }
 
-        $this->memberships->updateInvitation((int) $invitation['id'], [
-            'status' => 'rejected',
-            'rejected_at' => now_utc(),
-        ]);
+        $previousStokvel = $this->tenant->stokvel();
+        $previousMembership = $this->tenant->membership();
+        $previousPermissions = $this->tenant->permissions();
+        $this->tenant->setTenant(['id' => (int) $invitation['stokvel_id']]);
+
+        try {
+            $this->memberships->updateInvitation((int) $invitation['id'], [
+                'status' => 'rejected',
+                'rejected_at' => now_utc(),
+            ]);
+        } finally {
+            $this->tenant->setTenant($previousStokvel, $previousMembership, $previousPermissions);
+        }
 
         $this->audit->log('membership.invitation_rejected', 'invitation', (int) $invitation['id'], metadata: [
             'user_id' => $userId,

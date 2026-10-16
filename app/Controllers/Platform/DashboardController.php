@@ -18,20 +18,14 @@ final class DashboardController extends Controller
         }
 
         $db = $this->db();
-        $failedJobs = 0;
-        try {
-            $failedJobs = (int) ($db->fetch(
-                "SELECT COUNT(*) AS c FROM notification_jobs WHERE status = 'failed'"
-            )['c'] ?? 0);
-        } catch (\Throwable) {
-            $failedJobs = 0;
-        }
         $metrics = [
             'stokvels' => (int) ($db->fetch('SELECT COUNT(*) AS c FROM stokvels')['c'] ?? 0),
             'users' => (int) ($db->fetch('SELECT COUNT(*) AS c FROM users')['c'] ?? 0),
             'active_stokvels' => (int) ($db->fetch("SELECT COUNT(*) AS c FROM stokvels WHERE status = 'active'")['c'] ?? 0),
             'suspended_stokvels' => (int) ($db->fetch("SELECT COUNT(*) AS c FROM stokvels WHERE status = 'suspended'")['c'] ?? 0),
-            'failed_jobs' => $failedJobs,
+            'failed_jobs' => (int) ($db->fetch(
+                "SELECT COUNT(*) AS c FROM notification_jobs WHERE status IN ('failed', 'dead')"
+            )['c'] ?? 0),
             'security_events' => (int) ($db->fetch(
                 "SELECT COUNT(*) AS c FROM audit_logs WHERE action LIKE 'auth.%' OR action LIKE 'security.%'"
             )['c'] ?? 0),

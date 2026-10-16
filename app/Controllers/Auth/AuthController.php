@@ -106,28 +106,11 @@ final class AuthController extends Controller
             return $this->redirect('/register');
         }
 
-        $registration = $this->service(\App\Services\Auth\RegistrationService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function register(array $data): int
-            {
-                $hash = password_hash($data['password'], PASSWORD_ARGON2ID);
-                return (int) $this->db->insert(
-                    'INSERT INTO users (first_name, last_name, email, mobile, password_hash, created_at, updated_at) VALUES (:fn, :ln, :email, :mobile, :ph, :ca, :ua)',
-                    [
-                        'fn' => $data['first_name'],
-                        'ln' => $data['last_name'],
-                        'email' => $data['email'],
-                        'mobile' => $data['mobile'] ?: null,
-                        'ph' => $hash,
-                        'ca' => now_utc(),
-                        'ua' => now_utc(),
-                    ]
-                );
-            }
-        });
-
         try {
-            $userId = $registration->register($data);
+            /** @var \App\Services\Auth\AuthService $auth */
+            $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
+            $user = $auth->register($data);
+            $userId = (int) $user['id'];
         } catch (\Throwable) {
             $this->flashOld($request);
             Session::flash('error', 'An account with this email may already exist.');
@@ -142,8 +125,9 @@ final class AuthController extends Controller
 
     public function logout(Request $request): Response
     {
-        Session::destroy();
-        Session::start();
+        /** @var \App\Services\Auth\AuthService $auth */
+        $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
+        $auth->logout();
         Session::flash('success', 'You have been signed out.');
         return $this->redirect('/login');
     }

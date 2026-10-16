@@ -43,10 +43,33 @@ final class ProfileController extends Controller
             return $this->redirect('/member/profile');
         }
 
+        $now = now_utc();
         $this->db()->exec(
-            'UPDATE users SET first_name = :fn, last_name = :ln, mobile = :mobile, updated_at = :ua WHERE id = :id',
-            ['fn' => $data['first_name'], 'ln' => $data['last_name'], 'mobile' => $data['mobile'] ?: null, 'ua' => now_utc(), 'id' => $userId]
+            'UPDATE users SET mobile = :mobile, updated_at = :ua WHERE id = :id',
+            ['mobile' => $data['mobile'] ?: null, 'ua' => $now, 'id' => $userId]
         );
+        $profile = $this->db()->fetch(
+            'SELECT id FROM user_profiles WHERE user_id = :id LIMIT 1',
+            ['id' => $userId]
+        );
+        if ($profile) {
+            $this->db()->exec(
+                'UPDATE user_profiles SET first_name = :fn, last_name = :ln, updated_at = :ua WHERE user_id = :id',
+                ['fn' => $data['first_name'], 'ln' => $data['last_name'], 'ua' => $now, 'id' => $userId]
+            );
+        } else {
+            $this->db()->insert(
+                'INSERT INTO user_profiles (user_id, first_name, last_name, created_at, updated_at)
+                 VALUES (:id, :fn, :ln, :ca, :ua)',
+                [
+                    'id' => $userId,
+                    'fn' => $data['first_name'],
+                    'ln' => $data['last_name'],
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+        }
 
         Session::flash('success', 'Profile updated.');
         return $this->redirect('/member/profile');

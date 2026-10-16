@@ -12,13 +12,13 @@ use App\Support\MoneyMath;
 
 final class LoanService
 {
-    public const REGULATORY_WARNING = 'Stovel loan features are administrative tools for member-based savings groups. '
+    public const REGULATORY_WARNING = 'stockvel loan features are administrative tools for member-based savings groups. '
         . 'They do not constitute regulated credit provision under the National Credit Act unless your organisation '
         . 'is appropriately registered and compliant. Seek independent legal advice before offering credit to members.';
 
-    public const STATUS_APPLIED = 'applied';
-    public const STATUS_COMMITTEE_APPROVED = 'committee_approved';
-    public const STATUS_COMMITTEE_REJECTED = 'committee_rejected';
+    public const STATUS_APPLIED = 'submitted';
+    public const STATUS_COMMITTEE_APPROVED = 'approved';
+    public const STATUS_COMMITTEE_REJECTED = 'rejected';
     public const STATUS_DISBURSED = 'disbursed';
     public const STATUS_ACTIVE = 'active';
     public const STATUS_SETTLED = 'settled';
@@ -45,7 +45,7 @@ final class LoanService
         ?array $guarantorMemberIds = null
     ): int {
         $product = $this->products->get($stokvelId, $loanProductId);
-        if ($product === null || (int) $product['is_active'] !== 1) {
+        if ($product === null || (int) ($product['is_active'] ?? 0) !== 1) {
             throw new FinanceException('Loan product not found or inactive.');
         }
 
@@ -53,74 +53,75 @@ final class LoanService
         if (MoneyMath::comp($amount, (string) $product['min_amount']) < 0 || MoneyMath::comp($amount, (string) $product['max_amount']) > 0) {
             throw new FinanceException('Requested amount is outside product limits.');
         }
-        if ($termMonths < (int) $product['min_term_months'] || $termMonths > (int) $product['max_term_months']) {
+
+        $maxTerm = (int) ($product['max_term_months'] ?? $product['min_term_months'] ?? 0);
+        if ($termMonths < 1 || ($maxTerm > 0 && $termMonths > $maxTerm)) {
             throw new FinanceException('Requested term is outside product limits.');
         }
 
         $member = $this->db->fetch(
-            'SELECT id FROM members WHERE id = :id AND stokvel_id = :stokvel_id AND status = :status',
+            'SELECT id FROM memberships WHERE id = :id AND stokvel_id = :stokvel_id AND status = :status',
             ['id' => $memberId, 'stokvel_id' => $stokvelId, 'status' => 'active']
         );
         if ($member === null) {
             throw new FinanceException('Member not found or inactive.');
         }
 
-        if ((int) $product['requires_guarantors'] === 1) {
+        $requiresGuarantors = (int) ($product['requires_guarantors'] ?? $product['requires_guarantor'] ?? 0);
+        $minGuarantors = (int) ($product['min_guarantors'] ?? ($requiresGuarantors ? 1 : 0));
+        if ($requiresGuarantors === 1) {
             $guarantorMemberIds = $guarantorMemberIds ?? [];
-            if (count($guarantorMemberIds) < (int) $product['min_guarantors']) {
+            if (count($guarantorMemberIds) < $minGuarantors) {
                 throw new FinanceException('Insufficient guarantors for this loan product.');
             }
         }
 
         $now = now_utc();
-        $loanId = (int) $this->db->insert(
-            'INSERT INTO loans
-                (stokvel_id, member_id, loan_product_id, requested_amount, approved_amount, term_months,
-                 annual_interest_rate_percent, amortization_method, instalment_fee, penalty_rate_percent,
-                 status, purpose, applied_by, applied_at, outstanding_principal, outstanding_interest,
-                 outstanding_fees, outstanding_penalties, in_arrears, created_at, updated_at)
+        $applicationId = (int) $this->db->insert(
+            'INSERT INTO loan_applications
+                (stokvel_id, membership_id, loan_product_id, application_ref, requested_amount, term_months,
+                 purpose, status, submitted_at, created_at, updated_at)
              VALUES
-                (:stokvel_id, :member_id, :loan_product_id, :requested_amount, NULL, :term_months,
-                 :annual_interest_rate_percent, :amortization_method, :instalment_fee, :penalty_rate_percent,
-                 :status, :purpose, :applied_by, :applied_at, :outstanding_principal, :outstanding_interest,
-                 :outstanding_fees, :outstanding_penalties, 0, :created_at, :updated_at)',
+                (:stokvel_id, :membership_id, :loan_product_id, :application_ref, :requested_amount, :term_months,
+                 :purpose, :status, :submitted_at, :created_at, :updated_at)',
             [
                 'stokvel_id' => $stokvelId,
-                'member_id' => $memberId,
+                'membership_id' => $memberId,
                 'loan_product_id' => $loanProductId,
+                'application_ref' => $this->nextApplicationRef($stokvelId),
                 'requested_amount' => $amount,
                 'term_months' => $termMonths,
-                'annual_interest_rate_percent' => (string) $product['annual_interest_rate_percent'],
-                'amortization_method' => (string) $product['amortization_method'],
-                'instalment_fee' => (string) $product['instalment_fee'],
-                'penalty_rate_percent' => (string) $product['penalty_rate_percent'],
-                'status' => self::STATUS_APPLIED,
                 'purpose' => $purpose,
-                'applied_by' => $appliedBy,
-                'applied_at' => $now,
-                'outstanding_principal' => '0.00',
-                'outstanding_interest' => '0.00',
-                'outstanding_fees' => '0.00',
-                'outstanding_penalties' => '0.00',
+                'status' => self::STATUS_APPLIED,
+                'submitted_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]
         );
 
-        foreach ($guarantorMemberIds ?? [] as $guarantorId) {
-            $this->db->insert(
-                'INSERT INTO loan_guarantors (stokvel_id, loan_id, member_id, created_at)
-                 VALUES (:stokvel_id, :loan_id, :member_id, :created_at)',
-                [
-                    'stokvel_id' => $stokvelId,
-                    'loan_id' => $loanId,
-                    'member_id' => (int) $guarantorId,
-                    'created_at' => $now,
-                ]
-            );
+        $guarantorMemberIds = $guarantorMemberIds ?? [];
+        if ($guarantorMemberIds !== []) {
+            $each = MoneyMath::div($amount, (string) count($guarantorMemberIds));
+            foreach ($guarantorMemberIds as $guarantorId) {
+                $this->db->insert(
+                    'INSERT INTO loan_guarantors
+                        (stokvel_id, loan_application_id, guarantor_membership_id, guaranteed_amount, status, created_at, updated_at)
+                     VALUES
+                        (:stokvel_id, :loan_application_id, :guarantor_membership_id, :guaranteed_amount, :status, :created_at, :updated_at)',
+                    [
+                        'stokvel_id' => $stokvelId,
+                        'loan_application_id' => $applicationId,
+                        'guarantor_membership_id' => (int) $guarantorId,
+                        'guaranteed_amount' => $each,
+                        'status' => 'pending',
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
+            }
         }
 
-        return $loanId;
+        return $applicationId;
     }
 
     public function committeeApprove(
@@ -130,22 +131,25 @@ final class LoanService
         ?string $approvedAmount = null,
         ?string $committeeNotes = null
     ): void {
-        $loan = $this->lockLoan($stokvelId, $loanId);
-        if ($loan['status'] !== self::STATUS_APPLIED) {
+        $application = $this->lockApplication($stokvelId, $loanId);
+        if ($application['status'] !== self::STATUS_APPLIED) {
             throw new FinanceException('Only applied loans can be committee-approved.');
         }
 
-        $amount = MoneyMath::normalize($approvedAmount ?? (string) $loan['requested_amount']);
+        $amount = MoneyMath::normalize($approvedAmount ?? (string) $application['requested_amount']);
+        if (MoneyMath::comp($amount, (string) $application['requested_amount']) > 0) {
+            throw new FinanceException('Approved amount cannot exceed requested amount.');
+        }
+
         $this->db->exec(
-            'UPDATE loans SET status = :status, approved_amount = :approved_amount, committee_approved_by = :approved_by,
-             committee_approved_at = :approved_at, committee_notes = :notes, updated_at = :updated_at
+            'UPDATE loan_applications SET status = :status, decided_at = :decided_at, decided_by_user_id = :decided_by_user_id,
+             decision_notes = :decision_notes, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
                 'status' => self::STATUS_COMMITTEE_APPROVED,
-                'approved_amount' => $amount,
-                'approved_by' => $committeeMemberId,
-                'approved_at' => now_utc(),
-                'notes' => $committeeNotes,
+                'decided_at' => now_utc(),
+                'decided_by_user_id' => $committeeMemberId,
+                'decision_notes' => $committeeNotes,
                 'updated_at' => now_utc(),
                 'id' => $loanId,
                 'stokvel_id' => $stokvelId,
@@ -155,20 +159,20 @@ final class LoanService
 
     public function committeeReject(int $stokvelId, int $loanId, int $committeeMemberId, string $reason): void
     {
-        $loan = $this->lockLoan($stokvelId, $loanId);
-        if ($loan['status'] !== self::STATUS_APPLIED) {
+        $application = $this->lockApplication($stokvelId, $loanId);
+        if ($application['status'] !== self::STATUS_APPLIED) {
             throw new FinanceException('Only applied loans can be committee-rejected.');
         }
 
         $this->db->exec(
-            'UPDATE loans SET status = :status, committee_rejected_by = :rejected_by, committee_rejected_at = :rejected_at,
-             committee_rejection_reason = :reason, updated_at = :updated_at
+            'UPDATE loan_applications SET status = :status, decided_at = :decided_at, decided_by_user_id = :decided_by_user_id,
+             decision_notes = :decision_notes, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
                 'status' => self::STATUS_COMMITTEE_REJECTED,
-                'rejected_by' => $committeeMemberId,
-                'rejected_at' => now_utc(),
-                'reason' => $reason,
+                'decided_at' => now_utc(),
+                'decided_by_user_id' => $committeeMemberId,
+                'decision_notes' => $reason,
                 'updated_at' => now_utc(),
                 'id' => $loanId,
                 'stokvel_id' => $stokvelId,
@@ -179,23 +183,65 @@ final class LoanService
     public function disburse(int $stokvelId, int $loanId, int $disbursedBy, ?string $disbursementDate = null): void
     {
         $this->db->transaction(function () use ($stokvelId, $loanId, $disbursedBy, $disbursementDate): void {
-            $loan = $this->lockLoan($stokvelId, $loanId);
-            if ($loan['status'] !== self::STATUS_COMMITTEE_APPROVED) {
+            $application = $this->lockApplication($stokvelId, $loanId);
+            if ($application['status'] !== self::STATUS_COMMITTEE_APPROVED) {
                 throw new FinanceException('Loan must be committee-approved before disbursement.');
             }
 
-            $amount = MoneyMath::normalize((string) $loan['approved_amount']);
+            $existingLoan = $this->db->fetch(
+                'SELECT id FROM loans WHERE loan_application_id = :application_id AND stokvel_id = :stokvel_id LIMIT 1',
+                ['application_id' => $loanId, 'stokvel_id' => $stokvelId]
+            );
+            if ($existingLoan !== null) {
+                throw new FinanceException('Loan already disbursed for this application.');
+            }
+
+            $product = $this->products->get($stokvelId, (int) $application['loan_product_id']);
+            if ($product === null) {
+                throw new FinanceException('Loan product not found.');
+            }
+
+            $amount = MoneyMath::normalize((string) $application['requested_amount']);
+            $rate = MoneyMath::normalize((string) ($product['interest_rate_percent'] ?? $product['annual_interest_rate_percent'] ?? '0'));
             $disbursementDate = $disbursementDate ?? (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d');
+            $now = now_utc();
+
+            $loanRecordId = (int) $this->db->insert(
+                'INSERT INTO loans
+                    (stokvel_id, loan_application_id, membership_id, loan_product_id, loan_ref, principal_amount,
+                     interest_rate_percent, term_months, status, disbursed_at, disbursed_amount, outstanding_balance,
+                     created_at, updated_at)
+                 VALUES
+                    (:stokvel_id, :loan_application_id, :membership_id, :loan_product_id, :loan_ref, :principal_amount,
+                     :interest_rate_percent, :term_months, :status, :disbursed_at, :disbursed_amount, :outstanding_balance,
+                     :created_at, :updated_at)',
+                [
+                    'stokvel_id' => $stokvelId,
+                    'loan_application_id' => $loanId,
+                    'membership_id' => (int) $application['membership_id'],
+                    'loan_product_id' => (int) $application['loan_product_id'],
+                    'loan_ref' => $this->nextLoanRef($stokvelId),
+                    'principal_amount' => $amount,
+                    'interest_rate_percent' => $rate,
+                    'term_months' => (int) $application['term_months'],
+                    'status' => self::STATUS_ACTIVE,
+                    'disbursed_at' => $now,
+                    'disbursed_amount' => $amount,
+                    'outstanding_balance' => $amount,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]
+            );
 
             $schedule = $this->calculator->buildSchedule(
                 $amount,
-                (string) $loan['annual_interest_rate_percent'],
-                (int) $loan['term_months'],
-                (string) $loan['amortization_method'],
+                $rate,
+                (int) $application['term_months'],
+                $this->resolveAmortizationMethod($product),
                 (new \DateTimeImmutable($disbursementDate))->modify('+1 month')->format('Y-m-d'),
-                (string) $loan['instalment_fee']
+                '0.00'
             );
-            $this->persistSchedule($stokvelId, $loanId, $schedule);
+            $this->persistSchedule($stokvelId, $loanRecordId, $schedule);
 
             $bank = $this->chartOfAccounts->requireBySubType($stokvelId, 'bank');
             $loanReceivable = $this->chartOfAccounts->requireBySubType($stokvelId, 'loan_receivable');
@@ -204,8 +250,8 @@ final class LoanService
                 $stokvelId,
                 $disbursedBy,
                 $disbursementDate,
-                'LOAN-DISB-' . $loanId,
-                'Loan disbursement #' . $loanId
+                'LOAN-DISB-' . $loanRecordId,
+                'Loan disbursement #' . $loanRecordId
             );
             $this->ledger->addLine(
                 $stokvelId,
@@ -213,7 +259,7 @@ final class LoanService
                 (int) $loanReceivable['id'],
                 $amount,
                 '0.00',
-                (int) $loan['member_id'],
+                (int) $application['membership_id'],
                 'Loan principal disbursed'
             );
             $this->ledger->addLine(
@@ -225,31 +271,19 @@ final class LoanService
                 null,
                 'Bank outflow'
             );
-            $this->ledger->post($stokvelId, $journalId, $disbursedBy);
-
-            $this->db->exec(
-                'UPDATE loans SET status = :status, disbursed_amount = :amount, disbursed_by = :disbursed_by,
-                 disbursed_at = :disbursed_at, disbursement_journal_entry_id = :journal_id,
-                 outstanding_principal = :outstanding_principal, updated_at = :updated_at
-                 WHERE id = :id AND stokvel_id = :stokvel_id',
-                [
-                    'status' => self::STATUS_ACTIVE,
-                    'amount' => $amount,
-                    'disbursed_by' => $disbursedBy,
-                    'disbursed_at' => now_utc(),
-                    'journal_id' => $journalId,
-                    'outstanding_principal' => $amount,
-                    'updated_at' => now_utc(),
-                    'id' => $loanId,
-                    'stokvel_id' => $stokvelId,
-                ]
-            );
+            $this->ledger->post($stokvelId, $journalId, $disbursedBy, true);
         });
     }
 
-    public function repay(int $stokvelId, int $loanId, string $amount, int $recordedBy, ?string $paidAt = null): array
-    {
-        return $this->db->transaction(function () use ($stokvelId, $loanId, $amount, $recordedBy, $paidAt): array {
+    public function repay(
+        int $stokvelId,
+        int $loanId,
+        string $amount,
+        int $recordedBy,
+        ?string $paidAt = null,
+        string $paymentMethod = 'cash'
+    ): array {
+        return $this->db->transaction(function () use ($stokvelId, $loanId, $amount, $recordedBy, $paidAt, $paymentMethod): array {
             $loan = $this->lockLoan($stokvelId, $loanId);
             if (!in_array($loan['status'], [self::STATUS_ACTIVE, self::STATUS_DISBURSED], true)) {
                 throw new FinanceException('Loan is not active.');
@@ -266,8 +300,6 @@ final class LoanService
             $bank = $this->chartOfAccounts->requireBySubType($stokvelId, 'bank');
             $loanReceivable = $this->chartOfAccounts->requireBySubType($stokvelId, 'loan_receivable');
             $interestIncome = $this->chartOfAccounts->requireBySubType($stokvelId, 'interest');
-            $penaltyIncome = $this->chartOfAccounts->requireBySubType($stokvelId, 'penalties');
-            $otherIncome = $this->chartOfAccounts->requireBySubType($stokvelId, 'other_income');
 
             $journalId = $this->ledger->createDraft(
                 $stokvelId,
@@ -284,7 +316,7 @@ final class LoanService
                     (int) $loanReceivable['id'],
                     '0.00',
                     $allocation['principal'],
-                    (int) $loan['member_id'],
+                    (int) $loan['membership_id'],
                     'Principal repayment'
                 );
             }
@@ -295,62 +327,24 @@ final class LoanService
                     (int) $interestIncome['id'],
                     '0.00',
                     $allocation['interest'],
-                    (int) $loan['member_id'],
+                    (int) $loan['membership_id'],
                     'Interest repayment'
                 );
             }
-            if (MoneyMath::isPositive($allocation['penalty'])) {
-                $this->ledger->addLine(
-                    $stokvelId,
-                    $journalId,
-                    (int) $penaltyIncome['id'],
-                    '0.00',
-                    $allocation['penalty'],
-                    (int) $loan['member_id'],
-                    'Penalty repayment'
-                );
-            }
-            if (MoneyMath::isPositive($allocation['fee'])) {
-                $this->ledger->addLine(
-                    $stokvelId,
-                    $journalId,
-                    (int) $otherIncome['id'],
-                    '0.00',
-                    $allocation['fee'],
-                    (int) $loan['member_id'],
-                    'Fee repayment'
-                );
-            }
+            $this->ledger->post($stokvelId, $journalId, $recordedBy, true);
 
-            $this->ledger->post($stokvelId, $journalId, $recordedBy);
-
-            $newPrincipal = MoneyMath::sub((string) $loan['outstanding_principal'], $allocation['principal']);
-            $newInterest = MoneyMath::sub((string) $loan['outstanding_interest'], $allocation['interest']);
-            $newFees = MoneyMath::sub((string) $loan['outstanding_fees'], $allocation['fee']);
-            $newPenalties = MoneyMath::sub((string) $loan['outstanding_penalties'], $allocation['penalty']);
-
-            $status = self::STATUS_ACTIVE;
-            if (
-                MoneyMath::isZero($newPrincipal)
-                && MoneyMath::isZero($newInterest)
-                && MoneyMath::isZero($newFees)
-                && MoneyMath::isZero($newPenalties)
-            ) {
-                $status = self::STATUS_SETTLED;
-            }
+            $newBalance = MoneyMath::max(
+                MoneyMath::sub(MoneyMath::normalize((string) $loan['outstanding_balance']), $amount),
+                '0.00'
+            );
+            $status = MoneyMath::isZero($newBalance) ? self::STATUS_SETTLED : self::STATUS_ACTIVE;
 
             $this->db->exec(
-                'UPDATE loans SET outstanding_principal = :principal, outstanding_interest = :interest,
-                 outstanding_fees = :fees, outstanding_penalties = :penalties, status = :status,
-                 in_arrears = :in_arrears, updated_at = :updated_at
+                'UPDATE loans SET outstanding_balance = :outstanding_balance, status = :status, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
-                    'principal' => MoneyMath::max($newPrincipal, '0.00'),
-                    'interest' => MoneyMath::max($newInterest, '0.00'),
-                    'fees' => MoneyMath::max($newFees, '0.00'),
-                    'penalties' => MoneyMath::max($newPenalties, '0.00'),
+                    'outstanding_balance' => $newBalance,
                     'status' => $status,
-                    'in_arrears' => 0,
                     'updated_at' => now_utc(),
                     'id' => $loanId,
                     'stokvel_id' => $stokvelId,
@@ -359,22 +353,18 @@ final class LoanService
 
             $this->db->insert(
                 'INSERT INTO loan_repayments
-                    (stokvel_id, loan_id, amount, principal_component, interest_component, fee_component, penalty_component,
-                     journal_entry_id, paid_at, recorded_by, created_at)
+                    (stokvel_id, loan_id, repayment_ref, amount, payment_method, paid_at, recorded_by_user_id, notes, created_at)
                  VALUES
-                    (:stokvel_id, :loan_id, :amount, :principal, :interest, :fee, :penalty,
-                     :journal_id, :paid_at, :recorded_by, :created_at)',
+                    (:stokvel_id, :loan_id, :repayment_ref, :amount, :payment_method, :paid_at, :recorded_by_user_id, :notes, :created_at)',
                 [
                     'stokvel_id' => $stokvelId,
                     'loan_id' => $loanId,
+                    'repayment_ref' => $this->nextRepaymentRef($stokvelId),
                     'amount' => $amount,
-                    'principal' => $allocation['principal'],
-                    'interest' => $allocation['interest'],
-                    'fee' => $allocation['fee'],
-                    'penalty' => $allocation['penalty'],
-                    'journal_id' => $journalId,
+                    'payment_method' => $paymentMethod,
                     'paid_at' => $paidAt,
-                    'recorded_by' => $recordedBy,
+                    'recorded_by_user_id' => $recordedBy,
+                    'notes' => json_encode($allocation, JSON_THROW_ON_ERROR),
                     'created_at' => now_utc(),
                 ]
             );
@@ -390,59 +380,31 @@ final class LoanService
             throw new FinanceException('Loan not found.');
         }
 
-        $schedule = $this->getSchedule($stokvelId, $loanId);
-        $nextInstalment = null;
-        foreach ($schedule as $row) {
-            if (($row['status'] ?? 'pending') !== 'paid') {
-                $nextInstalment = (int) $row['instalment_number'];
-                break;
-            }
-        }
-        if ($nextInstalment === null) {
-            throw new FinanceException('Loan has no outstanding instalments.');
+        $balance = MoneyMath::normalize((string) $loan['outstanding_balance']);
+        if (!MoneyMath::isPositive($balance)) {
+            throw new FinanceException('Loan has no outstanding balance.');
         }
 
-        $settlement = $this->calculator->calculateEarlySettlement(
-            array_map(static fn (array $row): array => [
-                'instalment_number' => (int) $row['instalment_number'],
-                'due_date' => (string) $row['due_date'],
-                'opening_balance' => (string) $row['opening_balance'],
-                'principal' => (string) $row['principal_amount'],
-                'interest' => (string) $row['interest_amount'],
-                'fee' => (string) $row['fee_amount'],
-                'total_instalment' => (string) $row['total_instalment'],
-                'closing_balance' => (string) $row['closing_balance'],
-            ], $schedule),
-            $nextInstalment,
-            (string) $loan['penalty_rate_percent']
-        );
+        $this->repay($stokvelId, $loanId, $balance, $recordedBy);
 
-        $this->repay($stokvelId, $loanId, $settlement['settlement_total'], $recordedBy);
-
-        return $settlement;
+        return ['settlement_total' => $balance];
     }
 
     public function flagArrears(int $stokvelId, ?string $asOfDate = null): int
     {
         $asOfDate = $asOfDate ?? (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d');
-        $overdueLoans = $this->db->fetchAll(
-            'SELECT DISTINCT l.id
-             FROM loans l
-             INNER JOIN loan_schedule_items ls ON ls.loan_id = l.id AND ls.stokvel_id = l.stokvel_id
-             WHERE l.stokvel_id = :stokvel_id AND l.status = :active
-               AND ls.status IN (\'pending\', \'partial\', \'overdue\') AND ls.due_date < :as_of_date',
-            [
-                'stokvel_id' => $stokvelId,
-                'active' => self::STATUS_ACTIVE,
-                'as_of_date' => $asOfDate,
-            ]
+        $overdue = $this->db->fetchAll(
+            'SELECT id FROM loan_schedules
+             WHERE stokvel_id = :stokvel_id AND status IN (\'pending\', \'partial\', \'overdue\') AND due_date < :as_of_date',
+            ['stokvel_id' => $stokvelId, 'as_of_date' => $asOfDate]
         );
 
         $count = 0;
-        foreach ($overdueLoans as $row) {
+        foreach ($overdue as $row) {
             $this->db->exec(
-                'UPDATE loans SET in_arrears = 1, updated_at = :updated_at WHERE id = :id AND stokvel_id = :stokvel_id',
-                ['updated_at' => now_utc(), 'id' => $row['id'], 'stokvel_id' => $stokvelId]
+                'UPDATE loan_schedules SET status = :status, updated_at = :updated_at
+                 WHERE id = :id AND stokvel_id = :stokvel_id',
+                ['status' => 'overdue', 'updated_at' => now_utc(), 'id' => $row['id'], 'stokvel_id' => $stokvelId]
             );
             ++$count;
         }
@@ -464,9 +426,8 @@ final class LoanService
                 throw new FinanceException('Only active loans can be restructured.');
             }
 
-            $outstanding = MoneyMath::normalize((string) $loan['outstanding_principal']);
-            $rate = MoneyMath::normalize($newRatePercent ?? (string) $loan['annual_interest_rate_percent']);
-            $startDate = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('+1 month')->format('Y-m-d');
+            $outstanding = MoneyMath::normalize((string) $loan['outstanding_balance']);
+            $rate = MoneyMath::normalize($newRatePercent ?? (string) $loan['interest_rate_percent']);
 
             $this->db->exec(
                 'UPDATE loans SET status = :status, updated_at = :updated_at WHERE id = :id AND stokvel_id = :stokvel_id',
@@ -478,73 +439,39 @@ final class LoanService
                 ]
             );
 
-            $newLoanId = $this->apply(
+            $applicationId = $this->apply(
                 $stokvelId,
-                (int) $loan['member_id'],
+                (int) $loan['membership_id'],
                 (int) $loan['loan_product_id'],
                 $outstanding,
                 $newTermMonths,
                 $restructuredBy,
                 'Restructured from loan #' . $loanId . ': ' . $reason
             );
+            $this->committeeApprove($stokvelId, $applicationId, $restructuredBy, $outstanding, $reason);
+            $this->disburse($stokvelId, $applicationId, $restructuredBy);
 
-            $this->db->exec(
-                'UPDATE loans SET status = :status, approved_amount = :amount, annual_interest_rate_percent = :rate,
-                 parent_loan_id = :parent_loan_id, updated_at = :updated_at
-                 WHERE id = :id AND stokvel_id = :stokvel_id',
-                [
-                    'status' => self::STATUS_COMMITTEE_APPROVED,
-                    'amount' => $outstanding,
-                    'rate' => $rate,
-                    'parent_loan_id' => $loanId,
-                    'updated_at' => now_utc(),
-                    'id' => $newLoanId,
-                    'stokvel_id' => $stokvelId,
-                ]
+            $newLoan = $this->db->fetch(
+                'SELECT id FROM loans WHERE loan_application_id = :application_id AND stokvel_id = :stokvel_id LIMIT 1',
+                ['application_id' => $applicationId, 'stokvel_id' => $stokvelId]
             );
 
-            $this->db->insert(
-                'INSERT INTO loan_restructure_audit
-                    (stokvel_id, original_loan_id, new_loan_id, reason, restructured_by, created_at)
-                 VALUES
-                    (:stokvel_id, :original_loan_id, :new_loan_id, :reason, :restructured_by, :created_at)',
-                [
-                    'stokvel_id' => $stokvelId,
-                    'original_loan_id' => $loanId,
-                    'new_loan_id' => $newLoanId,
-                    'reason' => $reason,
-                    'restructured_by' => $restructuredBy,
-                    'created_at' => now_utc(),
-                ]
-            );
+            if ($newLoan !== null) {
+                $this->db->exec(
+                    'UPDATE loans SET interest_rate_percent = :rate, updated_at = :updated_at
+                     WHERE id = :id AND stokvel_id = :stokvel_id',
+                    [
+                        'rate' => $rate,
+                        'updated_at' => now_utc(),
+                        'id' => $newLoan['id'],
+                        'stokvel_id' => $stokvelId,
+                    ]
+                );
 
-            $schedule = $this->calculator->buildSchedule(
-                $outstanding,
-                $rate,
-                $newTermMonths,
-                (string) $loan['amortization_method'],
-                $startDate,
-                (string) $loan['instalment_fee']
-            );
-            $this->persistSchedule($stokvelId, $newLoanId, $schedule);
+                return (int) $newLoan['id'];
+            }
 
-            $this->db->exec(
-                'UPDATE loans SET status = :status, disbursed_amount = :amount, disbursed_by = :disbursed_by,
-                 disbursed_at = :disbursed_at, outstanding_principal = :outstanding_principal, updated_at = :updated_at
-                 WHERE id = :id AND stokvel_id = :stokvel_id',
-                [
-                    'status' => self::STATUS_ACTIVE,
-                    'amount' => $outstanding,
-                    'disbursed_by' => $restructuredBy,
-                    'disbursed_at' => now_utc(),
-                    'outstanding_principal' => $outstanding,
-                    'updated_at' => now_utc(),
-                    'id' => $newLoanId,
-                    'stokvel_id' => $stokvelId,
-                ]
-            );
-
-            return $newLoanId;
+            throw new FinanceException('Restructured loan record was not created.');
         });
     }
 
@@ -556,12 +483,7 @@ final class LoanService
                 throw new FinanceException('Loan cannot be written off in its current status.');
             }
 
-            $totalOutstanding = MoneyMath::sum([
-                (string) $loan['outstanding_principal'],
-                (string) $loan['outstanding_interest'],
-                (string) $loan['outstanding_fees'],
-                (string) $loan['outstanding_penalties'],
-            ]);
+            $totalOutstanding = MoneyMath::normalize((string) $loan['outstanding_balance']);
             if (!MoneyMath::isPositive($totalOutstanding)) {
                 throw new FinanceException('Loan has no outstanding balance to write off.');
             }
@@ -591,27 +513,18 @@ final class LoanService
                 (int) $loanReceivable['id'],
                 '0.00',
                 $totalOutstanding,
-                (int) $loan['member_id'],
+                (int) $loan['membership_id'],
                 'Loan receivable written off'
             );
-            $this->ledger->post($stokvelId, $journalId, $writtenOffBy);
+            $this->ledger->post($stokvelId, $journalId, $writtenOffBy, true);
 
             $this->db->exec(
-                'UPDATE loans SET status = :status, written_off_by = :written_off_by, written_off_at = :written_off_at,
-                 write_off_reason = :reason, write_off_journal_entry_id = :journal_id,
-                 outstanding_principal = :zero, outstanding_interest = :zero2, outstanding_fees = :zero3,
-                 outstanding_penalties = :zero4, updated_at = :updated_at
+                'UPDATE loans SET status = :status, outstanding_balance = :zero, closed_at = :closed_at, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
                     'status' => self::STATUS_WRITTEN_OFF,
-                    'written_off_by' => $writtenOffBy,
-                    'written_off_at' => now_utc(),
-                    'reason' => $reason,
-                    'journal_id' => $journalId,
                     'zero' => '0.00',
-                    'zero2' => '0.00',
-                    'zero3' => '0.00',
-                    'zero4' => '0.00',
+                    'closed_at' => now_utc(),
                     'updated_at' => now_utc(),
                     'id' => $loanId,
                     'stokvel_id' => $stokvelId,
@@ -622,48 +535,85 @@ final class LoanService
 
     public function getLoan(int $stokvelId, int $loanId): ?array
     {
-        return $this->db->fetch(
+        $loan = $this->db->fetch(
             'SELECT * FROM loans WHERE id = :id AND stokvel_id = :stokvel_id LIMIT 1',
             ['id' => $loanId, 'stokvel_id' => $stokvelId]
         );
+        if ($loan !== null) {
+            $loan['member_id'] = $loan['membership_id'];
+
+            return $loan;
+        }
+
+        $application = $this->db->fetch(
+            'SELECT * FROM loan_applications WHERE id = :id AND stokvel_id = :stokvel_id LIMIT 1',
+            ['id' => $loanId, 'stokvel_id' => $stokvelId]
+        );
+        if ($application === null) {
+            return null;
+        }
+
+        $application['member_id'] = $application['membership_id'];
+        $application['requested_amount'] = $application['requested_amount'];
+
+        return $application;
     }
 
     public function getSchedule(int $stokvelId, int $loanId): array
     {
-        return $this->db->fetchAll(
-            'SELECT * FROM loan_schedule_items
+        $rows = $this->db->fetchAll(
+            'SELECT * FROM loan_schedules
              WHERE loan_id = :loan_id AND stokvel_id = :stokvel_id
              ORDER BY instalment_number ASC',
             ['loan_id' => $loanId, 'stokvel_id' => $stokvelId]
         );
+
+        $balance = null;
+        foreach ($rows as &$row) {
+            $opening = $balance ?? MoneyMath::add((string) $row['principal_due'], (string) $row['interest_due']);
+            $row['opening_balance'] = $opening;
+            $row['principal_amount'] = $row['principal_due'];
+            $row['interest_amount'] = $row['interest_due'];
+            $row['fee_amount'] = '0.00';
+            $row['total_instalment'] = $row['total_due'];
+            $row['paid_amount'] = $row['amount_paid'];
+            $row['closing_balance'] = MoneyMath::max(MoneyMath::sub($opening, (string) $row['principal_due']), '0.00');
+            $balance = $row['closing_balance'];
+        }
+        unset($row);
+
+        return $rows;
     }
 
     /** @param list<array<string, mixed>> $schedule */
     private function persistSchedule(int $stokvelId, int $loanId, array $schedule): void
     {
+        $now = now_utc();
         foreach ($schedule as $row) {
+            $principal = MoneyMath::normalize((string) $row['principal']);
+            $interest = MoneyMath::normalize((string) $row['interest']);
+            $fee = MoneyMath::normalize((string) ($row['fee'] ?? '0.00'));
+            $total = MoneyMath::normalize((string) $row['total_instalment']);
+
             $this->db->insert(
-                'INSERT INTO loan_schedule_items
-                    (stokvel_id, loan_id, instalment_number, due_date, opening_balance, principal_amount, interest_amount,
-                     fee_amount, total_instalment, closing_balance, paid_amount, status, created_at, updated_at)
+                'INSERT INTO loan_schedules
+                    (stokvel_id, loan_id, instalment_number, due_date, principal_due, interest_due, total_due,
+                     amount_paid, status, created_at, updated_at)
                  VALUES
-                    (:stokvel_id, :loan_id, :instalment_number, :due_date, :opening_balance, :principal_amount, :interest_amount,
-                     :fee_amount, :total_instalment, :closing_balance, :paid_amount, :status, :created_at, :updated_at)',
+                    (:stokvel_id, :loan_id, :instalment_number, :due_date, :principal_due, :interest_due, :total_due,
+                     :amount_paid, :status, :created_at, :updated_at)',
                 [
                     'stokvel_id' => $stokvelId,
                     'loan_id' => $loanId,
                     'instalment_number' => $row['instalment_number'],
                     'due_date' => $row['due_date'],
-                    'opening_balance' => $row['opening_balance'],
-                    'principal_amount' => $row['principal'],
-                    'interest_amount' => $row['interest'],
-                    'fee_amount' => $row['fee'],
-                    'total_instalment' => $row['total_instalment'],
-                    'closing_balance' => $row['closing_balance'],
-                    'paid_amount' => '0.00',
+                    'principal_due' => MoneyMath::add($principal, $fee),
+                    'interest_due' => $interest,
+                    'total_due' => $total,
+                    'amount_paid' => '0.00',
                     'status' => 'pending',
-                    'created_at' => now_utc(),
-                    'updated_at' => now_utc(),
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ]
             );
         }
@@ -676,13 +626,10 @@ final class LoanService
         $allocation = ['principal' => '0.00', 'interest' => '0.00', 'fee' => '0.00', 'penalty' => '0.00'];
 
         $instalments = $this->db->fetchAll(
-            'SELECT * FROM loan_schedule_items
+            'SELECT * FROM loan_schedules
              WHERE loan_id = :loan_id AND stokvel_id = :stokvel_id AND status IN (\'pending\', \'partial\', \'overdue\')
              ORDER BY due_date ASC, instalment_number ASC FOR UPDATE',
-            [
-                'loan_id' => $loanId,
-                'stokvel_id' => $stokvelId,
-            ]
+            ['loan_id' => $loanId, 'stokvel_id' => $stokvelId]
         );
 
         foreach ($instalments as $instalment) {
@@ -690,7 +637,7 @@ final class LoanService
                 break;
             }
 
-            $instalmentDue = MoneyMath::sub((string) $instalment['total_instalment'], (string) $instalment['paid_amount']);
+            $instalmentDue = MoneyMath::sub((string) $instalment['total_due'], (string) $instalment['amount_paid']);
             if (!MoneyMath::isPositive($instalmentDue)) {
                 continue;
             }
@@ -698,34 +645,28 @@ final class LoanService
             $apply = MoneyMath::min($remaining, $instalmentDue);
             $remaining = MoneyMath::sub($remaining, $apply);
 
-            $penaltyDue = (string) ($instalment['penalty_amount'] ?? '0.00');
-            $feeDue = (string) $instalment['fee_amount'];
-            $interestDue = (string) $instalment['interest_amount'];
-            $principalDue = (string) $instalment['principal_amount'];
-            $componentTotal = MoneyMath::sum([$penaltyDue, $feeDue, $interestDue, $principalDue]);
+            $interestDue = (string) $instalment['interest_due'];
+            $principalDue = (string) $instalment['principal_due'];
+            $componentTotal = MoneyMath::add($interestDue, $principalDue);
 
             if (MoneyMath::isZero($componentTotal)) {
                 $allocation['principal'] = MoneyMath::add($allocation['principal'], $apply);
             } else {
-                $toPenalty = MoneyMath::div(MoneyMath::mul($apply, $penaltyDue), $componentTotal);
-                $toFee = MoneyMath::div(MoneyMath::mul($apply, $feeDue), $componentTotal);
                 $toInterest = MoneyMath::div(MoneyMath::mul($apply, $interestDue), $componentTotal);
-                $toPrincipal = MoneyMath::sub(MoneyMath::sub(MoneyMath::sub($apply, $toPenalty), $toFee), $toInterest);
-
-                $allocation['penalty'] = MoneyMath::add($allocation['penalty'], $toPenalty);
-                $allocation['fee'] = MoneyMath::add($allocation['fee'], $toFee);
+                $toPrincipal = MoneyMath::sub($apply, $toInterest);
                 $allocation['interest'] = MoneyMath::add($allocation['interest'], $toInterest);
                 $allocation['principal'] = MoneyMath::add($allocation['principal'], $toPrincipal);
             }
 
-            $newPaid = MoneyMath::add((string) $instalment['paid_amount'], $apply);
-            $status = MoneyMath::comp($newPaid, (string) $instalment['total_instalment']) >= 0 ? 'paid' : 'partial';
+            $newPaid = MoneyMath::add((string) $instalment['amount_paid'], $apply);
+            $status = MoneyMath::comp($newPaid, (string) $instalment['total_due']) >= 0 ? 'paid' : 'partial';
             $this->db->exec(
-                'UPDATE loan_schedule_items SET paid_amount = :paid_amount, status = :status, updated_at = :updated_at
+                'UPDATE loan_schedules SET amount_paid = :amount_paid, status = :status, paid_at = :paid_at, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
-                    'paid_amount' => $newPaid,
+                    'amount_paid' => $newPaid,
                     'status' => $status,
+                    'paid_at' => $status === 'paid' ? now_utc() : null,
                     'updated_at' => now_utc(),
                     'id' => $instalment['id'],
                     'stokvel_id' => $stokvelId,
@@ -751,5 +692,65 @@ final class LoanService
         }
 
         return $loan;
+    }
+
+    private function lockApplication(int $stokvelId, int $applicationId): array
+    {
+        $application = $this->db->fetch(
+            'SELECT * FROM loan_applications WHERE id = :id AND stokvel_id = :stokvel_id FOR UPDATE',
+            ['id' => $applicationId, 'stokvel_id' => $stokvelId]
+        );
+        if ($application === null) {
+            throw new FinanceException('Loan application not found.');
+        }
+
+        return $application;
+    }
+
+    /** @param array<string, mixed> $product */
+    private function resolveAmortizationMethod(array $product): string
+    {
+        $method = (string) ($product['amortization_method'] ?? $product['interest_type'] ?? LoanScheduleCalculator::METHOD_REDUCING_BALANCE);
+        if ($method === 'reducing') {
+            return LoanScheduleCalculator::METHOD_REDUCING_BALANCE;
+        }
+        if ($method === 'flat') {
+            return LoanScheduleCalculator::METHOD_FLAT;
+        }
+
+        return $method;
+    }
+
+    private function nextApplicationRef(int $stokvelId): string
+    {
+        $year = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y');
+        $row = $this->db->fetch(
+            'SELECT COUNT(*) AS cnt FROM loan_applications WHERE stokvel_id = :stokvel_id AND application_ref LIKE :prefix',
+            ['stokvel_id' => $stokvelId, 'prefix' => 'APP-' . $stokvelId . '-' . $year . '-%']
+        );
+
+        return sprintf('APP-%d-%s-%06d', $stokvelId, $year, ((int) ($row['cnt'] ?? 0)) + 1);
+    }
+
+    private function nextLoanRef(int $stokvelId): string
+    {
+        $year = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y');
+        $row = $this->db->fetch(
+            'SELECT COUNT(*) AS cnt FROM loans WHERE stokvel_id = :stokvel_id AND loan_ref LIKE :prefix',
+            ['stokvel_id' => $stokvelId, 'prefix' => 'LOAN-' . $stokvelId . '-' . $year . '-%']
+        );
+
+        return sprintf('LOAN-%d-%s-%06d', $stokvelId, $year, ((int) ($row['cnt'] ?? 0)) + 1);
+    }
+
+    private function nextRepaymentRef(int $stokvelId): string
+    {
+        $year = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y');
+        $row = $this->db->fetch(
+            'SELECT COUNT(*) AS cnt FROM loan_repayments WHERE stokvel_id = :stokvel_id AND repayment_ref LIKE :prefix',
+            ['stokvel_id' => $stokvelId, 'prefix' => 'REP-' . $stokvelId . '-' . $year . '-%']
+        );
+
+        return sprintf('REP-%d-%s-%06d', $stokvelId, $year, ((int) ($row['cnt'] ?? 0)) + 1);
     }
 }

@@ -1,4 +1,4 @@
-# Stovel Implementation Status
+# stockvel Implementation Status
 
 Multi-tenant Stokvel Management Web Application (vanilla PHP 8.3+, MySQL 8+, vanilla JS).
 
@@ -69,8 +69,8 @@ All checklist domains from the product specification are implemented:
 
 | Role | Email | Password |
 |------|-------|----------|
-| Platform super admin | `admin@stovel.local` | `Password123!` |
-| Platform support | `support@stovel.local` | `Password123!` |
+| Platform super admin | `admin@stockvel.local` | `Password123!` |
+| Platform support | `support@stockvel.local` | `Password123!` |
 | Ubuntu chairperson | `thabo.mokoena@example.co.za` | `Password123!` |
 | Ubuntu treasurer | `nomsa.dlamini@example.co.za` | `Password123!` |
 
@@ -87,5 +87,5 @@ Seeded users have `must_change_password=1`. Force password change outside `APP_E
 ### Local runtime used for verification
 
 - PHP 8.3.35
-- MySQL 8.0.46 in Docker (`stovel-mysql` on port **3307**)
+- MySQL 8.0.46 in Docker (`stockvel-mysql` on port **3307**)
 - Built-in server: `php -S 127.0.0.1:8090 -t public`

@@ -1,0 +1,10 @@
+<link rel="stylesheet" href="<?= e(asset('css/variables.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/reset.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/base.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/layout.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/components.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/forms.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/tables.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/auth.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/dashboard.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset('css/responsive.css')) ?>">

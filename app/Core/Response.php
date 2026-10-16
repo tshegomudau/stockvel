@@ -77,6 +77,22 @@ final class Response
         return $clone;
     }
 
+    public function status(): int
+    {
+        return $this->status;
+    }
+
+    public function body(): string
+    {
+        return $this->content;
+    }
+
+    /** @return array<string, string> */
+    public function headers(): array
+    {
+        return $this->headers;
+    }
+
     public function send(): never
     {
         http_response_code($this->status);

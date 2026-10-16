@@ -8,7 +8,7 @@ use App\Core\Database;
 
 final class RememberTokenService
 {
-    private const COOKIE_NAME = 'stovel_remember';
+    private const COOKIE_NAME = 'stockvel_remember';
 
     public function __construct(
         private readonly Database $db
@@ -93,6 +93,9 @@ final class RememberTokenService
 
     private function setCookie(string $selector, string $validator, int $days): void
     {
+        if (headers_sent() || PHP_SAPI === 'cli') {
+            return;
+        }
         $secure = filter_var(env('SESSION_SECURE', false), FILTER_VALIDATE_BOOL);
         $sameSite = (string) env('SESSION_SAME_SITE', 'Lax');
         setcookie(
@@ -110,6 +113,9 @@ final class RememberTokenService
 
     private function forgetCookie(): void
     {
+        if (headers_sent() || PHP_SAPI === 'cli') {
+            return;
+        }
         $secure = filter_var(env('SESSION_SECURE', false), FILTER_VALIDATE_BOOL);
         setcookie(self::COOKIE_NAME, '', [
             'expires' => time() - 3600,

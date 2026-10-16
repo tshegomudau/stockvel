@@ -87,17 +87,21 @@ final class CsvImportService
         }
 
         if ($batchIdempotencyKey !== null && $batchIdempotencyKey !== '') {
+            $now = now_utc();
             $this->db->insert(
-                'INSERT INTO idempotency_keys (stokvel_id, scope, idempotency_key, resource_id, created_at, expires_at)
-                 VALUES (:stokvel_id, :scope, :idempotency_key, :resource_id, :created_at, :expires_at)
-                 ON DUPLICATE KEY UPDATE resource_id = resource_id',
+                'INSERT INTO idempotency_keys
+                    (stokvel_id, idempotency_key, request_method, request_path, response_body_hash, expires_at, created_at)
+                 VALUES
+                    (:stokvel_id, :idempotency_key, :request_method, :request_path, :response_body_hash, :expires_at, :created_at)
+                 ON DUPLICATE KEY UPDATE response_body_hash = VALUES(response_body_hash)',
                 [
                     'stokvel_id' => $stokvelId,
-                    'scope' => 'contribution_bulk',
                     'idempotency_key' => $batchIdempotencyKey,
-                    'resource_id' => json_encode(array_column($payments, 'id'), JSON_THROW_ON_ERROR),
-                    'created_at' => now_utc(),
-                    'expires_at' => (new \DateTimeImmutable(now_utc()))->modify('+30 days')->format('Y-m-d H:i:s'),
+                    'request_method' => 'POST',
+                    'request_path' => '/finance/contributions/csv:' . implode(',', array_column($payments, 'id')),
+                    'response_body_hash' => (string) count($payments),
+                    'expires_at' => (new \DateTimeImmutable($now))->modify('+30 days')->format('Y-m-d H:i:s'),
+                    'created_at' => $now,
                 ]
             );
         }
@@ -166,7 +170,7 @@ final class CsvImportService
         $member = null;
         if ($memberNumber !== '') {
             $member = $this->db->fetch(
-                'SELECT id, status FROM members WHERE stokvel_id = :stokvel_id AND member_number = :member_number LIMIT 1',
+                'SELECT id, status FROM memberships WHERE stokvel_id = :stokvel_id AND member_number = :member_number LIMIT 1',
                 ['stokvel_id' => $stokvelId, 'member_number' => $memberNumber]
             );
             if ($member === null) {

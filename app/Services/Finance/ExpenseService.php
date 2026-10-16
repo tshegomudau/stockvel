@@ -40,13 +40,16 @@ final class ExpenseService
         }
 
         $now = now_utc();
+        $code = $this->nextCategoryCode($stokvelId, $name);
+
         return (int) $this->db->insert(
             'INSERT INTO expense_categories
-                (stokvel_id, name, account_id, budget_amount, is_active, created_at, updated_at)
+                (stokvel_id, code, name, account_id, budget_amount, is_active, created_at, updated_at)
              VALUES
-                (:stokvel_id, :name, :account_id, :budget_amount, 1, :created_at, :updated_at)',
+                (:stokvel_id, :code, :name, :account_id, :budget_amount, 1, :created_at, :updated_at)',
             [
                 'stokvel_id' => $stokvelId,
+                'code' => $code,
                 'name' => $name,
                 'account_id' => $expenseAccountId,
                 'budget_amount' => $budgetAmount !== null ? MoneyMath::normalize($budgetAmount) : null,
@@ -70,7 +73,8 @@ final class ExpenseService
         string $amount,
         string $description,
         int $requestedBy,
-        ?string $expenseDate = null
+        ?string $expenseDate = null,
+        ?string $vendorName = null
     ): int {
         $category = $this->getCategory($stokvelId, $categoryId);
         if ($category === null) {
@@ -82,26 +86,27 @@ final class ExpenseService
             throw new FinanceException('Expense amount must be positive.');
         }
 
-        $comparison = $this->compareToBudget($stokvelId, $categoryId, $amount);
+        $this->compareToBudget($stokvelId, $categoryId, $amount);
         $now = now_utc();
+        $incurredAt = $expenseDate ?? (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d');
 
         return (int) $this->db->insert(
             'INSERT INTO expenses
-                (stokvel_id, category_id, amount, description, expense_date, status,
-                 requested_by, budget_snapshot, budget_remaining_snapshot, created_at, updated_at)
+                (stokvel_id, expense_category_id, expense_ref, description, amount, status,
+                 incurred_at, vendor_name, recorded_by_user_id, created_at, updated_at)
              VALUES
-                (:stokvel_id, :category_id, :amount, :description, :expense_date, :status,
-                 :requested_by, :budget_snapshot, :budget_remaining, :created_at, :updated_at)',
+                (:stokvel_id, :expense_category_id, :expense_ref, :description, :amount, :status,
+                 :incurred_at, :vendor_name, :recorded_by_user_id, :created_at, :updated_at)',
             [
                 'stokvel_id' => $stokvelId,
-                'category_id' => $categoryId,
-                'amount' => $amount,
+                'expense_category_id' => $categoryId,
+                'expense_ref' => $this->nextExpenseRef($stokvelId),
                 'description' => $description,
-                'expense_date' => $expenseDate ?? (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d'),
+                'amount' => $amount,
                 'status' => self::STATUS_REQUESTED,
-                'requested_by' => $requestedBy,
-                'budget_snapshot' => $comparison['budget'],
-                'budget_remaining' => $comparison['remaining_after'],
+                'incurred_at' => $incurredAt,
+                'vendor_name' => $vendorName,
+                'recorded_by_user_id' => $requestedBy,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]
@@ -114,17 +119,16 @@ final class ExpenseService
         if ($expense['status'] !== self::STATUS_REQUESTED) {
             throw new FinanceException('Only requested expenses can be approved.');
         }
-        if ((int) $expense['requested_by'] === $approvedBy && $this->expenseMakerCheckerEnabled($stokvelId)) {
+        if ((int) $expense['recorded_by_user_id'] === $approvedBy && $this->expenseMakerCheckerEnabled($stokvelId)) {
             throw new AuthorizationException('Maker-checker: you cannot approve your own expense request.');
         }
 
         $this->db->exec(
-            'UPDATE expenses SET status = :status, approved_by = :approved_by, approved_at = :approved_at, updated_at = :updated_at
+            'UPDATE expenses SET status = :status, approved_by_user_id = :approved_by_user_id, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
                 'status' => self::STATUS_APPROVED,
-                'approved_by' => $approvedBy,
-                'approved_at' => now_utc(),
+                'approved_by_user_id' => $approvedBy,
                 'updated_at' => now_utc(),
                 'id' => $expenseId,
                 'stokvel_id' => $stokvelId,
@@ -139,15 +143,17 @@ final class ExpenseService
             throw new FinanceException('Only requested expenses can be rejected.');
         }
 
+        $description = trim((string) $expense['description']);
+        if ($reason !== '') {
+            $description .= ' [Rejected: ' . $reason . ']';
+        }
+
         $this->db->exec(
-            'UPDATE expenses SET status = :status, rejected_by = :rejected_by, rejection_reason = :reason,
-             rejected_at = :rejected_at, updated_at = :updated_at
+            'UPDATE expenses SET status = :status, description = :description, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
                 'status' => self::STATUS_REJECTED,
-                'rejected_by' => $rejectedBy,
-                'reason' => $reason,
-                'rejected_at' => now_utc(),
+                'description' => $description,
                 'updated_at' => now_utc(),
                 'id' => $expenseId,
                 'stokvel_id' => $stokvelId,
@@ -163,25 +169,29 @@ final class ExpenseService
                 throw new FinanceException('Only approved expenses can be paid.');
             }
 
-            $category = $this->getCategory($stokvelId, (int) $expense['category_id']);
+            $category = $this->getCategory($stokvelId, (int) $expense['expense_category_id']);
             if ($category === null) {
                 throw new FinanceException('Expense category not found.');
             }
 
             $bank = $this->chartOfAccounts->requireBySubType($stokvelId, 'bank');
             $amount = MoneyMath::normalize((string) $expense['amount']);
+            $expenseAccountId = (int) ($category['account_id'] ?? 0);
+            if ($expenseAccountId <= 0) {
+                $expenseAccountId = (int) $this->chartOfAccounts->requireBySubType($stokvelId, 'admin')['id'];
+            }
 
             $journalId = $this->ledger->createDraft(
                 $stokvelId,
                 $paidBy,
-                (string) $expense['expense_date'],
-                'EXP-' . $expenseId,
+                (string) $expense['incurred_at'],
+                (string) $expense['expense_ref'],
                 (string) $expense['description']
             );
             $this->ledger->addLine(
                 $stokvelId,
                 $journalId,
-                (int) $category['account_id'],
+                $expenseAccountId,
                 $amount,
                 '0.00',
                 null,
@@ -196,17 +206,16 @@ final class ExpenseService
                 null,
                 'Bank payment'
             );
-            $this->ledger->post($stokvelId, $journalId, $paidBy);
+            $this->ledger->post($stokvelId, $journalId, $paidBy, true);
 
             $this->db->exec(
-                'UPDATE expenses SET status = :status, paid_by = :paid_by, paid_at = :paid_at,
-                 journal_entry_id = :journal_id, updated_at = :updated_at
+                'UPDATE expenses SET status = :status, paid_at = :paid_at,
+                 journal_entry_id = :journal_entry_id, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
                     'status' => self::STATUS_PAID,
-                    'paid_by' => $paidBy,
                     'paid_at' => now_utc(),
-                    'journal_id' => $journalId,
+                    'journal_entry_id' => $journalId,
                     'updated_at' => now_utc(),
                     'id' => $expenseId,
                     'stokvel_id' => $stokvelId,
@@ -225,17 +234,19 @@ final class ExpenseService
             throw new FinanceException('Expense has no linked journal entry.');
         }
 
-        $reversalJournalId = $this->ledger->reverse($stokvelId, (int) $expense['journal_entry_id'], $reversedBy, $reason);
+        $this->ledger->reverse($stokvelId, (int) $expense['journal_entry_id'], $reversedBy, $reason);
+
+        $description = trim((string) $expense['description']);
+        if ($reason !== '') {
+            $description .= ' [Reversed: ' . $reason . ']';
+        }
 
         $this->db->exec(
-            'UPDATE expenses SET status = :status, reversed_by = :reversed_by, reversed_at = :reversed_at,
-             reversal_journal_entry_id = :journal_id, updated_at = :updated_at
+            'UPDATE expenses SET status = :status, description = :description, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
                 'status' => self::STATUS_REVERSED,
-                'reversed_by' => $reversedBy,
-                'reversed_at' => now_utc(),
-                'journal_id' => $reversalJournalId,
+                'description' => $description,
                 'updated_at' => now_utc(),
                 'id' => $expenseId,
                 'stokvel_id' => $stokvelId,
@@ -255,11 +266,11 @@ final class ExpenseService
         $yearStart = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y') . '-01-01';
         $spentRow = $this->db->fetch(
             'SELECT COALESCE(SUM(amount), 0) AS spent FROM expenses
-             WHERE stokvel_id = :stokvel_id AND category_id = :category_id
-               AND status IN (\'paid\', \'approved\', \'requested\') AND expense_date >= :year_start',
+             WHERE stokvel_id = :stokvel_id AND expense_category_id = :expense_category_id
+               AND status IN (\'paid\', \'approved\', \'requested\') AND incurred_at >= :year_start',
             [
                 'stokvel_id' => $stokvelId,
-                'category_id' => $categoryId,
+                'expense_category_id' => $categoryId,
                 'year_start' => $yearStart,
             ]
         );
@@ -290,10 +301,18 @@ final class ExpenseService
 
     public function getExpense(int $stokvelId, int $expenseId): ?array
     {
-        return $this->db->fetch(
+        $row = $this->db->fetch(
             'SELECT * FROM expenses WHERE id = :id AND stokvel_id = :stokvel_id LIMIT 1',
             ['id' => $expenseId, 'stokvel_id' => $stokvelId]
         );
+        if ($row === null) {
+            return null;
+        }
+
+        $row['category_id'] = $row['expense_category_id'];
+        $row['expense_date'] = $row['incurred_at'];
+
+        return $row;
     }
 
     private function getCategory(int $stokvelId, int $categoryId): ?array
@@ -325,5 +344,35 @@ final class ExpenseService
         );
 
         return $row === null || (int) ($row['expense_maker_checker'] ?? 1) === 1;
+    }
+
+    private function nextExpenseRef(int $stokvelId): string
+    {
+        $year = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y');
+        $row = $this->db->fetch(
+            'SELECT COUNT(*) AS cnt FROM expenses
+             WHERE stokvel_id = :stokvel_id AND expense_ref LIKE :prefix',
+            ['stokvel_id' => $stokvelId, 'prefix' => 'EXP-' . $stokvelId . '-' . $year . '-%']
+        );
+        $seq = ((int) ($row['cnt'] ?? 0)) + 1;
+
+        return sprintf('EXP-%d-%s-%06d', $stokvelId, $year, $seq);
+    }
+
+    private function nextCategoryCode(int $stokvelId, string $name): string
+    {
+        $base = strtolower(preg_replace('/[^a-z0-9]+/i', '-', trim($name)) ?? 'category');
+        $base = trim($base, '-') ?: 'category';
+        $code = substr($base, 0, 28);
+        $suffix = 0;
+        while ($this->db->fetch(
+            'SELECT id FROM expense_categories WHERE stokvel_id = :stokvel_id AND code = :code LIMIT 1',
+            ['stokvel_id' => $stokvelId, 'code' => $code]
+        ) !== null) {
+            ++$suffix;
+            $code = substr($base, 0, 24) . '-' . $suffix;
+        }
+
+        return $code;
     }
 }

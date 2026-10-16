@@ -69,10 +69,10 @@ final class TenantContext
 
     public function can(string $permission): bool
     {
-        if ($this->isPlatformAdmin()) {
+        if (in_array('*', $this->permissions, true)) {
             return true;
         }
-        return in_array($permission, $this->permissions, true) || in_array('*', $this->permissions, true);
+        return in_array($permission, $this->permissions, true);
     }
 
     public function requirePermission(string $permission): void

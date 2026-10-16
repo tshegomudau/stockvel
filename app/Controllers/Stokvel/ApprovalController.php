@@ -21,8 +21,8 @@ final class ApprovalController extends Controller
 
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM approvals WHERE stokvel_id = :sid AND status = :status',
-            'SELECT * FROM approvals WHERE stokvel_id = :sid AND status = :status ORDER BY created_at DESC',
+            'SELECT COUNT(*) AS c FROM approval_requests WHERE stokvel_id = :sid AND status = :status',
+            'SELECT * FROM approval_requests WHERE stokvel_id = :sid AND status = :status ORDER BY created_at DESC',
             $params,
             $this->page($request),
             $this->perPage($request),
@@ -58,16 +58,52 @@ final class ApprovalController extends Controller
     private function decide(int $id, string $status, string $notes): void
     {
         $sid = $this->requireStokvel();
+        $userId = (int) $this->userId();
+        $now = now_utc();
+
+        $row = $this->db()->fetch(
+            'SELECT id, status FROM approval_requests WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => $id, 'sid' => $sid]
+        );
+        if ($row === null || ($row['status'] ?? '') !== 'pending') {
+            Session::flash('error', 'Approval request not found or already decided.');
+            return;
+        }
+
+        if ($status === 'approved') {
+            $this->db()->exec(
+                'UPDATE approval_requests
+                 SET status = :st, approved_by_user_id = :by, rejected_by_user_id = NULL,
+                     decision_notes = :notes, decided_at = :da, updated_at = :ua
+                 WHERE id = :id AND stokvel_id = :sid AND status = :pending',
+                [
+                    'st' => 'approved',
+                    'by' => $userId,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'da' => $now,
+                    'ua' => $now,
+                    'id' => $id,
+                    'sid' => $sid,
+                    'pending' => 'pending',
+                ]
+            );
+            return;
+        }
+
         $this->db()->exec(
-            'UPDATE approvals SET status = :st, decided_by = :by, decision_notes = :notes, decided_at = :da, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+            'UPDATE approval_requests
+             SET status = :st, rejected_by_user_id = :by, approved_by_user_id = NULL,
+                 decision_notes = :notes, decided_at = :da, updated_at = :ua
+             WHERE id = :id AND stokvel_id = :sid AND status = :pending',
             [
-                'st' => $status,
-                'by' => $this->userId(),
-                'notes' => $notes ?: null,
-                'da' => now_utc(),
-                'ua' => now_utc(),
+                'st' => 'rejected',
+                'by' => $userId,
+                'notes' => $notes !== '' ? $notes : null,
+                'da' => $now,
+                'ua' => $now,
                 'id' => $id,
                 'sid' => $sid,
+                'pending' => 'pending',
             ]
         );
     }

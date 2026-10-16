@@ -4,18 +4,51 @@
 declare(strict_types=1);
 
 $basePath = dirname(__DIR__);
-$app = require $basePath . '/bootstrap/app.php';
+require $basePath . '/bootstrap/autoload.php';
 
 use App\Core\Database;
+use App\Core\Env;
 use App\Core\Logger;
 use App\Core\Migrator;
 use App\Core\SeederRunner;
+use App\Core\TestingGuard;
 use App\Services\Cron\CronRunner;
 use App\Services\Finance\ChargeService;
-use App\Services\Finance\FeeStructureService;
-use App\Services\Notifications\NotificationProcessor;
 use App\Services\Notifications\NotificationQueueService;
 use Tests\TestRunner;
+
+$argv = $_SERVER['argv'] ?? [];
+$envName = Env::resolveNameFromArgv($argv);
+$commandHint = null;
+foreach ($argv as $i => $arg) {
+    if ($i === 0 || !is_string($arg) || str_starts_with($arg, '-')) {
+        continue;
+    }
+    $commandHint = $arg;
+    break;
+}
+$forceTesting = $envName === 'testing'
+    || str_starts_with((string) $commandHint, 'test')
+    || in_array($commandHint, ['seed:e2e', 'db:reset'], true);
+
+if ($forceTesting) {
+    $envName = 'testing';
+}
+if ($envName !== null) {
+    $_ENV['STOCKVEL_ENV'] = $envName;
+    $_SERVER['STOCKVEL_ENV'] = $envName;
+    putenv('STOCKVEL_ENV=' . $envName);
+}
+
+// Strip --env=* so command parsing stays clean.
+$filteredArgv = array_values(array_filter(
+    $argv,
+    static fn ($arg) => !is_string($arg) || !str_starts_with($arg, '--env')
+));
+$_SERVER['argv'] = $filteredArgv;
+$argv = $filteredArgv;
+
+$app = require $basePath . '/bootstrap/app.php';
 
 $command = $argv[1] ?? 'help';
 $container = $app->container();
@@ -27,7 +60,7 @@ try {
         case 'migrate':
             $m = new Migrator($db->pdo(), $basePath . '/database/migrations');
             $ran = $m->migrate();
-            echo 'Migrated ' . count($ran) . " file(s).\n";
+            echo 'Migrated ' . count($ran) . " file(s) on " . TestingGuard::currentDatabaseName() . ".\n";
             break;
 
         case 'migrate:rollback':
@@ -39,13 +72,80 @@ try {
 
         case 'seed':
             (new SeederRunner($db->pdo()))->runDemo();
-            echo "Seed complete.\n";
+            echo "Seed complete on " . TestingGuard::currentDatabaseName() . ".\n";
+            break;
+
+        case 'seed:e2e':
+            TestingGuard::assertSafeForDestructiveOps(TestingGuard::currentDatabaseName(), 'seed:e2e');
+            require_once $basePath . '/database/seeders/E2ETestSeeder.php';
+            (new \Database\Seeders\E2ETestSeeder())->run($db->pdo());
+            echo "E2E seed complete on " . TestingGuard::currentDatabaseName() . ".\n";
+            break;
+
+        case 'db:reset':
+            $database = TestingGuard::currentDatabaseName();
+            TestingGuard::assertSafeForDestructiveOps($database, 'db:reset');
+            $pdo = $db->pdo();
+            $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+            $tables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($tables as $table) {
+                $pdo->exec('DROP TABLE IF EXISTS `' . str_replace('`', '``', (string) $table) . '`');
+            }
+            $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+            $m = new Migrator($pdo, $basePath . '/database/migrations');
+            $ran = $m->migrate();
+            echo "Reset {$database}: dropped " . count($tables) . ' table(s), migrated ' . count($ran) . " file(s).\n";
             break;
 
         case 'test':
-            $_ENV['APP_ENV'] = 'testing';
-            $ok = (new TestRunner($basePath . '/tests'))->run();
+        case 'test:all':
+            ensureTestingEnv();
+            $ok = (new TestRunner($basePath . '/tests'))->run('all');
             exit($ok ? 0 : 1);
+
+        case 'test:unit':
+            ensureTestingEnv();
+            $ok = (new TestRunner($basePath . '/tests'))->run('unit');
+            exit($ok ? 0 : 1);
+
+        case 'test:integration':
+            ensureTestingEnv();
+            $ok = (new TestRunner($basePath . '/tests'))->run('integration');
+            exit($ok ? 0 : 1);
+
+        case 'test:http':
+            ensureTestingEnv();
+            $ok = (new TestRunner($basePath . '/tests'))->run('http');
+            exit($ok ? 0 : 1);
+
+        case 'test:e2e':
+            ensureTestingEnv();
+            $ok = (new TestRunner($basePath . '/tests'))->run('e2e');
+            exit($ok ? 0 : 1);
+
+        case 'test:syntax':
+            $failed = 0;
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($basePath, FilesystemIterator::SKIP_DOTS)
+            );
+            foreach ($iterator as $file) {
+                if (!$file->isFile() || $file->getExtension() !== 'php') {
+                    continue;
+                }
+                $path = $file->getPathname();
+                if (str_contains($path, '/vendor/') || str_contains($path, '/storage/')) {
+                    continue;
+                }
+                $output = [];
+                $code = 0;
+                exec(escapeshellarg(PHP_BINARY) . ' -l ' . escapeshellarg($path) . ' 2>&1', $output, $code);
+                if ($code !== 0) {
+                    echo "[FAIL] {$path}\n" . implode("\n", $output) . "\n";
+                    $failed++;
+                }
+            }
+            echo $failed === 0 ? "All PHP files passed syntax checks.\n" : "{$failed} syntax error(s).\n";
+            exit($failed === 0 ? 0 : 1);
 
         case 'cron:run':
             cronRunner($container)->runAll();
@@ -99,8 +199,8 @@ try {
 
         case 'serve':
             $host = $argv[2] ?? '127.0.0.1';
-            $port = $argv[3] ?? '8080';
-            echo "Stovel dev server http://{$host}:{$port}\n";
+            $port = $argv[3] ?? '8090';
+            echo "stockvel dev server http://{$host}:{$port}\n";
             passthru(sprintf(
                 '%s -S %s:%s -t %s/public %s/public/index.php',
                 PHP_BINARY,
@@ -114,24 +214,31 @@ try {
         case 'help':
         default:
             echo <<<HELP
-Stovel console
+stockvel console
 
-  migrate                 Run pending migrations
-  migrate:rollback [n]    Roll back migrations
-  seed                    Run DemoSeeder
-  test                    Run test suite
-  cron:run                Run all scheduled tasks
-  notifications:process   Process notification queue
-  charges:generate        Generate recurring charges
-  charges:overdue         Mark overdue charges
-  penalties:calculate     Calculate meeting penalties
-  loans:instalments       Advance loan instalment statuses
-  loans:arrears           Mark loan arrears
-  payouts:process         Process scheduled payouts
-  tokens:expire           Purge expired reset tokens
-  cleanup:sessions        Remove stale session files
-  jobs:detect-failed      Record permanently failed jobs
-  serve [host] [port]     PHP built-in server
+  migrate [--env=testing]     Run pending migrations
+  migrate:rollback [n]        Roll back migrations
+  seed [--env=testing]        Run DemoSeeder
+  seed:e2e --env=testing      Run E2E matrix seeder (test DB only)
+  db:reset --env=testing      Drop all tables + remigrate (test DB only)
+  test / test:all             Full verified suite (non-zero on failure)
+  test:unit                   Unit tests
+  test:integration            Integration tests
+  test:http                   HTTP/route tests
+  test:e2e                    End-to-end workflow tests
+  test:syntax                 PHP syntax check all application files
+  cron:run                    Run all scheduled tasks
+  notifications:process       Process notification queue
+  charges:generate            Generate recurring charges
+  charges:overdue             Mark overdue charges
+  penalties:calculate         Calculate meeting penalties
+  loans:instalments           Advance loan instalment statuses
+  loans:arrears               Mark loan arrears
+  payouts:process             Process scheduled payouts
+  tokens:expire               Purge expired reset tokens
+  cleanup:sessions            Remove stale session files
+  jobs:detect-failed          Record permanently failed jobs
+  serve [host] [port]         PHP built-in server
 
 HELP;
             exit($command === 'help' ? 0 : 1);
@@ -142,6 +249,16 @@ HELP;
         fwrite(STDERR, $e->getTraceAsString() . PHP_EOL);
     }
     exit(1);
+}
+
+function ensureTestingEnv(): void
+{
+    $_ENV['APP_ENV'] = 'testing';
+    $_SERVER['APP_ENV'] = 'testing';
+    putenv('APP_ENV=testing');
+    $dbName = TestingGuard::currentDatabaseName();
+    TestingGuard::assertSafeForDestructiveOps($dbName, 'test suite');
+    echo "Using test database: {$dbName}\n";
 }
 
 function cronRunner(\App\Core\Container $container): CronRunner

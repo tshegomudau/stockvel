@@ -1,21 +1,24 @@
-<div class="page-header">
-    <h1>Fee structures</h1>
-    <a class="btn btn-primary" href="<?= e(url('/app/fees/create')) ?>">Add Fee structure</a>
-</div>
-<?php if (empty($paginator->items)): ?>
-    <?= view('partials/empty', ['emptyTitle' => 'No records', 'emptyActionUrl' => url('/app/fees/create'), 'emptyActionLabel' => 'Add Fee structure'], null) ?>
+<?= view('partials/page-header', [
+    'title' => 'Fee structures',
+    'description' => 'Configure joining fees, recurring contributions, and penalties.',
+    'actionUrl' => url('/app/fees/create'),
+    'actionLabel' => 'New fee structure',
+], null) ?>
+<?php $list = isset($paginator) ? $paginator->items : ($items ?? $rows ?? []); ?>
+<?php if (empty($list)): ?>
+    <?= view('partials/empty', ['emptyTitle' => 'No fee structures', 'emptyActionUrl' => url('/app/fees/create'), 'emptyActionLabel' => 'Create fee structure'], null) ?>
 <?php else: ?>
-<table class="table">
-    <thead><tr><th>ID</th><th>Created</th><th></th></tr></thead>
-    <tbody>
-    <?php foreach ($paginator->items as $row): ?>
-        <tr>
-            <td><?= e((string) ($row['id'] ?? '')) ?></td>
-            <td><?= e(sa_date($row['created_at'] ?? '')) ?></td>
-            <td><a href="<?= e(url('/app/fees/' . ($row['id'] ?? ''))) ?>">View</a></td>
-        </tr>
-    <?php endforeach; ?>
-    </tbody>
-</table>
+<div class="table-wrap"><table class="table">
+<thead><tr><th>Name</th><th>Type</th><th>Status</th><th></th></tr></thead>
+<tbody>
+<?php foreach ($list as $row): ?>
+<tr>
+<td><?= e($row['name'] ?? '') ?></td>
+<td><?= e($row['structure_type'] ?? $row['type'] ?? '') ?></td>
+<td><span class="badge"><?= e($row['status'] ?? '') ?></span></td>
+<td class="actions"><a class="btn btn-sm btn-secondary" href="<?= e(url('/app/fees/' . ($row['id'] ?? ''))) ?>">View</a></td>
+</tr>
+<?php endforeach; ?>
+</tbody></table></div>
 <?= view('partials/pagination', ['paginator' => $paginator], null) ?>
 <?php endif; ?>

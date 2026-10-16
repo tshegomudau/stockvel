@@ -44,15 +44,19 @@ final class FeeStructureService
             $description,
             $now
         ): array {
+            $code = $this->nextStructureCode($stokvelId, $name);
+
             $structureId = (int) $this->db->insert(
                 'INSERT INTO fee_structures
-                    (stokvel_id, name, structure_type, description, is_active, created_at, updated_at)
+                    (stokvel_id, code, name, structure_type, status, description, is_active, created_at, updated_at)
                  VALUES
-                    (:stokvel_id, :name, :structure_type, :description, 1, :created_at, :updated_at)',
+                    (:stokvel_id, :code, :name, :structure_type, :status, :description, 1, :created_at, :updated_at)',
                 [
                     'stokvel_id' => $stokvelId,
+                    'code' => $code,
                     'name' => $name,
                     'structure_type' => $structureType,
+                    'status' => 'active',
                     'description' => $description,
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -226,6 +230,33 @@ final class FeeStructureService
     public function deactivate(int $stokvelId, int $feeStructureId): void
     {
         $this->updateStructureMeta($stokvelId, $feeStructureId, ['is_active' => 0]);
+        $this->db->exec(
+            'UPDATE fee_structures SET status = :status, updated_at = :updated_at
+             WHERE id = :id AND stokvel_id = :stokvel_id',
+            [
+                'status' => 'inactive',
+                'updated_at' => now_utc(),
+                'id' => $feeStructureId,
+                'stokvel_id' => $stokvelId,
+            ]
+        );
+    }
+
+    private function nextStructureCode(int $stokvelId, string $name): string
+    {
+        $base = strtolower(preg_replace('/[^a-z0-9]+/i', '-', trim($name)) ?? 'fee');
+        $base = trim($base, '-') ?: 'fee';
+        $code = substr($base, 0, 48);
+        $suffix = 0;
+        while ($this->db->fetch(
+            'SELECT id FROM fee_structures WHERE stokvel_id = :stokvel_id AND code = :code LIMIT 1',
+            ['stokvel_id' => $stokvelId, 'code' => $code]
+        ) !== null) {
+            ++$suffix;
+            $code = substr($base, 0, 44) . '-' . $suffix;
+        }
+
+        return $code;
     }
 
     private function getLatestVersion(int $stokvelId, int $feeStructureId): ?array

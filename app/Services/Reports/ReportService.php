@@ -52,29 +52,9 @@ final class ReportService
     {
         [$from, $to] = $this->dateRange($filters);
 
-        if ($this->tableExists('contributions')) {
-            return $this->db->fetchAll(
-                'SELECT c.id, c.member_id, c.amount, c.payment_method, c.paid_at, c.status, c.reference
-                 FROM contributions c
-                 WHERE c.stokvel_id = :stokvel_id AND c.paid_at BETWEEN :from_date AND :to_date
-                 ORDER BY c.paid_at DESC',
-                ['stokvel_id' => $stokvelId, 'from_date' => $from, 'to_date' => $to]
-            );
-        }
-
-        if ($this->tableExists('contribution_payments')) {
-            return $this->db->fetchAll(
-                'SELECT id, member_id, amount, allocated_amount, credit_amount, payment_method,
-                        receipt_number, paid_at, status
-                 FROM contribution_payments
-                 WHERE stokvel_id = :stokvel_id AND paid_at BETWEEN :from_date AND :to_date
-                 ORDER BY paid_at DESC',
-                ['stokvel_id' => $stokvelId, 'from_date' => $from . ' 00:00:00', 'to_date' => $to . ' 23:59:59']
-            );
-        }
-
         return $this->db->fetchAll(
-            'SELECT id, membership_id, transaction_ref, amount, payment_method, status, paid_at
+            'SELECT id, membership_id AS member_id, transaction_ref AS receipt_number, amount,
+                    payment_method, status, paid_at, external_reference AS reference
              FROM payment_transactions
              WHERE stokvel_id = :stokvel_id AND paid_at BETWEEN :from_date AND :to_date
              ORDER BY paid_at DESC',
@@ -99,17 +79,13 @@ final class ReportService
             );
         }
 
-        $rows = [];
-        if ($this->tableExists('contribution_payments')) {
-            $rows = array_merge($rows, $this->db->fetchAll(
-                'SELECT paid_at AS entry_date, amount, payment_method AS description, receipt_number AS reference
-                 FROM contribution_payments
-                 WHERE stokvel_id = :stokvel_id AND member_id = :member_id AND status = :status',
-                ['stokvel_id' => $stokvelId, 'member_id' => $memberId, 'status' => 'completed']
-            ));
-        }
-
-        return $rows;
+        return $this->db->fetchAll(
+            'SELECT paid_at AS entry_date, amount, payment_method AS description, transaction_ref AS reference
+             FROM payment_transactions
+             WHERE stokvel_id = :stokvel_id AND membership_id = :member_id AND status = :status
+             ORDER BY paid_at DESC',
+            ['stokvel_id' => $stokvelId, 'member_id' => $memberId, 'status' => 'completed']
+        );
     }
 
     /** @param array<string, mixed> $filters */
@@ -325,13 +301,6 @@ final class ReportService
     /** @param array<string, mixed> $filters */
     public function payoutSchedule(int $stokvelId, array $filters = []): array
     {
-        if ($this->tableExists('payouts')) {
-            return $this->db->fetchAll(
-                'SELECT * FROM payouts WHERE stokvel_id = :stokvel_id ORDER BY scheduled_date ASC',
-                ['stokvel_id' => $stokvelId]
-            );
-        }
-
         return $this->db->fetchAll(
             'SELECT ps.id, ps.sequence_number, ps.scheduled_date, ps.payout_amount, ps.status, ps.paid_at,
                     pc.name AS cycle_name, m.member_number, p.first_name, p.last_name

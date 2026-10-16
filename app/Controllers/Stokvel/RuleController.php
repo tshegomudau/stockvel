@@ -10,6 +10,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
+use App\Services\Rules\RuleService;
 
 final class RuleController extends Controller
 {
@@ -21,8 +22,8 @@ final class RuleController extends Controller
         $perPage = $this->perPage($request);
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM stokvel_rules WHERE stokvel_id = :sid',
-            'SELECT * FROM stokvel_rules WHERE stokvel_id = :sid ORDER BY created_at DESC',
+            'SELECT COUNT(*) AS c FROM rules WHERE stokvel_id = :sid',
+            'SELECT * FROM rules WHERE stokvel_id = :sid ORDER BY created_at DESC',
             ['sid' => $sid],
             $page,
             $perPage,
@@ -50,21 +51,25 @@ final class RuleController extends Controller
     {
         $this->requirePermission('rules.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method']);
-        $data['stokvel_id'] = $sid;
-        $data['created_at'] = now_utc();
-        $data['updated_at'] = now_utc();
-        $this->service(\App\Services\Stokvel\RuleService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function create(array $data): int
-            {
-                $cols = array_keys($data);
-                $ph = array_map(static fn ($c) => ':' . $c, $cols);
-                $sql = 'INSERT INTO stokvel_rules (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $ph) . ')';
-                return (int) $this->db->insert($sql, $data);
-            }
-        })->create($data);
+        $data = [
+            'title' => trim((string) $request->input('title', '')),
+            'body' => trim((string) $request->input('body', '')),
+            'category' => trim((string) $request->input('category', 'general')),
+        ];
+        $validator = Validator::make($data, [
+            'title' => 'required|string',
+            'body' => 'required|string',
+        ]);
+        if ($validator->fails()) {
+            $this->flashOld($request);
+            Session::flash('error', 'Invalid rule details.');
+            return $this->redirect('/app/rules/create');
+        }
+
+        /** @var RuleService $rules */
+        $rules = app()->container()->get(RuleService::class);
+        $rules->create($sid, (int) $this->userId(), $data);
+
         Session::flash('success', 'Rule saved.');
         return $this->redirect('/app/rules');
     }
@@ -73,15 +78,23 @@ final class RuleController extends Controller
     {
         $this->requirePermission('rules.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch('SELECT * FROM stokvel_rules WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        $row = $this->db()->fetch(
+            'SELECT * FROM rules WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         if (!$row) {
             return $this->redirect('/app/rules');
         }
+        $versions = $this->db()->fetchAll(
+            'SELECT * FROM rule_versions WHERE rule_id = :id AND stokvel_id = :sid ORDER BY version_number DESC',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         return $this->render('stokvel/rules/show', [
             'title' => 'Rule #' . $id,
             'activeNav' => 'rules',
             'navContext' => 'app',
             'item' => $row,
+            'versions' => $versions,
         ]);
     }
 
@@ -89,10 +102,19 @@ final class RuleController extends Controller
     {
         $this->requirePermission('rules.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch('SELECT * FROM stokvel_rules WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        $row = $this->db()->fetch(
+            'SELECT * FROM rules WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         if (!$row) {
             return $this->redirect('/app/rules');
         }
+        $latest = $this->db()->fetch(
+            'SELECT content FROM rule_versions WHERE rule_id = :id AND stokvel_id = :sid
+             ORDER BY version_number DESC LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
+        $row['body'] = $latest['content'] ?? '';
         return $this->render('stokvel/rules/edit', [
             'title' => 'Edit Rule',
             'activeNav' => 'rules',
@@ -105,16 +127,21 @@ final class RuleController extends Controller
     {
         $this->requirePermission('rules.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method'], $data['stokvel_id']);
-        $data['updated_at'] = now_utc();
-        $sets = [];
-        foreach (array_keys($data) as $col) {
-            $sets[] = "{$col} = :{$col}";
+        $title = trim((string) $request->input('title', ''));
+        $body = trim((string) $request->input('body', ''));
+        if ($title === '' || $body === '') {
+            Session::flash('error', 'Title and body are required.');
+            return $this->redirect('/app/rules/' . $id . '/edit');
         }
-        $data['id'] = (int) $id;
-        $data['sid'] = $sid;
-        $this->db()->exec('UPDATE stokvel_rules SET ' . implode(', ', $sets) . ' WHERE id = :id AND stokvel_id = :sid', $data);
+
+        $this->db()->exec(
+            'UPDATE rules SET title = :title, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+            ['title' => $title, 'ua' => now_utc(), 'id' => (int) $id, 'sid' => $sid]
+        );
+        /** @var RuleService $rules */
+        $rules = app()->container()->get(RuleService::class);
+        $rules->createNewVersion($sid, (int) $id, (int) $this->userId(), $body);
+
         Session::flash('success', 'Rule updated.');
         return $this->redirect('/app/rules/' . $id);
     }
@@ -123,12 +150,10 @@ final class RuleController extends Controller
     {
         $this->requirePermission('rules.manage');
         $sid = $this->requireStokvel();
-        $this->db()->exec('UPDATE stokvel_rules SET deleted_at = :da, updated_at = :ua WHERE id = :id AND stokvel_id = :sid', [
-            'da' => now_utc(),
-            'ua' => now_utc(),
-            'id' => (int) $id,
-            'sid' => $sid,
-        ]);
+        $this->db()->exec(
+            'UPDATE rules SET status = :status, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+            ['status' => 'inactive', 'ua' => now_utc(), 'id' => (int) $id, 'sid' => $sid]
+        );
         Session::flash('success', 'Rule removed.');
         return $this->redirect('/app/rules');
     }

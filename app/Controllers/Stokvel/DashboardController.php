@@ -23,7 +23,7 @@ final class DashboardController extends Controller
             )['c'] ?? 0),
             'contributions_mtd' => (float) ($db->fetch(
                 "SELECT COALESCE(SUM(amount),0) AS t FROM payment_transactions
-                 WHERE stokvel_id = :sid AND status IN ('posted','completed','allocated')
+                 WHERE stokvel_id = :sid AND status IN ('posted','completed','allocated','confirmed')
                    AND MONTH(paid_at) = MONTH(UTC_TIMESTAMP())
                    AND YEAR(paid_at) = YEAR(UTC_TIMESTAMP())",
                 ['sid' => $sid]
@@ -39,7 +39,7 @@ final class DashboardController extends Controller
             )['c'] ?? 0),
             'upcoming_meetings' => (int) ($db->fetch(
                 "SELECT COUNT(*) AS c FROM meetings
-                 WHERE stokvel_id = :sid AND scheduled_at >= UTC_TIMESTAMP() AND status = 'scheduled'",
+                 WHERE stokvel_id = :sid AND scheduled_at >= UTC_TIMESTAMP() AND status IN ('scheduled','confirmed')",
                 ['sid' => $sid]
             )['c'] ?? 0),
             'active_loans' => (int) ($db->fetch(
@@ -54,12 +54,34 @@ final class DashboardController extends Controller
             ['sid' => $sid]
         );
 
+        $chartLabels = [];
+        $chartValues = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month = (new \DateTimeImmutable('first day of this month', new \DateTimeZone('UTC')))->modify("-{$i} months");
+            $label = $month->format('M');
+            $row = $db->fetch(
+                "SELECT COALESCE(SUM(amount),0) AS t FROM payment_transactions
+                 WHERE stokvel_id = :sid
+                   AND MONTH(paid_at) = :m AND YEAR(paid_at) = :y
+                   AND status IN ('posted','completed','allocated','confirmed')",
+                [
+                    'sid' => $sid,
+                    'm' => (int) $month->format('n'),
+                    'y' => (int) $month->format('Y'),
+                ]
+            );
+            $chartLabels[] = $label;
+            $chartValues[] = round((float) ($row['t'] ?? 0), 2);
+        }
+
         return $this->render('stokvel/dashboard', [
             'title' => 'Dashboard',
             'activeNav' => 'dashboard',
             'navContext' => 'app',
             'stats' => $stats,
             'recentActivity' => $recent,
+            'chartLabels' => $chartLabels,
+            'chartValues' => $chartValues,
         ]);
     }
 }

@@ -22,34 +22,42 @@ final class WebhookController extends Controller
             return Response::json(['error' => 'Invalid payload'], 400);
         }
 
-        $signature = $request->header('X-Webhook-Signature', '');
-        $processor = $this->service(\App\Services\Payments\WebhookProcessor::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function handle(array $payload, string $signature): array
-            {
-                $reference = (string) ($payload['reference'] ?? $payload['id'] ?? '');
-                if ($reference === '') {
-                    return ['status' => 'ignored'];
-                }
-                $existing = $this->db->fetch('SELECT id FROM payment_webhooks WHERE external_ref = :ref LIMIT 1', ['ref' => $reference]);
-                if ($existing) {
-                    return ['status' => 'duplicate'];
-                }
-                $this->db->insert(
-                    'INSERT INTO payment_webhooks (external_ref, payload_json, signature, processed_at, created_at) VALUES (:ref, :pj, :sig, :pa, :ca)',
-                    [
-                        'ref' => $reference,
-                        'pj' => json_encode($payload),
-                        'sig' => $signature,
-                        'pa' => now_utc(),
-                        'ca' => now_utc(),
-                    ]
-                );
-                return ['status' => 'processed'];
-            }
-        });
+        $signature = (string) $request->header('X-Webhook-Signature', '');
+        $reference = (string) ($payload['reference'] ?? $payload['id'] ?? '');
+        if ($reference === '') {
+            return Response::json(['status' => 'ignored']);
+        }
 
-        $result = $processor->handle($payload, (string) $signature);
-        return Response::json($result);
+        $existing = $this->db()->fetch(
+            'SELECT id FROM webhook_events WHERE provider = :provider AND external_id = :ref LIMIT 1',
+            ['provider' => 'payments', 'ref' => $reference]
+        );
+        if ($existing) {
+            return Response::json(['status' => 'duplicate']);
+        }
+
+        $now = now_utc();
+        $this->db()->insert(
+            'INSERT INTO webhook_events
+                (stokvel_id, provider, event_type, external_id, payload_json, status, processed_at, created_at, updated_at)
+             VALUES
+                (:sid, :provider, :event_type, :external_id, :payload_json, :status, :processed_at, :created_at, :updated_at)',
+            [
+                'sid' => isset($payload['stokvel_id']) ? (int) $payload['stokvel_id'] : null,
+                'provider' => 'payments',
+                'event_type' => (string) ($payload['event'] ?? 'payment'),
+                'external_id' => $reference,
+                'payload_json' => json_encode([
+                    'payload' => $payload,
+                    'signature' => $signature,
+                ], JSON_THROW_ON_ERROR),
+                'status' => 'processed',
+                'processed_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]
+        );
+
+        return Response::json(['status' => 'processed']);
     }
 }

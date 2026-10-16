@@ -1,6 +1,6 @@
-# Stovel
+# stockvel
 
-Stovel is a multi-tenant web application for managing South African **stokvels** (member savings groups): memberships, contributions, fees, expenses, loans, rotational payouts, meetings, documents, approvals, and financial reports.
+stockvel is a multi-tenant web application for managing South African **stokvels** (member savings groups): memberships, contributions, fees, expenses, loans, rotational payouts, meetings, documents, approvals, and financial reports.
 
 ## Requirements
 
@@ -19,11 +19,11 @@ Optional for development:
 ### 1. Database (Docker example)
 
 ```bash
-docker run -d --name stovel-mysql \
+docker run -d --name stockvel-mysql \
   -e MYSQL_ROOT_PASSWORD=root \
-  -e MYSQL_DATABASE=stovel \
-  -e MYSQL_USER=stovel \
-  -e MYSQL_PASSWORD=stovel_pass \
+  -e MYSQL_DATABASE=stockvel \
+  -e MYSQL_USER=stockvel \
+  -e MYSQL_PASSWORD=stockvel_pass \
   -p 3307:3306 \
   mysql:8.0 \
   --character-set-server=utf8mb4 \
@@ -86,8 +86,8 @@ After `php bin/console seed`, all demo users share password **`Password123!`** (
 
 | Email | Role |
 |-------|------|
-| `admin@stovel.local` | Platform super admin |
-| `support@stovel.local` | Platform support |
+| `admin@stockvel.local` | Platform super admin |
+| `support@stockvel.local` | Platform support |
 | `thabo.mokoena@example.co.za` | Ubuntu Stokvel chairperson |
 | `nomsa.dlamini@example.co.za` | Ubuntu Stokvel treasurer |
 | `sipho.ndlovu@example.co.za` | Ubuntu Stokvel secretary |
@@ -113,14 +113,14 @@ Additional seeded members use `@example.co.za` addresses listed in `DemoSeeder.p
 Run every 5–15 minutes as the web server user:
 
 ```cron
-*/10 * * * * cd /var/www/stovel && /usr/bin/php bin/console cron:run >> storage/logs/cron.log 2>&1
+*/10 * * * * cd /var/www/stockvel && /usr/bin/php bin/console cron:run >> storage/logs/cron.log 2>&1
 ```
 
 Tasks include charge generation, overdue marking, penalty calculation, notification delivery, payout processing, token expiry, and failed-job detection.
 
 ## Backups
 
-1. **MySQL**: nightly logical backup, e.g. `mysqldump --single-transaction stovel > stovel-$(date +%F).sql`
+1. **MySQL**: nightly logical backup, e.g. `mysqldump --single-transaction stockvel > stockvel-$(date +%F).sql`
 2. **Files**: archive `storage/documents`, `storage/exports`, and `.env` (secure off-site storage)
 3. Test restores quarterly; keep backups encrypted at rest.
 
@@ -138,9 +138,9 @@ Tasks include charge generation, overdue marking, penalty calculation, notificat
 
 ## Legal & compliance disclaimer
 
-Stovel is **software tooling** for voluntary savings groups and their administrators. It is **not** legal, tax, or regulatory advice.
+stockvel is **software tooling** for voluntary savings groups and their administrators. It is **not** legal, tax, or regulatory advice.
 
-- **National Credit Act (NCA)**: If your stokvel offers credit to members or the public in a way that constitutes “credit agreements” under the NCA, you may need NCR registration and compliant documentation. Stovel’s loan modules are record-keeping aids only.
+- **National Credit Act (NCA)**: If your stokvel offers credit to members or the public in a way that constitutes “credit agreements” under the NCA, you may need NCR registration and compliant documentation. stockvel’s loan modules are record-keeping aids only.
 - **FIC / AML**: Collecting and pooling member funds may trigger anti-money laundering obligations depending on structure and partners. Consult a compliance professional.
 - **POPIA**: You are responsible for lawful processing of personal information (member ID numbers, contact details, financial data), security safeguards, breach notification, and data subject rights.
 

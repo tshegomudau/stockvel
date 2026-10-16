@@ -158,7 +158,7 @@ final class DemoSeeder
                 'view_financial_reports', 'view_audit',
             ],
             'ordinary_member' => [
-                'view_financial_reports',
+                // Member portal access only — no committee financial report rights.
             ],
             'auditor' => [
                 'view_financial_reports', 'export_data', 'view_audit',
@@ -185,7 +185,7 @@ final class DemoSeeder
     private function seedPlatformUsers(): void
     {
         $this->createUser(
-            'admin@stovel.local',
+            'admin@stockvel.local',
             '0821000001',
             'platform_super_admin',
             'Sibusiso',
@@ -195,7 +195,7 @@ final class DemoSeeder
         );
 
         $this->createUser(
-            'support@stovel.local',
+            'support@stockvel.local',
             '0821000002',
             'platform_support',
             'Ayanda',

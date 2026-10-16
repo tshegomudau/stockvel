@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 return [
-    'name' => env('APP_NAME', 'Stovel'),
+    'name' => env('APP_NAME', 'stockvel'),
     'env' => env('APP_ENV', 'production'),
     'debug' => filter_var(env('APP_DEBUG', false), FILTER_VALIDATE_BOOL),
     'url' => env('APP_URL', 'http://localhost'),
+    'base_path' => env('APP_BASE_PATH', ''),
+    'asset_version' => env('ASSET_VERSION', '1'),
     'key' => env('APP_KEY', ''),
     'timezone' => env('APP_TIMEZONE', 'Africa/Johannesburg'),
     'currency' => env('APP_CURRENCY', 'ZAR'),

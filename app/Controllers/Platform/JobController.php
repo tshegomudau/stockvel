@@ -23,8 +23,11 @@ final class JobController extends Controller
 
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM failed_jobs WHERE resolved_at IS NULL',
-            'SELECT id, queue, job_class, exception_message, failed_at, attempts FROM failed_jobs WHERE resolved_at IS NULL ORDER BY failed_at DESC',
+            "SELECT COUNT(*) AS c FROM notification_jobs WHERE status IN ('failed', 'dead')",
+            "SELECT id, channel, recipient, status, last_error, attempt_count, max_attempts, updated_at
+             FROM notification_jobs
+             WHERE status IN ('failed', 'dead')
+             ORDER BY updated_at DESC",
             [],
             $page,
             $perPage,

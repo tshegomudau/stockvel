@@ -13,7 +13,7 @@ final class HomeController extends Controller
     public function landing(Request $request): Response
     {
         return $this->render('public/home', [
-            'title' => 'Stovel — Stokvel management',
+            'title' => 'stockvel — Stokvel management',
             'activeNav' => 'home',
         ], 'layouts/guest');
     }

@@ -1,27 +1,14 @@
+<?= view('partials/page-header', [
+    'title' => 'My dashboard',
+    'description' => 'Your membership status, balances, and upcoming activity.',
+], null) ?>
 <div class="grid grid-3">
-    <div class="stat-card card">
-        <span class="stat-label">My balance</span>
-        <strong class="stat-value"><?= e(money($balance ?? 0)) ?></strong>
-    </div>
-    <div class="stat-card card">
-        <span class="stat-label">Role</span>
-        <strong class="stat-value"><?= e($membership['role'] ?? 'Member') ?></strong>
-    </div>
-    <div class="stat-card card">
-        <span class="stat-label">Status</span>
-        <strong class="stat-value"><?= e($membership['status'] ?? '') ?></strong>
-    </div>
+<?= view('partials/stat-card', ['label' => 'Status', 'value' => ucfirst((string) ($membership['status'] ?? 'unknown'))], null) ?>
+<?= view('partials/stat-card', ['label' => 'Balance due', 'value' => money($balanceDue ?? 0), 'isMoney' => true], null) ?>
+<?= view('partials/stat-card', ['label' => 'Member number', 'value' => (string) ($membership['member_number'] ?? '—')], null) ?>
 </div>
-<div class="card" style="margin-top:1.5rem;">
-    <h2>Upcoming meetings</h2>
-    <?php if (empty($upcomingMeetings)): ?>
-        <p>No upcoming meetings scheduled.</p>
-    <?php else: ?>
-        <ul>
-            <?php foreach ($upcomingMeetings as $m): ?>
-                <li><?= e($m['title'] ?? 'Meeting') ?> — <?= e(sa_datetime($m['scheduled_at'] ?? '')) ?></li>
-            <?php endforeach; ?>
-        </ul>
-    <?php endif; ?>
-    <a class="btn btn-sm" href="<?= e(url('/member/meetings')) ?>">All meetings</a>
+<div class="quick-actions mt-6">
+<a class="btn btn-primary" href="<?= e(url('/member/statement')) ?>">View statement</a>
+<a class="btn btn-secondary" href="<?= e(url('/member/meetings')) ?>">Meetings</a>
+<a class="btn btn-secondary" href="<?= e(url('/member/documents')) ?>">Documents</a>
 </div>

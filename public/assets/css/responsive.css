@@ -1,0 +1,19 @@
+@media (max-width: 959px) {
+  .app-topbar .page-title { padding-left: 3.25rem; }
+  .topbar-inner { padding-left: 0.85rem; padding-right: 0.85rem; }
+  .app-content { padding: 1rem 0.85rem 2rem; }
+}
+@media (max-width: 480px) {
+  .btn-block-sm { width: 100%; }
+  .page-header { align-items: stretch; }
+  .page-actions { width: 100%; }
+  .page-actions .btn { flex: 1 1 auto; }
+}
+@media print {
+  .sidebar, .drawer, .drawer-toggle, .app-topbar, .toast-stack, .btn, .filter-bar, .no-print {
+    display: none !important;
+  }
+  .app-shell, .app-main, .app-content { display: block; width: 100%; padding: 0; margin: 0; }
+  .card, .stat-card, .table-wrap { box-shadow: none; border-color: #ccc; break-inside: avoid; }
+  body { background: #fff; color: #000; }
+}

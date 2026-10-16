@@ -78,6 +78,32 @@ abstract class Controller
         $data['user'] = $data['user'] ?? $this->user();
         $data['stokvel'] = $data['stokvel'] ?? $this->tenant()->stokvel();
         $data['activeNav'] = $data['activeNav'] ?? '';
+        $data['navContext'] = $data['navContext'] ?? 'app';
+
+        if (!isset($data['memberships']) && $this->userId() !== null && class_exists(\App\Services\Auth\AuthService::class)) {
+            try {
+                $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
+                if (method_exists($auth, 'membershipsForUser')) {
+                    $data['memberships'] = $auth->membershipsForUser((int) $this->userId());
+                }
+            } catch (\Throwable) {
+                $data['memberships'] = [];
+            }
+        }
+
+        if (!isset($data['unreadNotifications']) && $this->userId() !== null && $this->stokvelId() !== null) {
+            try {
+                $row = $this->db()->fetch(
+                    "SELECT COUNT(*) AS c FROM notifications
+                     WHERE stokvel_id = :sid AND user_id = :uid AND read_at IS NULL",
+                    ['sid' => $this->stokvelId(), 'uid' => $this->userId()]
+                );
+                $data['unreadNotifications'] = (int) ($row['c'] ?? 0);
+            } catch (\Throwable) {
+                $data['unreadNotifications'] = 0;
+            }
+        }
+
         return Response::html(view($template, $data, $layout));
     }
 

@@ -75,45 +75,49 @@ final class ContributionService
 
             $receiptNumber = $this->nextReceiptNumber($stokvelId);
             $now = now_utc();
-            $paidAt = $paidAt ?? $now;
+            $paidAt = $this->normalizePaidAt($paidAt ?? $now);
 
             $paymentId = (int) $this->db->insert(
-                'INSERT INTO contribution_payments
-                    (stokvel_id, member_id, amount, allocated_amount, credit_amount, payment_method,
-                     receipt_number, status, external_reference, idempotency_key, paid_at, recorded_by,
-                     created_at, updated_at)
+                'INSERT INTO payment_transactions
+                    (stokvel_id, membership_id, transaction_ref, amount, payment_method,
+                     external_reference, status, paid_at, recorded_by_user_id, notes,
+                     idempotency_key, created_at, updated_at)
                  VALUES
-                    (:stokvel_id, :member_id, :amount, :allocated_amount, :credit_amount, :payment_method,
-                     :receipt_number, :status, :external_reference, :idempotency_key, :paid_at, :recorded_by,
-                     :created_at, :updated_at)',
+                    (:stokvel_id, :membership_id, :transaction_ref, :amount, :payment_method,
+                     :external_reference, :status, :paid_at, :recorded_by_user_id, :notes,
+                     :idempotency_key, :created_at, :updated_at)',
                 [
                     'stokvel_id' => $stokvelId,
-                    'member_id' => $memberId,
+                    'membership_id' => $memberId,
+                    'transaction_ref' => $receiptNumber,
                     'amount' => $amount,
-                    'allocated_amount' => '0.00',
-                    'credit_amount' => '0.00',
                     'payment_method' => $paymentMethod,
-                    'receipt_number' => $receiptNumber,
-                    'status' => self::STATUS_COMPLETED,
                     'external_reference' => $externalReference,
-                    'idempotency_key' => $idempotencyKey,
+                    'status' => self::STATUS_COMPLETED,
                     'paid_at' => $paidAt,
-                    'recorded_by' => $recordedBy,
+                    'recorded_by_user_id' => $recordedBy,
+                    'notes' => null,
+                    'idempotency_key' => $idempotencyKey !== '' ? $idempotencyKey : null,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]
             );
 
-            if ($idempotencyKey !== null && $idempotencyKey !== '') {
-                $this->storeIdempotencyKey($stokvelId, 'contribution_payment', $idempotencyKey, (string) $paymentId);
-            }
-
             $allocation = $this->allocatePaymentToCharges($stokvelId, $paymentId, $memberId, $amount);
 
-            $this->postPaymentLedger($stokvelId, $paymentId, $memberId, $amount, $recordedBy, $receiptNumber);
+            $journalId = $this->postPaymentLedger(
+                $stokvelId,
+                $paymentId,
+                $memberId,
+                $amount,
+                $recordedBy,
+                $receiptNumber
+            );
+
+            $this->updatePaymentMeta($stokvelId, $paymentId, $allocation, $journalId);
 
             $payment = $this->getPayment($stokvelId, $paymentId);
-            $payment['allocations'] = $allocation;
+            $payment['allocations'] = $allocation['items'];
 
             return $payment;
         });
@@ -128,17 +132,9 @@ final class ContributionService
         ?string $batchIdempotencyKey = null
     ): array {
         if ($batchIdempotencyKey !== null && $batchIdempotencyKey !== '') {
-            $existing = $this->db->fetch(
-                'SELECT resource_id FROM idempotency_keys
-                 WHERE stokvel_id = :stokvel_id AND scope = :scope AND idempotency_key = :key LIMIT 1',
-                [
-                    'stokvel_id' => $stokvelId,
-                    'scope' => 'contribution_bulk',
-                    'key' => $batchIdempotencyKey,
-                ]
-            );
+            $existing = $this->findBulkByIdempotencyKey($stokvelId, $batchIdempotencyKey);
             if ($existing !== null) {
-                return json_decode((string) ($existing['resource_id'] ?? '[]'), true, 512, JSON_THROW_ON_ERROR);
+                return $existing;
             }
         }
 
@@ -162,12 +158,7 @@ final class ContributionService
         }
 
         if ($batchIdempotencyKey !== null && $batchIdempotencyKey !== '') {
-            $this->storeIdempotencyKey(
-                $stokvelId,
-                'contribution_bulk',
-                $batchIdempotencyKey,
-                json_encode(array_column($results, 'id'), JSON_THROW_ON_ERROR)
-            );
+            $this->storeBulkIdempotencyKey($stokvelId, $batchIdempotencyKey, array_column($results, 'id'));
         }
 
         return $results;
@@ -175,25 +166,45 @@ final class ContributionService
 
     public function getPayment(int $stokvelId, int $paymentId): ?array
     {
-        return $this->db->fetch(
-            'SELECT * FROM contribution_payments WHERE id = :id AND stokvel_id = :stokvel_id LIMIT 1',
+        $row = $this->db->fetch(
+            'SELECT * FROM payment_transactions WHERE id = :id AND stokvel_id = :stokvel_id LIMIT 1',
             ['id' => $paymentId, 'stokvel_id' => $stokvelId]
         );
+        if ($row === null) {
+            return null;
+        }
+
+        return $this->enrichPayment($stokvelId, $row);
     }
 
     public function getMemberCreditBalance(int $stokvelId, int $memberId): string
     {
-        $row = $this->db->fetch(
-            'SELECT COALESCE(SUM(credit_amount), 0) AS credit FROM contribution_payments
-             WHERE stokvel_id = :stokvel_id AND member_id = :member_id AND status = :status',
+        $rows = $this->db->fetchAll(
+            'SELECT pt.id, pt.amount, pt.notes
+             FROM payment_transactions pt
+             WHERE pt.stokvel_id = :stokvel_id AND pt.membership_id = :membership_id AND pt.status = :status',
             [
                 'stokvel_id' => $stokvelId,
-                'member_id' => $memberId,
+                'membership_id' => $memberId,
                 'status' => self::STATUS_COMPLETED,
             ]
         );
 
-        return MoneyMath::normalize($row['credit'] ?? '0');
+        $total = '0.00';
+        foreach ($rows as $row) {
+            $meta = $this->parsePaymentNotes($row['notes'] ?? null);
+            if (isset($meta['credit_amount'])) {
+                $total = MoneyMath::add($total, MoneyMath::normalize((string) $meta['credit_amount']));
+                continue;
+            }
+            $allocated = $this->sumAllocations($stokvelId, (int) $row['id']);
+            $credit = MoneyMath::sub(MoneyMath::normalize((string) $row['amount']), $allocated);
+            if (MoneyMath::isPositive($credit)) {
+                $total = MoneyMath::add($total, $credit);
+            }
+        }
+
+        return MoneyMath::normalize($total);
     }
 
     /** @return list<array{charge_id: int, amount: string}> */
@@ -217,14 +228,14 @@ final class ContributionService
             $this->charges->applyAllocation($stokvelId, (int) $charge['id'], $apply);
 
             $this->db->insert(
-                'INSERT INTO contribution_allocations
-                    (stokvel_id, contribution_payment_id, member_charge_id, amount, created_at)
+                'INSERT INTO payment_allocations
+                    (stokvel_id, payment_transaction_id, member_charge_id, amount, created_at)
                  VALUES
-                    (:stokvel_id, :payment_id, :charge_id, :amount, :created_at)',
+                    (:stokvel_id, :payment_transaction_id, :member_charge_id, :amount, :created_at)',
                 [
                     'stokvel_id' => $stokvelId,
-                    'payment_id' => $paymentId,
-                    'charge_id' => $charge['id'],
+                    'payment_transaction_id' => $paymentId,
+                    'member_charge_id' => $charge['id'],
                     'amount' => $apply,
                     'created_at' => now_utc(),
                 ]
@@ -236,24 +247,33 @@ final class ContributionService
         }
 
         $credit = MoneyMath::normalize($remaining);
+
+        return [
+            'items' => $allocations,
+            'allocated_amount' => $allocatedTotal,
+            'credit_amount' => $credit,
+        ];
+    }
+
+    /** @param array{items: list<array{charge_id: int, amount: string}>, allocated_amount: string, credit_amount: string} $allocation */
+    private function updatePaymentMeta(int $stokvelId, int $paymentId, array $allocation, int $journalId): void
+    {
+        $notes = json_encode([
+            'allocated_amount' => $allocation['allocated_amount'],
+            'credit_amount' => $allocation['credit_amount'],
+            'journal_entry_id' => $journalId,
+        ], JSON_THROW_ON_ERROR);
+
         $this->db->exec(
-            'UPDATE contribution_payments
-             SET allocated_amount = :allocated, credit_amount = :credit, updated_at = :updated_at
+            'UPDATE payment_transactions SET notes = :notes, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
-                'allocated' => $allocatedTotal,
-                'credit' => $credit,
+                'notes' => $notes,
                 'updated_at' => now_utc(),
                 'id' => $paymentId,
                 'stokvel_id' => $stokvelId,
             ]
         );
-
-        if (MoneyMath::isPositive($credit)) {
-            $this->upsertMemberCreditLedger($stokvelId, $memberId, $credit);
-        }
-
-        return $allocations;
     }
 
     private function postPaymentLedger(
@@ -263,7 +283,7 @@ final class ContributionService
         string $amount,
         int $recordedBy,
         string $receiptNumber
-    ): void {
+    ): int {
         $cashAccount = $this->chartOfAccounts->requireBySubType($stokvelId, 'bank');
         $incomeAccount = $this->chartOfAccounts->requireBySubType($stokvelId, 'contributions');
 
@@ -284,61 +304,17 @@ final class ContributionService
             $memberId,
             'Member contribution'
         );
-        $this->ledger->post($stokvelId, $journalId, $recordedBy);
+        $this->ledger->post($stokvelId, $journalId, $recordedBy, true);
 
-        $this->db->exec(
-            'UPDATE contribution_payments SET journal_entry_id = :journal_id, updated_at = :updated_at
-             WHERE id = :id AND stokvel_id = :stokvel_id',
-            [
-                'journal_id' => $journalId,
-                'updated_at' => now_utc(),
-                'id' => $paymentId,
-                'stokvel_id' => $stokvelId,
-            ]
-        );
-    }
-
-    private function upsertMemberCreditLedger(int $stokvelId, int $memberId, string $creditAmount): void
-    {
-        $existing = $this->db->fetch(
-            'SELECT id, balance FROM member_credits WHERE stokvel_id = :stokvel_id AND member_id = :member_id LIMIT 1',
-            ['stokvel_id' => $stokvelId, 'member_id' => $memberId]
-        );
-        if ($existing === null) {
-            $this->db->insert(
-                'INSERT INTO member_credits (stokvel_id, member_id, balance, created_at, updated_at)
-                 VALUES (:stokvel_id, :member_id, :balance, :created_at, :updated_at)',
-                [
-                    'stokvel_id' => $stokvelId,
-                    'member_id' => $memberId,
-                    'balance' => $creditAmount,
-                    'created_at' => now_utc(),
-                    'updated_at' => now_utc(),
-                ]
-            );
-
-            return;
-        }
-
-        $newBalance = MoneyMath::add((string) $existing['balance'], $creditAmount);
-        $this->db->exec(
-            'UPDATE member_credits SET balance = :balance, updated_at = :updated_at
-             WHERE id = :id AND stokvel_id = :stokvel_id',
-            [
-                'balance' => $newBalance,
-                'updated_at' => now_utc(),
-                'id' => $existing['id'],
-                'stokvel_id' => $stokvelId,
-            ]
-        );
+        return $journalId;
     }
 
     private function nextReceiptNumber(int $stokvelId): string
     {
         $year = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y');
         $row = $this->db->fetch(
-            'SELECT COUNT(*) AS cnt FROM contribution_payments
-             WHERE stokvel_id = :stokvel_id AND receipt_number LIKE :prefix',
+            'SELECT COUNT(*) AS cnt FROM payment_transactions
+             WHERE stokvel_id = :stokvel_id AND transaction_ref LIKE :prefix',
             ['stokvel_id' => $stokvelId, 'prefix' => 'RCP-' . $stokvelId . '-' . $year . '-%']
         );
         $seq = ((int) ($row['cnt'] ?? 0)) + 1;
@@ -355,33 +331,109 @@ final class ContributionService
 
     private function findByIdempotencyKey(int $stokvelId, string $key): ?array
     {
-        $link = $this->db->fetch(
-            'SELECT resource_id FROM idempotency_keys
-             WHERE stokvel_id = :stokvel_id AND scope = :scope AND idempotency_key = :key LIMIT 1',
-            ['stokvel_id' => $stokvelId, 'scope' => 'contribution_payment', 'key' => $key]
+        $row = $this->db->fetch(
+            'SELECT id FROM payment_transactions
+             WHERE stokvel_id = :stokvel_id AND idempotency_key = :key LIMIT 1',
+            ['stokvel_id' => $stokvelId, 'key' => $key]
         );
-        if ($link === null) {
+        if ($row === null) {
             return null;
         }
 
-        return $this->getPayment($stokvelId, (int) $link['resource_id']);
+        return $this->getPayment($stokvelId, (int) $row['id']);
     }
 
-    private function storeIdempotencyKey(int $stokvelId, string $scope, string $key, string $resourceId): void
+    /** @return list<array<string, mixed>>|null */
+    private function findBulkByIdempotencyKey(int $stokvelId, string $key): ?array
+    {
+        $link = $this->db->fetch(
+            'SELECT request_path FROM idempotency_keys
+             WHERE stokvel_id = :stokvel_id AND idempotency_key = :key LIMIT 1',
+            ['stokvel_id' => $stokvelId, 'key' => $key]
+        );
+        if ($link === null || !str_starts_with((string) $link['request_path'], '/finance/contributions/bulk:')) {
+            return null;
+        }
+
+        $ids = explode(',', substr((string) $link['request_path'], strlen('/finance/contributions/bulk:')));
+        $results = [];
+        foreach ($ids as $id) {
+            $payment = $this->getPayment($stokvelId, (int) $id);
+            if ($payment !== null) {
+                $results[] = $payment;
+            }
+        }
+
+        return $results !== [] ? $results : null;
+    }
+
+    /** @param list<int|string> $paymentIds */
+    private function storeBulkIdempotencyKey(int $stokvelId, string $key, array $paymentIds): void
     {
         $now = now_utc();
         $this->db->insert(
-            'INSERT INTO idempotency_keys (stokvel_id, scope, idempotency_key, resource_id, created_at, expires_at)
-             VALUES (:stokvel_id, :scope, :idempotency_key, :resource_id, :created_at, :expires_at)
-             ON DUPLICATE KEY UPDATE resource_id = resource_id',
+            'INSERT INTO idempotency_keys (stokvel_id, idempotency_key, request_method, request_path, expires_at, created_at)
+             VALUES (:stokvel_id, :idempotency_key, :request_method, :request_path, :expires_at, :created_at)
+             ON DUPLICATE KEY UPDATE request_path = request_path',
             [
                 'stokvel_id' => $stokvelId,
-                'scope' => $scope,
                 'idempotency_key' => $key,
-                'resource_id' => $resourceId,
-                'created_at' => $now,
+                'request_method' => 'POST',
+                'request_path' => '/finance/contributions/bulk:' . implode(',', $paymentIds),
                 'expires_at' => (new \DateTimeImmutable($now))->modify('+30 days')->format('Y-m-d H:i:s'),
+                'created_at' => $now,
             ]
         );
+    }
+
+    private function normalizePaidAt(string $paidAt): string
+    {
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $paidAt) === 1) {
+            return $paidAt . ' 12:00:00';
+        }
+
+        return $paidAt;
+    }
+
+    /** @param array<string, mixed> $row */
+    private function enrichPayment(int $stokvelId, array $row): array
+    {
+        $meta = $this->parsePaymentNotes($row['notes'] ?? null);
+        $allocated = isset($meta['allocated_amount'])
+            ? MoneyMath::normalize((string) $meta['allocated_amount'])
+            : $this->sumAllocations($stokvelId, (int) $row['id']);
+        $credit = isset($meta['credit_amount'])
+            ? MoneyMath::normalize((string) $meta['credit_amount'])
+            : MoneyMath::max(MoneyMath::sub(MoneyMath::normalize((string) $row['amount']), $allocated), '0.00');
+
+        $row['receipt_number'] = $row['transaction_ref'];
+        $row['member_id'] = $row['membership_id'];
+        $row['allocated_amount'] = $allocated;
+        $row['credit_amount'] = $credit;
+        $row['journal_entry_id'] = $meta['journal_entry_id'] ?? null;
+
+        return $row;
+    }
+
+    /** @return array<string, mixed> */
+    private function parsePaymentNotes(?string $notes): array
+    {
+        if ($notes === null || $notes === '') {
+            return [];
+        }
+        $decoded = json_decode($notes, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function sumAllocations(int $stokvelId, int $paymentId): string
+    {
+        $row = $this->db->fetch(
+            'SELECT COALESCE(SUM(amount), 0) AS total FROM payment_allocations
+             WHERE stokvel_id = :stokvel_id AND payment_transaction_id = :payment_id',
+            ['stokvel_id' => $stokvelId, 'payment_id' => $paymentId]
+        );
+
+        return MoneyMath::normalize($row['total'] ?? '0');
     }
 }

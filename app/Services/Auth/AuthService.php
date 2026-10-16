@@ -240,7 +240,8 @@ final class AuthService
             if ($stokvel) {
                 Session::set('active_stokvel_id', $stokvelId);
                 Session::set('stokvel_id', $stokvelId);
-                $this->tenant->setTenant($stokvel, null, ['*']);
+                $perms = $this->permissions->forPlatformRole((string) ($this->tenant->platformRole() ?? ''));
+                $this->tenant->setTenant($stokvel, null, $perms);
             }
             return;
         }

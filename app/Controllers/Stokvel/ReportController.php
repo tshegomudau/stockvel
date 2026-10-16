@@ -102,18 +102,25 @@ final class ReportController extends Controller
                         ['sid' => $stokvelId]
                     ),
                     'expenses' => $this->db->fetchAll(
-                        'SELECT * FROM expenses WHERE stokvel_id = :sid AND expense_date BETWEEN :f AND :t',
+                        'SELECT * FROM expenses WHERE stokvel_id = :sid AND incurred_at BETWEEN :f AND :t',
                         ['sid' => $stokvelId, 'f' => $from, 't' => $to]
                     ),
                     'loans' => $this->db->fetchAll('SELECT * FROM loans WHERE stokvel_id = :sid', ['sid' => $stokvelId]),
-                    'payouts' => $this->db->fetchAll('SELECT * FROM payouts WHERE stokvel_id = :sid', ['sid' => $stokvelId]),
+                    'payouts' => $this->db->fetchAll(
+                        'SELECT ps.*, pc.name AS cycle_name FROM payout_schedule ps
+                         INNER JOIN payout_cycles pc ON pc.id = ps.payout_cycle_id
+                         WHERE ps.stokvel_id = :sid ORDER BY ps.scheduled_date ASC',
+                        ['sid' => $stokvelId]
+                    ),
                     'ledger' => $this->db->fetchAll(
                         'SELECT jl.* FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journal_entry_id WHERE je.stokvel_id = :sid AND je.entry_date BETWEEN :f AND :t',
                         ['sid' => $stokvelId, 'f' => $from, 't' => $to]
                     ),
                     'cashflow' => $this->db->fetchAll(
-                        "SELECT DATE(paid_at) AS day, SUM(amount) AS total FROM contributions WHERE stokvel_id = :sid AND status = 'posted' AND paid_at BETWEEN :f AND :t GROUP BY DATE(paid_at)",
-                        ['sid' => $stokvelId, 'f' => $from, 't' => $to]
+                        "SELECT DATE(paid_at) AS day, SUM(amount) AS total FROM payment_transactions
+                         WHERE stokvel_id = :sid AND status = 'completed' AND paid_at BETWEEN :f AND :t
+                         GROUP BY DATE(paid_at)",
+                        ['sid' => $stokvelId, 'f' => $from . ' 00:00:00', 't' => $to . ' 23:59:59']
                     ),
                     'meetings' => $this->db->fetchAll(
                         'SELECT * FROM meetings WHERE stokvel_id = :sid AND scheduled_at BETWEEN :f AND :t',

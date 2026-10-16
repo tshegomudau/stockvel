@@ -62,7 +62,7 @@ return static function (TestRunner $runner): void {
     $runner->add('Partial payment allocation', function (): void {
         test_transaction(function () {
             $db = test_db();
-            if (!$db->fetch("SHOW TABLES LIKE 'contribution_payments'")) {
+            if (!$db->fetch("SHOW TABLES LIKE 'payment_transactions'")) {
                 return;
             }
             $row = $db->fetch(

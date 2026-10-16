@@ -81,12 +81,17 @@ final class MemberController extends Controller
     public function invite(Request $request): Response
     {
         $this->requirePermission('members.invite');
-        $sid = $this->requireStokvel();
+        $this->requireStokvel();
         $data = [
             'email' => trim((string) $request->input('email', '')),
             'mobile' => trim((string) $request->input('mobile', '')),
             'role' => (string) $request->input('role', 'ordinary'),
         ];
+        $roleMap = [
+            'ordinary' => 'ordinary_member',
+            'committee' => 'committee_member',
+        ];
+        $roleCode = $roleMap[$data['role']] ?? $data['role'];
         $validator = Validator::make($data, [
             'email' => 'required|email',
             'role' => 'required|in:chairperson,treasurer,secretary,committee,ordinary,auditor',
@@ -97,26 +102,19 @@ final class MemberController extends Controller
             return $this->redirect('/app/members/invite');
         }
 
-        $token = bin2hex(random_bytes(32));
-        $this->service(\App\Services\Membership\InvitationService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function create(array $data): void
-            {
-                $this->db->insert(
-                    'INSERT INTO member_invitations (stokvel_id, email, mobile, role, token_hash, status, invited_by, created_at) VALUES (:sid, :email, :mobile, :role, :th, :st, :by, :ca)',
-                    $data
-                );
-            }
-        })->create([
-            'sid' => $sid,
-            'email' => $data['email'],
-            'mobile' => $data['mobile'] ?: null,
-            'role' => $data['role'],
-            'th' => hash('sha256', $token),
-            'st' => 'pending',
-            'by' => $this->userId(),
-            'ca' => now_utc(),
-        ]);
+        $role = $this->db()->fetch(
+            'SELECT id FROM roles WHERE code = :code AND stokvel_id IS NULL LIMIT 1',
+            ['code' => $roleCode]
+        );
+
+        /** @var \App\Services\Membership\MembershipService $memberships */
+        $memberships = app()->container()->get(\App\Services\Membership\MembershipService::class);
+        $memberships->invite(
+            $data['email'],
+            $data['mobile'] !== '' ? $data['mobile'] : null,
+            $role ? (int) $role['id'] : null,
+            (int) $this->userId()
+        );
 
         Session::flash('success', 'Invitation sent to ' . $data['email'] . '.');
         return $this->redirect('/app/members');
@@ -162,16 +160,7 @@ final class MemberController extends Controller
             return $this->redirect('/app/members');
         }
 
-        $lines = $this->service(\App\Services\Finance\MemberStatementService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function lines(int $stokvelId, int $memberId): array
-            {
-                return $this->db->fetchAll(
-                    'SELECT * FROM member_ledger_entries WHERE stokvel_id = :sid AND member_id = :mid ORDER BY entry_date DESC LIMIT 200',
-                    ['sid' => $stokvelId, 'mid' => $memberId]
-                );
-            }
-        })->lines($sid, (int) $member['id']);
+        $lines = $this->memberStatementLines($sid, (int) $member['id']);
 
         $layout = $request->query('print') ? 'layouts/print' : 'layouts/app';
         return $this->render('stokvel/members/statement', [
@@ -190,5 +179,35 @@ final class MemberController extends Controller
             'UPDATE memberships SET status = :st, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
             ['st' => $status, 'ua' => now_utc(), 'id' => $memberId, 'sid' => $sid]
         );
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function memberStatementLines(int $stokvelId, int $membershipId): array
+    {
+        $charges = $this->db()->fetchAll(
+            "SELECT due_date AS entry_date, description, amount, 'charge' AS entry_type, charge_code AS reference
+             FROM member_charges
+             WHERE stokvel_id = :sid AND membership_id = :mid
+             ORDER BY due_date DESC, id DESC
+             LIMIT 100",
+            ['sid' => $stokvelId, 'mid' => $membershipId]
+        );
+        $payments = $this->db()->fetchAll(
+            "SELECT paid_at AS entry_date, CONCAT('Payment ', COALESCE(payment_method, '')) AS description,
+                    amount, 'payment' AS entry_type, COALESCE(transaction_ref, CAST(id AS CHAR)) AS reference
+             FROM payment_transactions
+             WHERE stokvel_id = :sid AND membership_id = :mid
+               AND status IN ('posted','completed','allocated','confirmed')
+             ORDER BY paid_at DESC, id DESC
+             LIMIT 100",
+            ['sid' => $stokvelId, 'mid' => $membershipId]
+        );
+
+        $lines = array_merge($charges, $payments);
+        usort($lines, static function (array $a, array $b): int {
+            return strcmp((string) ($b['entry_date'] ?? ''), (string) ($a['entry_date'] ?? ''));
+        });
+
+        return array_slice($lines, 0, 200);
     }
 }

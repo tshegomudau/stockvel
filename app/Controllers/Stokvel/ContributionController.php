@@ -10,6 +10,8 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
+use App\Exceptions\FinanceException;
+use App\Services\Finance\ContributionService;
 
 final class ContributionController extends Controller
 {
@@ -19,8 +21,8 @@ final class ContributionController extends Controller
         $sid = $this->requireStokvel();
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM contributions WHERE stokvel_id = :sid',
-            'SELECT c.*, p.first_name, p.last_name FROM payment_transactions c LEFT JOIN memberships sm ON sm.id = c.membership_id LEFT JOIN users u ON u.id = sm.user_id LEFT JOIN user_profiles p ON p.user_id = u.id WHERE c.stokvel_id = :sid ORDER BY c.paid_at DESC',
+            'SELECT COUNT(*) AS c FROM payment_transactions WHERE stokvel_id = :sid',
+            'SELECT c.*, c.transaction_ref AS receipt_number, p.first_name, p.last_name FROM payment_transactions c LEFT JOIN memberships sm ON sm.id = c.membership_id LEFT JOIN users u ON u.id = sm.user_id LEFT JOIN user_profiles p ON p.user_id = u.id WHERE c.stokvel_id = :sid ORDER BY c.paid_at DESC',
             ['sid' => $sid],
             $this->page($request),
             $this->perPage($request),
@@ -69,27 +71,22 @@ final class ContributionController extends Controller
             return $this->redirect('/app/contributions/create');
         }
 
-        $this->service(\App\Services\Finance\ContributionService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function capture(int $stokvelId, array $data, int $userId): void
-            {
-                $this->db->insert(
-                    'INSERT INTO contributions (stokvel_id, member_id, amount, paid_at, payment_method, reference, status, captured_by, created_at, updated_at) VALUES (:sid, :mid, :amt, :pa, :pm, :ref, :st, :by, :ca, :ua)',
-                    [
-                        'sid' => $stokvelId,
-                        'mid' => $data['member_id'],
-                        'amt' => $data['amount'],
-                        'pa' => $data['paid_at'],
-                        'pm' => $data['payment_method'],
-                        'ref' => $data['reference'] ?: null,
-                        'st' => 'posted',
-                        'by' => $userId,
-                        'ca' => now_utc(),
-                        'ua' => now_utc(),
-                    ]
-                );
-            }
-        })->capture($sid, $data, (int) $this->userId());
+        try {
+            $this->contributions()->capturePayment(
+                $sid,
+                $data['member_id'],
+                $data['amount'],
+                $data['payment_method'],
+                (int) $this->userId(),
+                null,
+                $data['reference'] !== '' ? $data['reference'] : null,
+                $data['paid_at']
+            );
+        } catch (FinanceException $e) {
+            $this->flashOld($request);
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/contributions/create');
+        }
 
         Session::flash('success', 'Contribution recorded.');
         return $this->redirect('/app/contributions');
@@ -116,29 +113,37 @@ final class ContributionController extends Controller
             return $this->redirect('/app/contributions/bulk');
         }
 
-        $count = 0;
+        $payload = [];
         foreach ($rows as $row) {
             if (!is_array($row) || empty($row['member_id']) || empty($row['amount'])) {
                 continue;
             }
-            $this->db()->insert(
-                'INSERT INTO contributions (stokvel_id, member_id, amount, paid_at, payment_method, status, captured_by, created_at, updated_at) VALUES (:sid, :mid, :amt, :pa, :pm, :st, :by, :ca, :ua)',
-                [
-                    'sid' => $sid,
-                    'mid' => (int) $row['member_id'],
-                    'amt' => $row['amount'],
-                    'pa' => $row['paid_at'] ?? date('Y-m-d'),
-                    'pm' => $row['payment_method'] ?? 'eft',
-                    'st' => 'posted',
-                    'by' => $this->userId(),
-                    'ca' => now_utc(),
-                    'ua' => now_utc(),
-                ]
-            );
-            $count++;
+            $payload[] = [
+                'member_id' => (int) $row['member_id'],
+                'amount' => (string) $row['amount'],
+                'payment_method' => (string) ($row['payment_method'] ?? 'eft'),
+                'reference' => isset($row['reference']) ? (string) $row['reference'] : null,
+            ];
         }
 
-        Session::flash('success', "{$count} contributions recorded.");
+        if ($payload === []) {
+            Session::flash('error', 'No valid rows submitted.');
+            return $this->redirect('/app/contributions/bulk');
+        }
+
+        try {
+            $results = $this->contributions()->captureBulk(
+                $sid,
+                $payload,
+                (int) $this->userId(),
+                'eft',
+                'bulk-' . $sid . '-' . hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR))
+            );
+            Session::flash('success', count($results) . ' contributions recorded.');
+        } catch (FinanceException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+
         return $this->redirect('/app/contributions');
     }
 
@@ -170,6 +175,7 @@ final class ContributionController extends Controller
 
         $header = fgetcsv($handle);
         $count = 0;
+        $svc = $this->contributions();
         while (($row = fgetcsv($handle)) !== false) {
             if (count($row) < 3) {
                 continue;
@@ -182,21 +188,21 @@ final class ContributionController extends Controller
             if (!$member) {
                 continue;
             }
-            $this->db()->insert(
-                'INSERT INTO contributions (stokvel_id, member_id, amount, paid_at, payment_method, status, captured_by, created_at, updated_at) VALUES (:sid, :mid, :amt, :pa, :pm, :st, :by, :ca, :ua)',
-                [
-                    'sid' => $sid,
-                    'mid' => $member['id'],
-                    'amt' => $amount,
-                    'pa' => $paidAt ?: date('Y-m-d'),
-                    'pm' => 'import',
-                    'st' => 'posted',
-                    'by' => $this->userId(),
-                    'ca' => now_utc(),
-                    'ua' => now_utc(),
-                ]
-            );
-            $count++;
+            try {
+                $svc->capturePayment(
+                    $sid,
+                    (int) $member['id'],
+                    (string) $amount,
+                    'other',
+                    (int) $this->userId(),
+                    'import-' . hash('sha256', $sid . ':' . $member['id'] . ':' . $amount . ':' . $paidAt),
+                    null,
+                    $paidAt ?: date('Y-m-d')
+                );
+                $count++;
+            } catch (FinanceException) {
+                continue;
+            }
         }
         fclose($handle);
 
@@ -209,7 +215,17 @@ final class ContributionController extends Controller
         $this->requirePermission('contributions.view');
         $sid = $this->requireStokvel();
         $rows = $this->db()->fetchAll(
-            'SELECT a.*, u.first_name, u.last_name FROM member_arrears a JOIN memberships sm ON sm.id = a.member_id JOIN users u ON u.id = sm.user_id WHERE a.stokvel_id = :sid ORDER BY a.balance_due DESC',
+            'SELECT mc.membership_id AS member_id, mc.stokvel_id,
+                    SUM(mc.amount - mc.amount_paid) AS balance_due,
+                    p.first_name, p.last_name
+             FROM member_charges mc
+             JOIN memberships sm ON sm.id = mc.membership_id
+             JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             WHERE mc.stokvel_id = :sid AND mc.status IN (\'pending\', \'partial\', \'overdue\')
+             GROUP BY mc.membership_id, mc.stokvel_id, p.first_name, p.last_name
+             HAVING balance_due > 0
+             ORDER BY balance_due DESC',
             ['sid' => $sid]
         );
 
@@ -225,8 +241,19 @@ final class ContributionController extends Controller
     {
         $sid = $this->requireStokvel();
         return $this->db()->fetchAll(
-            'SELECT sm.id, p.first_name, p.last_name, u.email FROM memberships sm JOIN users u ON u.id = sm.user_id LEFT JOIN user_profiles p ON p.user_id = u.id WHERE sm.stokvel_id = :sid AND sm.status = :st ORDER BY u.last_name',
+            'SELECT sm.id, p.first_name, p.last_name, u.email FROM memberships sm JOIN users u ON u.id = sm.user_id LEFT JOIN user_profiles p ON p.user_id = u.id WHERE sm.stokvel_id = :sid AND sm.status = :st ORDER BY p.last_name, p.first_name',
             ['sid' => $sid, 'st' => 'active']
         );
+    }
+
+    private function contributions(): ContributionService
+    {
+        /** @var ContributionService */
+        return $this->service(ContributionService::class, fn ($db) => new ContributionService(
+            $db,
+            new \App\Services\Finance\ChargeService($db, new \App\Services\Finance\FeeStructureService($db)),
+            new \App\Services\Finance\LedgerService($db),
+            new \App\Services\Finance\ChartOfAccountsService($db)
+        ));
     }
 }

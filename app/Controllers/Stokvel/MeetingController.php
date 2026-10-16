@@ -22,7 +22,7 @@ final class MeetingController extends Controller
         $paginator = Paginator::fromQuery(
             $this->db(),
             'SELECT COUNT(*) AS c FROM meetings WHERE stokvel_id = :sid',
-            'SELECT * FROM meetings WHERE stokvel_id = :sid ORDER BY created_at DESC',
+            'SELECT * FROM meetings WHERE stokvel_id = :sid ORDER BY scheduled_at DESC',
             ['sid' => $sid],
             $page,
             $perPage,
@@ -50,21 +50,46 @@ final class MeetingController extends Controller
     {
         $this->requirePermission('meetings.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method']);
-        $data['stokvel_id'] = $sid;
-        $data['created_at'] = now_utc();
-        $data['updated_at'] = now_utc();
-        $this->service(\App\Services\Stokvel\MeetingService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function create(array $data): int
-            {
-                $cols = array_keys($data);
-                $ph = array_map(static fn ($c) => ':' . $c, $cols);
-                $sql = 'INSERT INTO meetings (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $ph) . ')';
-                return (int) $this->db->insert($sql, $data);
-            }
-        })->create($data);
+        $title = trim((string) $request->input('title', ''));
+        $scheduledAt = (string) $request->input('scheduled_at', '');
+        $venue = trim((string) $request->input('venue', $request->input('location', '')));
+        $validator = Validator::make(
+            ['title' => $title, 'scheduled_at' => $scheduledAt],
+            ['title' => 'required|string', 'scheduled_at' => 'required']
+        );
+        if ($validator->fails()) {
+            $this->flashOld($request);
+            Session::flash('error', 'Invalid meeting details.');
+            return $this->redirect('/app/meetings/create');
+        }
+
+        $scheduledAt = str_replace('T', ' ', $scheduledAt);
+        if (strlen($scheduledAt) === 16) {
+            $scheduledAt .= ':00';
+        }
+
+        $now = now_utc();
+        $ref = 'MTG-' . $sid . '-' . gmdate('YmdHis');
+        $this->db()->insert(
+            'INSERT INTO meetings
+                (stokvel_id, meeting_ref, title, meeting_type, status, scheduled_at, venue,
+                 created_by_user_id, created_at, updated_at)
+             VALUES
+                (:sid, :ref, :title, :type, :status, :scheduled_at, :venue, :by, :ca, :ua)',
+            [
+                'sid' => $sid,
+                'ref' => $ref,
+                'title' => $title,
+                'type' => 'regular',
+                'status' => 'scheduled',
+                'scheduled_at' => $scheduledAt,
+                'venue' => $venue !== '' ? $venue : null,
+                'by' => $this->userId(),
+                'ca' => $now,
+                'ua' => $now,
+            ]
+        );
+
         Session::flash('success', 'Meeting saved.');
         return $this->redirect('/app/meetings');
     }
@@ -73,7 +98,10 @@ final class MeetingController extends Controller
     {
         $this->requirePermission('meetings.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch('SELECT * FROM meetings WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        $row = $this->db()->fetch(
+            'SELECT * FROM meetings WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         if (!$row) {
             return $this->redirect('/app/meetings');
         }
@@ -89,10 +117,14 @@ final class MeetingController extends Controller
     {
         $this->requirePermission('meetings.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch('SELECT * FROM meetings WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        $row = $this->db()->fetch(
+            'SELECT * FROM meetings WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         if (!$row) {
             return $this->redirect('/app/meetings');
         }
+        $row['location'] = $row['venue'] ?? '';
         return $this->render('stokvel/meetings/edit', [
             'title' => 'Edit Meeting',
             'activeNav' => 'meetings',
@@ -105,16 +137,29 @@ final class MeetingController extends Controller
     {
         $this->requirePermission('meetings.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method'], $data['stokvel_id']);
-        $data['updated_at'] = now_utc();
-        $sets = [];
-        foreach (array_keys($data) as $col) {
-            $sets[] = "{$col} = :{$col}";
+        $title = trim((string) $request->input('title', ''));
+        $scheduledAt = (string) $request->input('scheduled_at', '');
+        $venue = trim((string) $request->input('venue', $request->input('location', '')));
+        if ($title === '' || $scheduledAt === '') {
+            Session::flash('error', 'Title and schedule are required.');
+            return $this->redirect('/app/meetings/' . $id . '/edit');
         }
-        $data['id'] = (int) $id;
-        $data['sid'] = $sid;
-        $this->db()->exec('UPDATE meetings SET ' . implode(', ', $sets) . ' WHERE id = :id AND stokvel_id = :sid', $data);
+        $scheduledAt = str_replace('T', ' ', $scheduledAt);
+        if (strlen($scheduledAt) === 16) {
+            $scheduledAt .= ':00';
+        }
+        $this->db()->exec(
+            'UPDATE meetings SET title = :title, scheduled_at = :scheduled_at, venue = :venue, updated_at = :ua
+             WHERE id = :id AND stokvel_id = :sid',
+            [
+                'title' => $title,
+                'scheduled_at' => $scheduledAt,
+                'venue' => $venue !== '' ? $venue : null,
+                'ua' => now_utc(),
+                'id' => (int) $id,
+                'sid' => $sid,
+            ]
+        );
         Session::flash('success', 'Meeting updated.');
         return $this->redirect('/app/meetings/' . $id);
     }
@@ -123,12 +168,10 @@ final class MeetingController extends Controller
     {
         $this->requirePermission('meetings.manage');
         $sid = $this->requireStokvel();
-        $this->db()->exec('UPDATE meetings SET deleted_at = :da, updated_at = :ua WHERE id = :id AND stokvel_id = :sid', [
-            'da' => now_utc(),
-            'ua' => now_utc(),
-            'id' => (int) $id,
-            'sid' => $sid,
-        ]);
+        $this->db()->exec(
+            'UPDATE meetings SET status = :status, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+            ['status' => 'cancelled', 'ua' => now_utc(), 'id' => (int) $id, 'sid' => $sid]
+        );
         Session::flash('success', 'Meeting removed.');
         return $this->redirect('/app/meetings');
     }

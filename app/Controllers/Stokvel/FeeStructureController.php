@@ -10,6 +10,8 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
+use App\Exceptions\FinanceException;
+use App\Services\Finance\FeeStructureService;
 
 final class FeeStructureController extends Controller
 {
@@ -50,21 +52,35 @@ final class FeeStructureController extends Controller
     {
         $this->requirePermission('fees.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method']);
-        $data['stokvel_id'] = $sid;
-        $data['created_at'] = now_utc();
-        $data['updated_at'] = now_utc();
-        $this->service(\App\Services\Stokvel\FeeStructureService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function create(array $data): int
-            {
-                $cols = array_keys($data);
-                $ph = array_map(static fn ($c) => ':' . $c, $cols);
-                $sql = 'INSERT INTO fee_structures (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $ph) . ')';
-                return (int) $this->db->insert($sql, $data);
-            }
-        })->create($data);
+        $name = trim((string) $request->input('name', ''));
+        $amount = (string) $request->input('amount', '');
+        $frequency = (string) $request->input('frequency', 'monthly');
+        $validator = Validator::make(
+            ['name' => $name, 'amount' => $amount, 'frequency' => $frequency],
+            ['name' => 'required|string', 'amount' => 'required|numeric', 'frequency' => 'required|string']
+        );
+        if ($validator->fails()) {
+            $this->flashOld($request);
+            Session::flash('error', 'Invalid fee structure details.');
+            return $this->redirect('/app/fees/create');
+        }
+
+        try {
+            /** @var FeeStructureService $fees */
+            $fees = $this->service(FeeStructureService::class, fn ($db) => new FeeStructureService($db));
+            $fees->createStructure(
+                $sid,
+                $name,
+                'contribution',
+                $amount,
+                $frequency
+            );
+        } catch (FinanceException $e) {
+            $this->flashOld($request);
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/fees/create');
+        }
+
         Session::flash('success', 'Fee structure saved.');
         return $this->redirect('/app/fees');
     }
@@ -123,12 +139,14 @@ final class FeeStructureController extends Controller
     {
         $this->requirePermission('fees.manage');
         $sid = $this->requireStokvel();
-        $this->db()->exec('UPDATE fee_structures SET deleted_at = :da, updated_at = :ua WHERE id = :id AND stokvel_id = :sid', [
-            'da' => now_utc(),
-            'ua' => now_utc(),
-            'id' => (int) $id,
-            'sid' => $sid,
-        ]);
+        /** @var FeeStructureService $fees */
+        $fees = $this->service(FeeStructureService::class, fn ($db) => new FeeStructureService($db));
+        try {
+            $fees->deactivate($sid, (int) $id);
+        } catch (FinanceException) {
+            Session::flash('error', 'Fee structure not found.');
+            return $this->redirect('/app/fees');
+        }
         Session::flash('success', 'Fee structure removed.');
         return $this->redirect('/app/fees');
     }

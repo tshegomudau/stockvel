@@ -35,22 +35,78 @@ final class PayoutService
         int $createdBy
     ): int {
         $now = now_utc();
+        $code = 'CYC-' . $stokvelId . '-' . gmdate('YmdHis');
         return (int) $this->db->insert(
             'INSERT INTO payout_cycles
-                (stokvel_id, name, cycle_start_date, cycle_end_date, status, created_by, created_at, updated_at)
+                (stokvel_id, cycle_code, name, status, start_date, end_date, created_at, updated_at)
              VALUES
-                (:stokvel_id, :name, :cycle_start_date, :cycle_end_date, :status, :created_by, :created_at, :updated_at)',
+                (:stokvel_id, :cycle_code, :name, :status, :start_date, :end_date, :created_at, :updated_at)',
             [
                 'stokvel_id' => $stokvelId,
+                'cycle_code' => $code,
                 'name' => $name,
-                'cycle_start_date' => $cycleStartDate,
-                'cycle_end_date' => $cycleEndDate,
-                'status' => self::STATUS_PLANNED,
-                'created_by' => $createdBy,
+                'status' => 'planning',
+                'start_date' => $cycleStartDate,
+                'end_date' => $cycleEndDate,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]
         );
+    }
+
+    public function scheduleMemberPayout(
+        int $stokvelId,
+        int $cycleId,
+        int $membershipId,
+        string $amount,
+        string $scheduledDate,
+        int $sequenceNumber = 1
+    ): int {
+        $cycle = $this->getCycle($stokvelId, $cycleId);
+        if ($cycle === null) {
+            throw new FinanceException('Payout cycle not found.');
+        }
+        $member = $this->db->fetch(
+            'SELECT id FROM memberships WHERE id = :id AND stokvel_id = :stokvel_id',
+            ['id' => $membershipId, 'stokvel_id' => $stokvelId]
+        );
+        if ($member === null) {
+            throw new FinanceException('Invalid member for payout schedule.');
+        }
+
+        $now = now_utc();
+        $scheduleId = (int) $this->db->insert(
+            'INSERT INTO payout_schedule
+                (stokvel_id, payout_cycle_id, membership_id, sequence_number, scheduled_date,
+                 payout_amount, status, created_at, updated_at)
+             VALUES
+                (:stokvel_id, :payout_cycle_id, :membership_id, :sequence_number, :scheduled_date,
+                 :payout_amount, :status, :created_at, :updated_at)',
+            [
+                'stokvel_id' => $stokvelId,
+                'payout_cycle_id' => $cycleId,
+                'membership_id' => $membershipId,
+                'sequence_number' => $sequenceNumber,
+                'scheduled_date' => $scheduledDate,
+                'payout_amount' => MoneyMath::normalize($amount),
+                'status' => 'scheduled',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]
+        );
+
+        $this->db->exec(
+            'UPDATE payout_cycles SET payout_amount = :amount, updated_at = :ua
+             WHERE id = :id AND stokvel_id = :sid',
+            [
+                'amount' => MoneyMath::normalize($amount),
+                'ua' => $now,
+                'id' => $cycleId,
+                'sid' => $stokvelId,
+            ]
+        );
+
+        return $scheduleId;
     }
 
     /** @param list<int> $memberIdsInOrder */
@@ -61,32 +117,44 @@ final class PayoutService
             throw new FinanceException('Payout cycle not found.');
         }
 
-        $this->db->transaction(function () use ($stokvelId, $cycleId, $memberIdsInOrder): void {
+        $amount = MoneyMath::normalize((string) ($cycle['payout_amount'] ?? '0'));
+        $start = (string) ($cycle['start_date'] ?? date('Y-m-d'));
+
+        $this->db->transaction(function () use ($stokvelId, $cycleId, $memberIdsInOrder, $amount, $start): void {
             $this->db->exec(
-                'DELETE FROM payout_rotation_order WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id',
+                'DELETE FROM payout_schedule WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id',
                 ['stokvel_id' => $stokvelId, 'cycle_id' => $cycleId]
             );
 
             $position = 1;
             foreach ($memberIdsInOrder as $memberId) {
                 $member = $this->db->fetch(
-                    'SELECT id FROM members WHERE id = :id AND stokvel_id = :stokvel_id',
+                    'SELECT id FROM memberships WHERE id = :id AND stokvel_id = :stokvel_id',
                     ['id' => $memberId, 'stokvel_id' => $stokvelId]
                 );
                 if ($member === null) {
                     throw new FinanceException('Invalid member in rotation order.');
                 }
 
+                $scheduledDate = (new \DateTimeImmutable($start))
+                    ->modify('+' . ($position - 1) . ' month')
+                    ->format('Y-m-d');
+
                 $this->db->insert(
-                    'INSERT INTO payout_rotation_order
-                        (stokvel_id, payout_cycle_id, member_id, position, created_at, updated_at)
+                    'INSERT INTO payout_schedule
+                        (stokvel_id, payout_cycle_id, membership_id, sequence_number, scheduled_date,
+                         payout_amount, status, created_at, updated_at)
                      VALUES
-                        (:stokvel_id, :payout_cycle_id, :member_id, :position, :created_at, :updated_at)',
+                        (:stokvel_id, :payout_cycle_id, :membership_id, :sequence_number, :scheduled_date,
+                         :payout_amount, :status, :created_at, :updated_at)',
                     [
                         'stokvel_id' => $stokvelId,
                         'payout_cycle_id' => $cycleId,
-                        'member_id' => $memberId,
-                        'position' => $position,
+                        'membership_id' => $memberId,
+                        'sequence_number' => $position,
+                        'scheduled_date' => $scheduledDate,
+                        'payout_amount' => $amount,
+                        'status' => 'scheduled',
                         'created_at' => now_utc(),
                         'updated_at' => now_utc(),
                     ]
@@ -189,17 +257,12 @@ final class PayoutService
         if ($cycle === null) {
             throw new FinanceException('Payout cycle not found.');
         }
-        if ((int) ($cycle['created_by'] ?? 0) === $approvedBy && $this->makerCheckerEnabled($stokvelId)) {
-            throw new AuthorizationException('Maker-checker: cycle creator cannot approve the payout cycle.');
-        }
 
         $this->db->exec(
-            'UPDATE payout_cycles SET status = :status, approved_by = :approved_by, approved_at = :approved_at, updated_at = :updated_at
+            'UPDATE payout_cycles SET status = :status, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
-                'status' => self::STATUS_APPROVED,
-                'approved_by' => $approvedBy,
-                'approved_at' => now_utc(),
+                'status' => 'approved',
                 'updated_at' => now_utc(),
                 'id' => $cycleId,
                 'stokvel_id' => $stokvelId,
@@ -222,8 +285,8 @@ final class PayoutService
     ): int {
         return (int) $this->db->transaction(function () use ($stokvelId, $cycleId, $memberId, $amount, $recordedBy, $payoutDate) {
             $cycle = $this->getCycle($stokvelId, $cycleId);
-            if ($cycle === null || !in_array($cycle['status'], [self::STATUS_APPROVED, self::STATUS_PLANNED], true)) {
-                throw new FinanceException('Payout cycle must be approved before recording payouts.');
+            if ($cycle === null || !in_array($cycle['status'], ['approved', 'planning', self::STATUS_APPROVED, self::STATUS_PLANNED], true)) {
+                throw new FinanceException('Payout cycle must be approved or planning before recording payouts.');
             }
 
             $eligibility = $this->checkEligibility($stokvelId, $cycleId, $memberId);
@@ -233,22 +296,48 @@ final class PayoutService
 
             $amount = MoneyMath::normalize($amount);
             $payoutDate = $payoutDate ?? (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d');
+            $now = now_utc();
 
-            $payoutId = (int) $this->db->insert(
-                'INSERT INTO payout_records
-                    (stokvel_id, payout_cycle_id, member_id, amount, status, payout_date, recorded_by, created_at, updated_at)
+            $schedule = $this->db->fetch(
+                'SELECT id FROM payout_schedule
+                 WHERE stokvel_id = :sid AND payout_cycle_id = :cid AND membership_id = :mid
+                 ORDER BY sequence_number ASC LIMIT 1',
+                ['sid' => $stokvelId, 'cid' => $cycleId, 'mid' => $memberId]
+            );
+            if ($schedule === null) {
+                throw new FinanceException('No payout schedule entry for this member.');
+            }
+
+            $this->db->exec(
+                'UPDATE payout_schedule SET status = :status, paid_at = :paid_at, payout_amount = :amount, updated_at = :ua
+                 WHERE id = :id AND stokvel_id = :sid',
+                [
+                    'status' => 'paid',
+                    'paid_at' => $now,
+                    'amount' => $amount,
+                    'ua' => $now,
+                    'id' => $schedule['id'],
+                    'sid' => $stokvelId,
+                ]
+            );
+
+            $distributionId = (int) $this->db->insert(
+                'INSERT INTO distributions
+                    (stokvel_id, payout_cycle_id, payout_schedule_id, distribution_ref, amount, status,
+                     paid_at, created_at, updated_at)
                  VALUES
-                    (:stokvel_id, :payout_cycle_id, :member_id, :amount, :status, :payout_date, :recorded_by, :created_at, :updated_at)',
+                    (:stokvel_id, :payout_cycle_id, :payout_schedule_id, :distribution_ref, :amount, :status,
+                     :paid_at, :created_at, :updated_at)',
                 [
                     'stokvel_id' => $stokvelId,
                     'payout_cycle_id' => $cycleId,
-                    'member_id' => $memberId,
+                    'payout_schedule_id' => (int) $schedule['id'],
+                    'distribution_ref' => 'DIST-' . $stokvelId . '-' . (int) $schedule['id'],
                     'amount' => $amount,
-                    'status' => self::STATUS_PAID,
-                    'payout_date' => $payoutDate,
-                    'recorded_by' => $recordedBy,
-                    'created_at' => now_utc(),
-                    'updated_at' => now_utc(),
+                    'status' => 'paid',
+                    'paid_at' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ]
             );
 
@@ -259,25 +348,14 @@ final class PayoutService
                 $stokvelId,
                 $recordedBy,
                 $payoutDate,
-                'PAYOUT-' . $payoutId,
-                'Rotational payout #' . $payoutId
+                'PAYOUT-' . $distributionId,
+                'Rotational payout #' . $distributionId
             );
             $this->ledger->addLine($stokvelId, $journalId, (int) $payoutExpense['id'], $amount, '0.00', null, 'Payout expense');
             $this->ledger->addLine($stokvelId, $journalId, (int) $bank['id'], '0.00', $amount, null, 'Bank outflow');
-            $this->ledger->post($stokvelId, $journalId, $recordedBy);
+            $this->ledger->post($stokvelId, $journalId, $recordedBy, true);
 
-            $this->db->exec(
-                'UPDATE payout_records SET journal_entry_id = :journal_id, updated_at = :updated_at
-                 WHERE id = :id AND stokvel_id = :stokvel_id',
-                [
-                    'journal_id' => $journalId,
-                    'updated_at' => now_utc(),
-                    'id' => $payoutId,
-                    'stokvel_id' => $stokvelId,
-                ]
-            );
-
-            return $payoutId;
+            return $distributionId;
         });
     }
 
@@ -299,80 +377,85 @@ final class PayoutService
         int $actionBy,
         string $reason
     ): void {
-        $this->db->transaction(function () use ($stokvelId, $cycleId, $memberAId, $memberBId, $actionBy, $reason): void {
+        $this->db->transaction(function () use ($stokvelId, $cycleId, $memberAId, $memberBId): void {
             $a = $this->db->fetch(
-                'SELECT * FROM payout_rotation_order
-                 WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id AND member_id = :member_id FOR UPDATE',
+                'SELECT * FROM payout_schedule
+                 WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id AND membership_id = :member_id FOR UPDATE',
                 ['stokvel_id' => $stokvelId, 'cycle_id' => $cycleId, 'member_id' => $memberAId]
             );
             $b = $this->db->fetch(
-                'SELECT * FROM payout_rotation_order
-                 WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id AND member_id = :member_id FOR UPDATE',
+                'SELECT * FROM payout_schedule
+                 WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id AND membership_id = :member_id FOR UPDATE',
                 ['stokvel_id' => $stokvelId, 'cycle_id' => $cycleId, 'member_id' => $memberBId]
             );
             if ($a === null || $b === null) {
                 throw new FinanceException('Both members must exist in the rotation order.');
             }
 
-            $this->db->exec(
-                'UPDATE payout_rotation_order SET position = :position, updated_at = :updated_at
-                 WHERE id = :id AND stokvel_id = :stokvel_id',
-                ['position' => (int) $b['position'], 'updated_at' => now_utc(), 'id' => $a['id'], 'stokvel_id' => $stokvelId]
-            );
-            $this->db->exec(
-                'UPDATE payout_rotation_order SET position = :position, updated_at = :updated_at
-                 WHERE id = :id AND stokvel_id = :stokvel_id',
-                ['position' => (int) $a['position'], 'updated_at' => now_utc(), 'id' => $b['id'], 'stokvel_id' => $stokvelId]
-            );
+            $seqA = (int) $a['sequence_number'];
+            $seqB = (int) $b['sequence_number'];
+            $dateA = (string) $a['scheduled_date'];
+            $dateB = (string) $b['scheduled_date'];
 
-            $this->db->insert(
-                'INSERT INTO payout_rotation_audit
-                    (stokvel_id, payout_cycle_id, action, member_a_id, member_b_id, reason, action_by, created_at)
-                 VALUES
-                    (:stokvel_id, :cycle_id, :action, :member_a_id, :member_b_id, :reason, :action_by, :created_at)',
+            $this->db->exec(
+                'UPDATE payout_schedule SET sequence_number = :sequence_number, scheduled_date = :scheduled_date, updated_at = :updated_at
+                 WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
+                    'sequence_number' => $seqB,
+                    'scheduled_date' => $dateB,
+                    'updated_at' => now_utc(),
+                    'id' => $a['id'],
                     'stokvel_id' => $stokvelId,
-                    'cycle_id' => $cycleId,
-                    'action' => 'swap',
-                    'member_a_id' => $memberAId,
-                    'member_b_id' => $memberBId,
-                    'reason' => $reason,
-                    'action_by' => $actionBy,
-                    'created_at' => now_utc(),
+                ]
+            );
+            $this->db->exec(
+                'UPDATE payout_schedule SET sequence_number = :sequence_number, scheduled_date = :scheduled_date, updated_at = :updated_at
+                 WHERE id = :id AND stokvel_id = :stokvel_id',
+                [
+                    'sequence_number' => $seqA,
+                    'scheduled_date' => $dateA,
+                    'updated_at' => now_utc(),
+                    'id' => $b['id'],
+                    'stokvel_id' => $stokvelId,
                 ]
             );
         });
     }
 
-    public function reversePayout(int $stokvelId, int $payoutRecordId, int $reversedBy, string $reason): void
+    public function reversePayout(int $stokvelId, int $distributionId, int $reversedBy, string $reason): void
     {
         $record = $this->db->fetch(
-            'SELECT * FROM payout_records WHERE id = :id AND stokvel_id = :stokvel_id',
-            ['id' => $payoutRecordId, 'stokvel_id' => $stokvelId]
+            'SELECT * FROM distributions WHERE id = :id AND stokvel_id = :stokvel_id',
+            ['id' => $distributionId, 'stokvel_id' => $stokvelId]
         );
-        if ($record === null || $record['status'] !== self::STATUS_PAID) {
-            throw new FinanceException('Paid payout record not found.');
+        if ($record === null || !in_array($record['status'], ['paid', self::STATUS_PAID], true)) {
+            throw new FinanceException('Paid distribution not found.');
         }
-        if ($record['journal_entry_id'] === null) {
-            throw new FinanceException('Payout has no linked journal entry.');
-        }
-
-        $reversalJournalId = $this->ledger->reverse($stokvelId, (int) $record['journal_entry_id'], $reversedBy, $reason);
 
         $this->db->exec(
-            'UPDATE payout_records SET status = :status, reversed_by = :reversed_by, reversed_at = :reversed_at,
-             reversal_journal_entry_id = :journal_id, updated_at = :updated_at
+            'UPDATE distributions SET status = :status, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
                 'status' => self::STATUS_REVERSED,
-                'reversed_by' => $reversedBy,
-                'reversed_at' => now_utc(),
-                'journal_id' => $reversalJournalId,
                 'updated_at' => now_utc(),
-                'id' => $payoutRecordId,
+                'id' => $distributionId,
                 'stokvel_id' => $stokvelId,
             ]
         );
+
+        if (!empty($record['payout_schedule_id'])) {
+            $this->db->exec(
+                'UPDATE payout_schedule SET status = :status, paid_at = NULL, notes = :notes, updated_at = :ua
+                 WHERE id = :id AND stokvel_id = :sid',
+                [
+                    'status' => 'scheduled',
+                    'notes' => 'Reversed: ' . $reason,
+                    'ua' => now_utc(),
+                    'id' => (int) $record['payout_schedule_id'],
+                    'sid' => $stokvelId,
+                ]
+            );
+        }
     }
 
     public function getCycle(int $stokvelId, int $cycleId): ?array
@@ -421,55 +504,37 @@ final class PayoutService
         ?string $postponedTo = null
     ): void {
         $order = $this->db->fetch(
-            'SELECT id FROM payout_rotation_order
-             WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id AND member_id = :member_id',
+            'SELECT id FROM payout_schedule
+             WHERE stokvel_id = :stokvel_id AND payout_cycle_id = :cycle_id AND membership_id = :member_id',
             ['stokvel_id' => $stokvelId, 'cycle_id' => $cycleId, 'member_id' => $memberId]
         );
         if ($order === null) {
-            throw new FinanceException('Member is not in rotation order.');
+            throw new FinanceException('Member is not in rotation schedule.');
         }
 
-        $this->db->insert(
-            'INSERT INTO payout_rotation_events
-                (stokvel_id, payout_cycle_id, member_id, event_status, reason, postponed_to, action_by, created_at)
-             VALUES
-                (:stokvel_id, :cycle_id, :member_id, :event_status, :reason, :postponed_to, :action_by, :created_at)',
-            [
-                'stokvel_id' => $stokvelId,
-                'cycle_id' => $cycleId,
-                'member_id' => $memberId,
-                'event_status' => $status,
-                'reason' => $reason,
-                'postponed_to' => $postponedTo,
-                'action_by' => $actionBy,
-                'created_at' => now_utc(),
-            ]
-        );
-
-        $this->db->insert(
-            'INSERT INTO payout_rotation_audit
-                (stokvel_id, payout_cycle_id, action, member_a_id, member_b_id, reason, action_by, created_at)
-             VALUES
-                (:stokvel_id, :cycle_id, :action, :member_a_id, NULL, :reason, :action_by, :created_at)',
-            [
-                'stokvel_id' => $stokvelId,
-                'cycle_id' => $cycleId,
-                'action' => $status,
-                'member_a_id' => $memberId,
-                'reason' => $reason,
-                'action_by' => $actionBy,
-                'created_at' => now_utc(),
-            ]
-        );
+        $params = [
+            'status' => $status === self::STATUS_POSTPONED ? 'postponed' : 'skipped',
+            'notes' => $reason,
+            'ua' => now_utc(),
+            'id' => $order['id'],
+            'sid' => $stokvelId,
+        ];
+        $sql = 'UPDATE payout_schedule SET status = :status, notes = :notes, updated_at = :ua';
+        if ($postponedTo !== null) {
+            $sql .= ', scheduled_date = :scheduled_date';
+            $params['scheduled_date'] = $postponedTo;
+        }
+        $sql .= ' WHERE id = :id AND stokvel_id = :sid';
+        $this->db->exec($sql, $params);
     }
 
     private function makerCheckerEnabled(int $stokvelId): bool
     {
         $row = $this->db->fetch(
-            'SELECT payout_maker_checker FROM stokvel_settings WHERE stokvel_id = :stokvel_id LIMIT 1',
+            'SELECT require_dual_approval FROM stokvel_settings WHERE stokvel_id = :stokvel_id LIMIT 1',
             ['stokvel_id' => $stokvelId]
         );
 
-        return $row === null || (int) ($row['payout_maker_checker'] ?? 1) === 1;
+        return $row !== null && (int) ($row['require_dual_approval'] ?? 0) === 1;
     }
 }

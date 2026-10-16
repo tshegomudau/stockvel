@@ -39,6 +39,8 @@ use App\Services\Documents\DocumentService;
 use App\Services\Finance\CsvImportService;
 use App\Services\Finance\ExpenseService;
 use App\Services\Finance\ReconciliationService;
+use App\Services\Loans\LoanProductService;
+use App\Services\Loans\LoanScheduleCalculator;
 use App\Services\Loans\LoanService;
 use App\Services\Meetings\MeetingService;
 use App\Services\Membership\InvitationService;
@@ -128,8 +130,12 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(LedgerService::class),
         $c->get(ChartOfAccountsService::class)
     ));
+    $container->singleton(LoanProductService::class, static fn (Container $c) => new LoanProductService($c->get(Database::class)));
+    $container->singleton(LoanScheduleCalculator::class, static fn () => new LoanScheduleCalculator());
     $container->singleton(LoanService::class, static fn (Container $c) => new LoanService(
         $c->get(Database::class),
+        $c->get(LoanProductService::class),
+        $c->get(LoanScheduleCalculator::class),
         $c->get(LedgerService::class),
         $c->get(ChartOfAccountsService::class)
     ));

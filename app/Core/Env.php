@@ -6,7 +6,7 @@ namespace App\Core;
 
 final class Env
 {
-    public static function load(string $path): void
+    public static function load(string $path, bool $override = true): void
     {
         if (!is_file($path)) {
             return;
@@ -34,9 +34,29 @@ final class Env
             ) {
                 $value = substr($value, 1, -1);
             }
+            if (!$override && (array_key_exists($key, $_ENV) || getenv($key) !== false)) {
+                continue;
+            }
             $_ENV[$key] = $value;
             $_SERVER[$key] = $value;
             putenv($key . '=' . $value);
         }
+    }
+
+    public static function resolveNameFromArgv(array $argv): ?string
+    {
+        foreach ($argv as $arg) {
+            if (!is_string($arg)) {
+                continue;
+            }
+            if (str_starts_with($arg, '--env=')) {
+                return substr($arg, 6);
+            }
+            if ($arg === '--env') {
+                return null;
+            }
+        }
+
+        return null;
     }
 }

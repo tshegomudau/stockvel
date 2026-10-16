@@ -47,7 +47,7 @@ final class MailChannel
         }
 
         $headers = [
-            'From: ' . env('MAIL_FROM_NAME', 'Stovel') . ' <' . env('MAIL_FROM_ADDRESS', 'noreply@stovel.local') . '>',
+            'From: ' . env('MAIL_FROM_NAME', 'stockvel') . ' <' . env('MAIL_FROM_ADDRESS', 'noreply@stockvel.local') . '>',
             'MIME-Version: 1.0',
             'Content-Type: text/plain; charset=UTF-8',
         ];

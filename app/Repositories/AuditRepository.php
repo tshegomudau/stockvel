@@ -44,14 +44,22 @@ final class AuditRepository
             $payload['metadata_json'] = is_string($meta) ? $meta : json_encode($meta, JSON_THROW_ON_ERROR);
         }
 
+        if ($payload['user_id'] !== null) {
+            $exists = $this->db->fetch('SELECT id FROM users WHERE id = :id LIMIT 1', ['id' => $payload['user_id']]);
+            if ($exists === null) {
+                $payload['user_id'] = null;
+            }
+        }
+
+        $columns = array_keys($payload);
+        $placeholders = array_map(static fn ($c) => ':' . $c, $columns);
+        $sql = sprintf(
+            'INSERT INTO audit_logs (%s) VALUES (%s)',
+            implode(', ', $columns),
+            implode(', ', $placeholders)
+        );
+
         try {
-            $columns = array_keys($payload);
-            $placeholders = array_map(static fn ($c) => ':' . $c, $columns);
-            $sql = sprintf(
-                'INSERT INTO audit_logs (%s) VALUES (%s)',
-                implode(', ', $columns),
-                implode(', ', $placeholders)
-            );
             return (int) $this->db->insert($sql, $payload);
         } catch (\Throwable) {
             $legacy = [

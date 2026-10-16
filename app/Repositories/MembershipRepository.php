@@ -101,9 +101,11 @@ final class MembershipRepository extends BaseRepository
 
     public function findInvitationByTokenHash(string $tokenHash): ?array
     {
-        $sql = 'SELECT * FROM invitations
-            WHERE token_hash = :token_hash AND ' . $this->applyTenant() . ' LIMIT 1';
-        return $this->db->fetch($sql, $this->tenantParams(['token_hash' => $tokenHash]));
+        // Token lookup is public / cross-tenant by design.
+        return $this->db->fetch(
+            'SELECT * FROM invitations WHERE token_hash = :token_hash LIMIT 1',
+            ['token_hash' => $tokenHash]
+        );
     }
 
     public function createInvitation(array $data): int

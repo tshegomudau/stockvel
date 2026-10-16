@@ -10,6 +10,8 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
+use App\Exceptions\FinanceException;
+use App\Services\Finance\ExpenseService;
 
 final class ExpenseController extends Controller
 {
@@ -39,10 +41,14 @@ final class ExpenseController extends Controller
     public function create(Request $request): Response
     {
         $this->requirePermission('expenses.manage');
+        $sid = $this->requireStokvel();
+        /** @var ExpenseService $expenses */
+        $expenses = app()->container()->get(ExpenseService::class);
         return $this->render('stokvel/expenses/create', [
             'title' => 'New Expense',
             'activeNav' => 'expenses',
             'navContext' => 'app',
+            'categories' => $expenses->listCategories($sid),
         ]);
     }
 
@@ -50,21 +56,43 @@ final class ExpenseController extends Controller
     {
         $this->requirePermission('expenses.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method']);
-        $data['stokvel_id'] = $sid;
-        $data['created_at'] = now_utc();
-        $data['updated_at'] = now_utc();
-        $this->service(\App\Services\Stokvel\ExpenseService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function create(array $data): int
-            {
-                $cols = array_keys($data);
-                $ph = array_map(static fn ($c) => ':' . $c, $cols);
-                $sql = 'INSERT INTO expenses (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $ph) . ')';
-                return (int) $this->db->insert($sql, $data);
-            }
-        })->create($data);
+        $data = [
+            'category_id' => (int) $request->input('category_id', $request->input('expense_category_id', 0)),
+            'description' => trim((string) $request->input('description', '')),
+            'amount' => (string) $request->input('amount', ''),
+            'expense_date' => (string) $request->input('expense_date', $request->input('incurred_at', date('Y-m-d'))),
+            'vendor_name' => trim((string) $request->input('vendor_name', $request->input('category', ''))),
+        ];
+        $validator = Validator::make($data, [
+            'category_id' => 'required|integer',
+            'description' => 'required|string',
+            'amount' => 'required|numeric',
+            'expense_date' => 'required|date',
+        ]);
+        if ($validator->fails() || $data['category_id'] < 1) {
+            $this->flashOld($request);
+            Session::flash('error', 'Invalid expense details.');
+            return $this->redirect('/app/expenses/create');
+        }
+
+        try {
+            /** @var ExpenseService $expenses */
+            $expenses = app()->container()->get(ExpenseService::class);
+            $expenses->requestExpense(
+                $sid,
+                $data['category_id'],
+                $data['amount'],
+                $data['description'],
+                (int) $this->userId(),
+                $data['expense_date'],
+                $data['vendor_name'] !== '' ? $data['vendor_name'] : null
+            );
+        } catch (FinanceException $e) {
+            $this->flashOld($request);
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/expenses/create');
+        }
+
         Session::flash('success', 'Expense saved.');
         return $this->redirect('/app/expenses');
     }
@@ -105,16 +133,23 @@ final class ExpenseController extends Controller
     {
         $this->requirePermission('expenses.manage');
         $sid = $this->requireStokvel();
-        $data = $request->all();
-        unset($data['_token'], $data['_method'], $data['stokvel_id']);
-        $data['updated_at'] = now_utc();
-        $sets = [];
-        foreach (array_keys($data) as $col) {
-            $sets[] = "{$col} = :{$col}";
+        $description = trim((string) $request->input('description', ''));
+        $amount = (string) $request->input('amount', '');
+        if ($description === '' || $amount === '') {
+            Session::flash('error', 'Description and amount are required.');
+            return $this->redirect('/app/expenses/' . $id . '/edit');
         }
-        $data['id'] = (int) $id;
-        $data['sid'] = $sid;
-        $this->db()->exec('UPDATE expenses SET ' . implode(', ', $sets) . ' WHERE id = :id AND stokvel_id = :sid', $data);
+        $this->db()->exec(
+            'UPDATE expenses SET description = :description, amount = :amount, updated_at = :ua
+             WHERE id = :id AND stokvel_id = :sid AND status IN (\'draft\', \'requested\')',
+            [
+                'description' => $description,
+                'amount' => $amount,
+                'ua' => now_utc(),
+                'id' => (int) $id,
+                'sid' => $sid,
+            ]
+        );
         Session::flash('success', 'Expense updated.');
         return $this->redirect('/app/expenses/' . $id);
     }
@@ -123,13 +158,16 @@ final class ExpenseController extends Controller
     {
         $this->requirePermission('expenses.manage');
         $sid = $this->requireStokvel();
-        $this->db()->exec('UPDATE expenses SET deleted_at = :da, updated_at = :ua WHERE id = :id AND stokvel_id = :sid', [
-            'da' => now_utc(),
-            'ua' => now_utc(),
-            'id' => (int) $id,
-            'sid' => $sid,
-        ]);
-        Session::flash('success', 'Expense removed.');
+        $this->db()->exec(
+            'UPDATE expenses SET status = :status, updated_at = :ua WHERE id = :id AND stokvel_id = :sid AND status IN (\'draft\', \'requested\')',
+            [
+                'status' => 'rejected',
+                'ua' => now_utc(),
+                'id' => (int) $id,
+                'sid' => $sid,
+            ]
+        );
+        Session::flash('success', 'Expense cancelled.');
         return $this->redirect('/app/expenses');
     }
 }

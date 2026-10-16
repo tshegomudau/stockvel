@@ -39,24 +39,23 @@ final class LedgerService
         }
 
         $now = now_utc();
+        $entryNumber = $this->uniqueEntryNumber($stokvelId, $reference);
         $journalId = (int) $this->db->insert(
             'INSERT INTO journal_entries
-                (stokvel_id, uuid, reference, description, entry_date, status,
-                 total_debit, total_credit, created_by, idempotency_key, created_at, updated_at)
+                (stokvel_id, entry_number, entry_date, description, status,
+                 source_type, source_id, created_by_user_id, created_at, updated_at)
              VALUES
-                (:stokvel_id, :uuid, :reference, :description, :entry_date, :status,
-                 :total_debit, :total_credit, :created_by, :idempotency_key, :created_at, :updated_at)',
+                (:stokvel_id, :entry_number, :entry_date, :description, :status,
+                 :source_type, :source_id, :created_by_user_id, :created_at, :updated_at)',
             [
                 'stokvel_id' => $stokvelId,
-                'uuid' => uuid(),
-                'reference' => $reference,
-                'description' => $description,
+                'entry_number' => $entryNumber,
                 'entry_date' => $entryDate,
+                'description' => $description !== '' ? $description : $reference,
                 'status' => self::STATUS_DRAFT,
-                'total_debit' => '0.00',
-                'total_credit' => '0.00',
-                'created_by' => $createdBy,
-                'idempotency_key' => $idempotencyKey,
+                'source_type' => $idempotencyKey !== null && $idempotencyKey !== '' ? 'idempotency' : null,
+                'source_id' => null,
+                'created_by_user_id' => $createdBy,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]
@@ -64,6 +63,16 @@ final class LedgerService
 
         if ($idempotencyKey !== null && $idempotencyKey !== '') {
             $this->storeIdempotencyKey($stokvelId, 'journal_entry', $idempotencyKey, (string) $journalId);
+            $this->db->exec(
+                'UPDATE journal_entries SET source_id = :source_id, updated_at = :updated_at
+                 WHERE id = :id AND stokvel_id = :stokvel_id',
+                [
+                    'source_id' => $journalId,
+                    'updated_at' => $now,
+                    'id' => $journalId,
+                    'stokvel_id' => $stokvelId,
+                ]
+            );
         }
 
         return $journalId;
@@ -78,7 +87,7 @@ final class LedgerService
         ?int $memberId = null,
         string $lineDescription = ''
     ): int {
-        $entry = $this->requireEditableEntry($stokvelId, $journalEntryId);
+        $this->requireEditableEntry($stokvelId, $journalEntryId);
 
         $debit = MoneyMath::normalize($debit);
         $credit = MoneyMath::normalize($credit);
@@ -113,8 +122,7 @@ final class LedgerService
             ['journal_entry_id' => $journalEntryId, 'stokvel_id' => $stokvelId]
         )['max_order'] ?? 0) + 1;
 
-        $now = now_utc();
-        $lineId = (int) $this->db->insert(
+        return (int) $this->db->insert(
             'INSERT INTO journal_lines
                 (stokvel_id, journal_entry_id, chart_of_account_id, membership_id, debit, credit, description, line_number, created_at)
              VALUES
@@ -126,20 +134,16 @@ final class LedgerService
                 'membership_id' => $memberId,
                 'debit' => $debit,
                 'credit' => $credit,
-                'description' => $lineDescription,
+                'description' => $lineDescription !== '' ? $lineDescription : null,
                 'line_number' => $lineOrder,
-                'created_at' => $now,
+                'created_at' => now_utc(),
             ]
         );
-
-        $this->recalculateTotals($stokvelId, $journalEntryId);
-
-        return $lineId;
     }
 
     public function submitForApproval(int $stokvelId, int $journalEntryId, int $submittedBy): void
     {
-        $this->db->transaction(function () use ($stokvelId, $journalEntryId, $submittedBy): void {
+        $this->db->transaction(function () use ($stokvelId, $journalEntryId): void {
             $entry = $this->lockEntry($stokvelId, $journalEntryId);
             if ($entry['status'] !== self::STATUS_DRAFT) {
                 throw new FinanceException('Only draft entries can be submitted for approval.');
@@ -166,18 +170,32 @@ final class LedgerService
             if ($entry['status'] !== self::STATUS_PENDING_APPROVAL) {
                 throw new FinanceException('Only pending entries can be approved.');
             }
-            if ($this->isMakerCheckerEnabled($stokvelId) && (int) $entry['created_by'] === $approvedBy) {
+            $createdBy = (int) ($entry['created_by_user_id'] ?? 0);
+            if ($this->isMakerCheckerEnabled($stokvelId) && $createdBy === $approvedBy) {
                 throw new AuthorizationException('Maker-checker: you cannot approve your own journal entry.');
             }
             $this->assertBalanced($stokvelId, $journalEntryId);
 
             $this->db->exec(
                 'UPDATE journal_entries
-                 SET approved_by = :approved_by, approved_at = :approved_at, updated_at = :updated_at
+                 SET status = :status, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
-                    'approved_by' => $approvedBy,
-                    'approved_at' => now_utc(),
+                    'status' => self::STATUS_PENDING_APPROVAL,
+                    'updated_at' => now_utc(),
+                    'id' => $journalEntryId,
+                    'stokvel_id' => $stokvelId,
+                ]
+            );
+
+            // Record approval actor via source metadata for auditability without schema drift.
+            $this->db->exec(
+                'UPDATE journal_entries
+                 SET source_type = :source_type, source_id = :source_id, updated_at = :updated_at
+                 WHERE id = :id AND stokvel_id = :stokvel_id',
+                [
+                    'source_type' => 'approved_by',
+                    'source_id' => $approvedBy,
                     'updated_at' => now_utc(),
                     'id' => $journalEntryId,
                     'stokvel_id' => $stokvelId,
@@ -193,20 +211,18 @@ final class LedgerService
             if ($entry['status'] !== self::STATUS_PENDING_APPROVAL) {
                 throw new FinanceException('Only pending entries can be rejected.');
             }
-            if ($this->isMakerCheckerEnabled($stokvelId) && (int) $entry['created_by'] === $rejectedBy) {
+            $createdBy = (int) ($entry['created_by_user_id'] ?? 0);
+            if ($this->isMakerCheckerEnabled($stokvelId) && $createdBy === $rejectedBy) {
                 throw new AuthorizationException('Maker-checker: you cannot reject your own journal entry.');
             }
 
             $this->db->exec(
                 'UPDATE journal_entries
-                 SET status = :status, rejected_by = :rejected_by, rejection_reason = :reason,
-                     rejected_at = :rejected_at, updated_at = :updated_at
+                 SET status = :status, description = :description, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
                     'status' => self::STATUS_REJECTED,
-                    'rejected_by' => $rejectedBy,
-                    'reason' => $reason,
-                    'rejected_at' => now_utc(),
+                    'description' => 'Rejected: ' . $reason,
                     'updated_at' => now_utc(),
                     'id' => $journalEntryId,
                     'stokvel_id' => $stokvelId,
@@ -215,41 +231,41 @@ final class LedgerService
         });
     }
 
-    public function post(int $stokvelId, int $journalEntryId, int $postedBy): void
+    /**
+     * @param bool $allowOperationalPost When true, skips maker-checker (used for contribution/expense operational postings).
+     */
+    public function post(int $stokvelId, int $journalEntryId, int $postedBy, bool $allowOperationalPost = false): void
     {
-        $this->db->transaction(function () use ($stokvelId, $journalEntryId, $postedBy): void {
+        $this->db->transaction(function () use ($stokvelId, $journalEntryId, $postedBy, $allowOperationalPost): void {
             $entry = $this->lockEntry($stokvelId, $journalEntryId);
             if (!in_array($entry['status'], [self::STATUS_DRAFT, self::STATUS_PENDING_APPROVAL], true)) {
                 throw new FinanceException('Only draft or pending entries can be posted.');
             }
 
             $makerChecker = $this->isMakerCheckerEnabled($stokvelId);
-            if ($makerChecker) {
+            if ($makerChecker && !$allowOperationalPost) {
                 if ($entry['status'] === self::STATUS_DRAFT) {
                     throw new FinanceException('Entry must be submitted and approved before posting.');
                 }
-                if ($entry['approved_by'] === null) {
+                if (($entry['source_type'] ?? '') !== 'approved_by' || empty($entry['source_id'])) {
                     throw new FinanceException('Entry requires approval before posting.');
                 }
-                if ((int) $entry['created_by'] === $postedBy) {
+                $createdBy = (int) ($entry['created_by_user_id'] ?? 0);
+                if ($createdBy === $postedBy) {
                     throw new AuthorizationException('Maker-checker: creator cannot post their own entry.');
                 }
             }
 
             $this->assertBalanced($stokvelId, $journalEntryId);
-            $totals = $this->calculateTotals($stokvelId, $journalEntryId);
 
             $this->db->exec(
                 'UPDATE journal_entries
-                 SET status = :status, posted_by = :posted_by, posted_at = :posted_at,
-                     total_debit = :total_debit, total_credit = :total_credit, updated_at = :updated_at
+                 SET status = :status, posted_by_user_id = :posted_by, posted_at = :posted_at, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
                     'status' => self::STATUS_POSTED,
                     'posted_by' => $postedBy,
                     'posted_at' => now_utc(),
-                    'total_debit' => $totals['debit'],
-                    'total_credit' => $totals['credit'],
                     'updated_at' => now_utc(),
                     'id' => $journalEntryId,
                     'stokvel_id' => $stokvelId,
@@ -275,26 +291,24 @@ final class LedgerService
                 $stokvelId,
                 $reversedBy,
                 (string) $entry['entry_date'],
-                'REV-' . $entry['reference'],
+                'REV-' . $entry['entry_number'],
                 'Reversal: ' . $reason
             );
 
             foreach ($lines as $line) {
-                $accountId = (int) ($line['chart_of_account_id'] ?? $line['account_id'] ?? 0);
-                $membershipId = $line['membership_id'] ?? $line['member_id'] ?? null;
                 $this->addLine(
                     $stokvelId,
                     $reversalId,
-                    $accountId,
+                    (int) $line['chart_of_account_id'],
                     (string) $line['credit'],
                     (string) $line['debit'],
-                    $membershipId !== null ? (int) $membershipId : null,
+                    isset($line['membership_id']) ? (int) $line['membership_id'] : null,
                     'Reversal of line #' . $line['id']
                 );
             }
 
             $this->db->exec(
-                'UPDATE journal_entries SET reverses_entry_id = :original_id, updated_at = :updated_at
+                'UPDATE journal_entries SET reversed_entry_id = :original_id, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
                     'original_id' => $journalEntryId,
@@ -304,18 +318,14 @@ final class LedgerService
                 ]
             );
 
-            $this->post($stokvelId, $reversalId, $reversedBy);
+            $this->post($stokvelId, $reversalId, $reversedBy, true);
 
             $this->db->exec(
                 'UPDATE journal_entries
-                 SET status = :status, reversed_by = :reversed_by, reversed_at = :reversed_at,
-                     reversal_entry_id = :reversal_entry_id, updated_at = :updated_at
+                 SET status = :status, updated_at = :updated_at
                  WHERE id = :id AND stokvel_id = :stokvel_id',
                 [
                     'status' => self::STATUS_REVERSED,
-                    'reversed_by' => $reversedBy,
-                    'reversed_at' => now_utc(),
-                    'reversal_entry_id' => $reversalId,
                     'updated_at' => now_utc(),
                     'id' => $journalEntryId,
                     'stokvel_id' => $stokvelId,
@@ -338,11 +348,11 @@ final class LedgerService
 
         $this->db->exec(
             'UPDATE journal_entries
-             SET status = :status, failure_reason = :reason, updated_at = :updated_at
+             SET status = :status, description = :description, updated_at = :updated_at
              WHERE id = :id AND stokvel_id = :stokvel_id',
             [
                 'status' => self::STATUS_FAILED,
-                'reason' => $reason,
+                'description' => 'Failed: ' . $reason,
                 'updated_at' => now_utc(),
                 'id' => $journalEntryId,
                 'stokvel_id' => $stokvelId,
@@ -398,23 +408,6 @@ final class LedgerService
         ];
     }
 
-    private function recalculateTotals(int $stokvelId, int $journalEntryId): void
-    {
-        $totals = $this->calculateTotals($stokvelId, $journalEntryId);
-        $this->db->exec(
-            'UPDATE journal_entries SET total_debit = :debit, total_credit = :credit, updated_at = :updated_at
-             WHERE id = :id AND stokvel_id = :stokvel_id AND status = :status',
-            [
-                'debit' => $totals['debit'],
-                'credit' => $totals['credit'],
-                'updated_at' => now_utc(),
-                'id' => $journalEntryId,
-                'stokvel_id' => $stokvelId,
-                'status' => self::STATUS_DRAFT,
-            ]
-        );
-    }
-
     private function requireEditableEntry(int $stokvelId, int $journalEntryId): array
     {
         $entry = $this->getEntry($stokvelId, $journalEntryId);
@@ -444,40 +437,65 @@ final class LedgerService
     private function isMakerCheckerEnabled(int $stokvelId): bool
     {
         $row = $this->db->fetch(
-            'SELECT ledger_maker_checker FROM stokvel_settings WHERE stokvel_id = :stokvel_id LIMIT 1',
+            'SELECT require_dual_approval FROM stokvel_settings WHERE stokvel_id = :stokvel_id LIMIT 1',
             ['stokvel_id' => $stokvelId]
         );
         if ($row === null) {
-            return true;
+            return false;
         }
 
-        return (int) ($row['ledger_maker_checker'] ?? 1) === 1;
+        return (int) ($row['require_dual_approval'] ?? 0) === 1;
+    }
+
+    private function uniqueEntryNumber(int $stokvelId, string $reference): string
+    {
+        $base = preg_replace('/[^A-Za-z0-9\-]/', '', $reference) ?: 'JE';
+        $base = substr($base, 0, 24);
+        $candidate = $base;
+        $i = 0;
+        while ($this->db->fetch(
+            'SELECT id FROM journal_entries WHERE stokvel_id = :sid AND entry_number = :n LIMIT 1',
+            ['sid' => $stokvelId, 'n' => $candidate]
+        )) {
+            $i++;
+            $candidate = substr($base, 0, 20) . '-' . $i;
+        }
+
+        return $candidate;
     }
 
     private function findByIdempotencyKey(int $stokvelId, string $key): ?array
     {
-        return $this->db->fetch(
-            'SELECT * FROM journal_entries
+        $link = $this->db->fetch(
+            'SELECT response_body_hash FROM idempotency_keys
              WHERE stokvel_id = :stokvel_id AND idempotency_key = :key
              LIMIT 1',
             ['stokvel_id' => $stokvelId, 'key' => $key]
         );
+        if ($link === null || empty($link['response_body_hash'])) {
+            return null;
+        }
+
+        return $this->getEntry($stokvelId, (int) $link['response_body_hash']);
     }
 
     private function storeIdempotencyKey(int $stokvelId, string $scope, string $key, string $resourceId): void
     {
         $now = now_utc();
         $this->db->insert(
-            'INSERT INTO idempotency_keys (stokvel_id, scope, idempotency_key, resource_id, created_at, expires_at)
-             VALUES (:stokvel_id, :scope, :idempotency_key, :resource_id, :created_at, :expires_at)
-             ON DUPLICATE KEY UPDATE resource_id = resource_id',
+            'INSERT INTO idempotency_keys
+                (stokvel_id, idempotency_key, request_method, request_path, response_body_hash, expires_at, created_at)
+             VALUES
+                (:stokvel_id, :idempotency_key, :request_method, :request_path, :response_body_hash, :expires_at, :created_at)
+             ON DUPLICATE KEY UPDATE response_body_hash = VALUES(response_body_hash)',
             [
                 'stokvel_id' => $stokvelId,
-                'scope' => $scope,
                 'idempotency_key' => $key,
-                'resource_id' => $resourceId,
-                'created_at' => $now,
+                'request_method' => 'POST',
+                'request_path' => '/' . $scope,
+                'response_body_hash' => $resourceId,
                 'expires_at' => (new \DateTimeImmutable($now))->modify('+7 days')->format('Y-m-d H:i:s'),
+                'created_at' => $now,
             ]
         );
     }

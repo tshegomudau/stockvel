@@ -8,26 +8,33 @@ use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
+use App\Exceptions\HttpException;
+use App\Services\Membership\InvitationService;
+use App\Services\Membership\MembershipService;
 
 final class InvitationController extends Controller
 {
     public function show(Request $request, string $token): Response
     {
-        $invitation = $this->service(\App\Services\Membership\InvitationService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function findByToken(string $token): ?array
-            {
-                return $this->db->fetch(
-                    'SELECT i.*, s.name AS stokvel_name FROM member_invitations i JOIN stokvels s ON s.id = i.stokvel_id WHERE i.token_hash = :th AND i.status = :st LIMIT 1',
-                    ['th' => hash('sha256', $token), 'st' => 'pending']
-                );
-            }
-        })->findByToken($token);
+        /** @var InvitationService $invitations */
+        $invitations = app()->container()->get(InvitationService::class);
+        $invitation = $invitations->findByToken($token);
 
-        if ($invitation === null) {
+        if ($invitation === null || ($invitation['status'] ?? '') !== 'pending') {
             Session::flash('error', 'This invitation is invalid or has already been used.');
             return $this->redirect('/');
         }
+
+        if ($invitations->isExpired($invitation)) {
+            Session::flash('error', 'This invitation has expired.');
+            return $this->redirect('/');
+        }
+
+        $stokvel = $this->db()->fetch(
+            'SELECT name FROM stokvels WHERE id = :id LIMIT 1',
+            ['id' => (int) $invitation['stokvel_id']]
+        );
+        $invitation['stokvel_name'] = $stokvel['name'] ?? 'Stokvel';
 
         return $this->render('public/invitation', [
             'title' => 'Stokvel invitation',
@@ -38,46 +45,38 @@ final class InvitationController extends Controller
 
     public function accept(Request $request, string $token): Response
     {
-        $this->service(\App\Services\Membership\InvitationService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function accept(string $token, ?int $userId): void
-            {
-                $inv = $this->db->fetch('SELECT * FROM member_invitations WHERE token_hash = :th LIMIT 1', ['th' => hash('sha256', $token)]);
-                if (!$inv) {
-                    throw new \RuntimeException('Invalid invitation');
-                }
-                $this->db->exec('UPDATE member_invitations SET status = :st, responded_at = :ra WHERE id = :id', [
-                    'st' => 'accepted',
-                    'ra' => now_utc(),
-                    'id' => $inv['id'],
-                ]);
-                if ($userId) {
-                    $this->db->insert(
-                        'INSERT INTO memberships (stokvel_id, user_id, role, status, joined_at, created_at, updated_at) VALUES (:sid, :uid, :role, :status, :ja, :ca, :ua)',
-                        [
-                            'sid' => $inv['stokvel_id'],
-                            'uid' => $userId,
-                            'role' => $inv['role'] ?? 'ordinary',
-                            'status' => 'active',
-                            'ja' => now_utc(),
-                            'ca' => now_utc(),
-                            'ua' => now_utc(),
-                        ]
-                    );
-                }
-            }
-        })->accept($token, $this->userId());
+        $userId = $this->userId();
+        if ($userId === null) {
+            Session::flash('intended_url', '/invitations/' . $token);
+            Session::flash('error', 'Sign in or register to accept this invitation.');
+            return $this->redirect('/login');
+        }
+
+        try {
+            /** @var MembershipService $memberships */
+            $memberships = app()->container()->get(MembershipService::class);
+            $memberships->accept($token, (int) $userId);
+        } catch (HttpException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/');
+        }
 
         Session::flash('success', 'Invitation accepted. Welcome to the stokvel.');
-        return $this->redirect($this->userId() ? '/app' : '/register');
+        return $this->redirect('/app');
     }
 
     public function reject(Request $request, string $token): Response
     {
-        $this->db()->exec(
-            'UPDATE member_invitations SET status = :st, responded_at = :ra WHERE token_hash = :th',
-            ['st' => 'rejected', 'ra' => now_utc(), 'th' => hash('sha256', $token)]
-        );
+        $userId = $this->userId();
+        try {
+            /** @var MembershipService $memberships */
+            $memberships = app()->container()->get(MembershipService::class);
+            $memberships->reject($token, (int) ($userId ?? 0));
+        } catch (HttpException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/');
+        }
+
         Session::flash('success', 'Invitation declined.');
         return $this->redirect('/');
     }

@@ -8,7 +8,7 @@ $themeAccent = $stokvel['theme_accent'] ?? '#e8c547';
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($title ?? 'Dashboard') ?> — <?= e(config('app.name', 'Stovel')) ?></title>
+    <title><?= e($title ?? 'Dashboard') ?> — <?= e(config('app.name', 'stockvel')) ?></title>
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
 </head>
 <body class="layout-app">
@@ -18,7 +18,7 @@ $themeAccent = $stokvel['theme_accent'] ?? '#e8c547';
         <div class="sidebar-header">
             <a class="brand brand--sidebar" href="<?= e(url('/dashboard')) ?>">
                 <span class="brand-mark" aria-hidden="true"></span>
-                <span class="brand-text"><?= e(config('app.name', 'Stovel')) ?></span>
+                <span class="brand-text"><?= e(config('app.name', 'stockvel')) ?></span>
             </a>
         </div>
         <nav class="sidebar-nav">

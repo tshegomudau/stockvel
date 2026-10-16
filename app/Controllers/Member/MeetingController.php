@@ -16,7 +16,13 @@ final class MeetingController extends Controller
         $this->requireAuth();
         $sid = $this->requireStokvel();
         $meetings = $this->db()->fetchAll(
-            'SELECT m.*, ma.acknowledged_at FROM meetings m LEFT JOIN meeting_acknowledgements ma ON ma.meeting_id = m.id AND ma.user_id = :uid WHERE m.stokvel_id = :sid ORDER BY m.scheduled_at DESC LIMIT 50',
+            'SELECT m.*, ma.acknowledged_at
+             FROM meetings m
+             LEFT JOIN meeting_acknowledgements ma
+               ON ma.meeting_id = m.id AND ma.user_id = :uid AND ma.stokvel_id = m.stokvel_id
+             WHERE m.stokvel_id = :sid
+             ORDER BY m.scheduled_at DESC
+             LIMIT 50',
             ['sid' => $sid, 'uid' => $this->userId()]
         );
 
@@ -41,9 +47,16 @@ final class MeetingController extends Controller
         }
 
         $this->db()->exec(
-            'INSERT INTO meeting_acknowledgements (meeting_id, user_id, acknowledged_at, created_at) VALUES (:mid, :uid, :aa, :ca)
+            'INSERT INTO meeting_acknowledgements (stokvel_id, meeting_id, user_id, acknowledged_at, created_at)
+             VALUES (:sid, :mid, :uid, :aa, :ca)
              ON DUPLICATE KEY UPDATE acknowledged_at = VALUES(acknowledged_at)',
-            ['mid' => (int) $id, 'uid' => $this->userId(), 'aa' => now_utc(), 'ca' => now_utc()]
+            [
+                'sid' => $sid,
+                'mid' => (int) $id,
+                'uid' => $this->userId(),
+                'aa' => now_utc(),
+                'ca' => now_utc(),
+            ]
         );
 
         Session::flash('success', 'Minutes acknowledged.');

@@ -40,11 +40,16 @@ final class AuditService
         ?array $oldValues = null,
         ?array $newValues = null,
         ?array $metadata = null,
-        ?int $stokvelId = null
+        ?int $stokvelId = null,
+        ?int $userId = null
     ): void {
+        $resolvedUserId = $userId
+            ?? (isset($metadata['user_id']) && is_numeric($metadata['user_id']) ? (int) $metadata['user_id'] : null)
+            ?? $this->tenantContext->userId();
+
         $this->audit->append([
             'stokvel_id' => $stokvelId ?? $this->tenantContext->stokvelId(),
-            'user_id' => $this->tenantContext->userId(),
+            'user_id' => $resolvedUserId,
             'action' => $action,
             'entity_type' => $entityType ?? 'system',
             'entity_id' => $entityId,

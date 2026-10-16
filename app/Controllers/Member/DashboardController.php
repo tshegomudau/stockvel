@@ -21,10 +21,20 @@ final class DashboardController extends Controller
             ['sid' => $sid, 'uid' => $userId]
         );
 
-        $balance = (float) ($this->db()->fetch(
-            'SELECT COALESCE(SUM(amount),0) AS b FROM member_ledger_entries WHERE stokvel_id = :sid AND member_id = :mid',
-            ['sid' => $sid, 'mid' => $membership['id'] ?? 0]
+        $membershipId = (int) ($membership['id'] ?? 0);
+        $paid = (float) ($this->db()->fetch(
+            "SELECT COALESCE(SUM(amount),0) AS b FROM payment_transactions
+             WHERE stokvel_id = :sid AND membership_id = :mid
+               AND status IN ('posted','completed','allocated','confirmed')",
+            ['sid' => $sid, 'mid' => $membershipId]
         )['b'] ?? 0);
+        $owed = (float) ($this->db()->fetch(
+            "SELECT COALESCE(SUM(amount - amount_paid),0) AS b FROM member_charges
+             WHERE stokvel_id = :sid AND membership_id = :mid
+               AND status IN ('pending','partial','overdue')",
+            ['sid' => $sid, 'mid' => $membershipId]
+        )['b'] ?? 0);
+        $balance = round($paid - $owed, 2);
 
         $upcoming = $this->db()->fetchAll(
             'SELECT * FROM meetings WHERE stokvel_id = :sid AND scheduled_at >= UTC_TIMESTAMP() ORDER BY scheduled_at ASC LIMIT 3',

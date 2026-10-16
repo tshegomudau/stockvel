@@ -24,7 +24,7 @@ final class Session
             mkdir($savePath, 0775, true);
         }
 
-        session_name((string) env('SESSION_NAME', 'stovel_session'));
+        session_name((string) env('SESSION_NAME', 'stockvel_session'));
         session_save_path($savePath);
         session_set_cookie_params([
             'lifetime' => $lifetime,
@@ -81,11 +81,13 @@ final class Session
     public static function destroy(): void
     {
         $_SESSION = [];
-        if (ini_get('session.use_cookies')) {
+        if (ini_get('session.use_cookies') && !headers_sent() && PHP_SAPI !== 'cli') {
             $params = session_get_cookie_params();
             setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', (bool) $params['secure'], (bool) $params['httponly']);
         }
-        session_destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
         self::$started = false;
     }
 }
