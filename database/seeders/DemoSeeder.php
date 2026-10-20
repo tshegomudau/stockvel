@@ -8,8 +8,32 @@ use PDO;
 use PDOException;
 use RuntimeException;
 
+/**
+ * Development / demo dataset for local onboarding.
+ *
+ * Safe to re-run: if the platform admin already exists, the seeder skips inserts
+ * and exits successfully. For a clean reload, drop the database (or use
+ * `php bin/console db:reset --env=testing` on a test database) then migrate + seed.
+ *
+ * Password for all seeded users: Password123!
+ *
+ * | Email                             | Role                         |
+ * |-----------------------------------|------------------------------|
+ * | admin@stockvel.local              | Platform super admin         |
+ * | support@stockvel.local            | Platform support             |
+ * | thabo.mokoena@example.co.za       | Ubuntu chairperson           |
+ * | nomsa.dlamini@example.co.za       | Ubuntu treasurer             |
+ * | sipho.ndlovu@example.co.za        | Ubuntu secretary             |
+ * | lerato.pillay@example.co.za       | Ubuntu ordinary member       |
+ * | themba.zulu@example.co.za         | Masakhane chairperson        |
+ * | patience.molefe@example.co.za     | Masakhane treasurer          |
+ *
+ * Tenants: Ubuntu Savings Club (`ubuntu-savings`), Masakhane Burial Society (`masakhane-burial`).
+ */
 final class DemoSeeder
 {
+    public const PLATFORM_ADMIN_EMAIL = 'admin@stockvel.local';
+
     private PDO $pdo;
 
     /** @var array<string, int> */
@@ -37,6 +61,11 @@ final class DemoSeeder
         $this->now = gmdate('Y-m-d H:i:s');
         $this->passwordHash = $this->hashPassword('Password123!');
 
+        if ($this->alreadySeeded()) {
+            fwrite(STDOUT, "Demo seed already present (found " . self::PLATFORM_ADMIN_EMAIL . "); skipping.\n");
+            return;
+        }
+
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
 
         try {
@@ -55,6 +84,17 @@ final class DemoSeeder
             throw new RuntimeException('Demo seed failed: ' . $e->getMessage(), 0, $e);
         } finally {
             $this->pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+        }
+    }
+
+    private function alreadySeeded(): bool
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT 1 FROM users WHERE email = :email LIMIT 1');
+            $stmt->execute(['email' => self::PLATFORM_ADMIN_EMAIL]);
+            return (bool) $stmt->fetchColumn();
+        } catch (PDOException) {
+            return false;
         }
     }
 
@@ -120,8 +160,19 @@ final class DemoSeeder
             'INSERT INTO roles (stokvel_id, code, name, description, is_system, created_at, updated_at)
              VALUES (NULL, :code, :name, :description, 1, :created_at, :updated_at)'
         );
+        $find = $this->pdo->prepare(
+            'SELECT id FROM roles WHERE code = :code AND stokvel_id IS NULL LIMIT 1'
+        );
 
         foreach ($roles as $code => [$name, $description]) {
+            // MySQL allows multiple NULLs in unique (stokvel_id, code), so look up first.
+            $find->execute(['code' => $code]);
+            $existingId = $find->fetchColumn();
+            if ($existingId) {
+                $this->roleIds[$code] = (int) $existingId;
+                continue;
+            }
+
             $stmt->execute([
                 'code' => $code,
                 'name' => $name,

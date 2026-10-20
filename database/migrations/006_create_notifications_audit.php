@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Notifications, audit trail, and scheduled job tables.
+ * Migration 006 — Notifications, notification_jobs, audit_logs, cron locks.
  */
 return [
     'up' => [

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Fees, payments, ledger, expenses, and idempotency tables.
+ * Migration 003 — Fees, charges, payments, ledger, approval_requests, expenses, webhooks.
  */
 return [
     'up' => [

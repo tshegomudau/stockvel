@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Loans, guarantors, repayments, and rotational payout tables.
+ * Migration 004 — Loan products/applications, payout cycles, distributions.
  */
 return [
     'up' => [

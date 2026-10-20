@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 /**
- * Meeting acknowledgements and bank reconciliation tables used by services.
- * Approvals already exist as approval_requests (controllers aligned separately).
+ * Migration 008 — Meeting acknowledgements and bank reconciliation.
+ *
+ * Approvals use approval_requests from migration 003 (not a separate approvals table).
  */
 return [
     'up' => [

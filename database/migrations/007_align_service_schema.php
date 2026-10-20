@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Align schema with service-layer expectations without breaking seeded data.
+ * Migration 007 — Additive columns for COA sub_types and fee/loan/expense services.
  */
 return [
     'up' => [

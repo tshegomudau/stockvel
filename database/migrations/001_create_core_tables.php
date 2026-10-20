@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Core authentication, platform users, and security tables.
+ * Migration 001 — Core authentication, platform users, and security tables.
  */
 return [
     'up' => [

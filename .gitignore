@@ -13,6 +13,8 @@
 !/storage/exports/.gitkeep
 /storage/mail/*
 !/storage/mail/.gitkeep
+/storage/test-artifacts/*
+!/storage/test-artifacts/.gitkeep
 /public/uploads/*
 !/public/uploads/.gitkeep
 *.log

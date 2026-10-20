@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Stokvel tenancy, membership, RBAC, and consent tables.
+ * Migration 002 — Stokvel tenancy, membership, RBAC, invitations, and consent.
  */
 return [
     'up' => [

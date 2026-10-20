@@ -57,10 +57,50 @@ $logger = $container->get(Logger::class);
 
 try {
     switch ($command) {
+        case 'setup':
+            ensureStorageDirectories($basePath);
+            if (!is_file($basePath . '/.env')) {
+                if (is_file($basePath . '/.env.example')) {
+                    copy($basePath . '/.env.example', $basePath . '/.env');
+                    echo "Created .env from .env.example — edit DB_* and APP_KEY, then re-run setup.\n";
+                    exit(1);
+                }
+                throw new RuntimeException('.env is missing and .env.example was not found.');
+            }
+            $database = TestingGuard::currentDatabaseName();
+            echo "Setting up database: {$database}\n";
+            $m = new Migrator($db->pdo(), $basePath . '/database/migrations');
+            $ran = $m->migrate();
+            echo 'Migrated ' . count($ran) . " pending file(s).\n";
+            (new SeederRunner($db->pdo()))->runDemo();
+            echo "Demo seed finished on {$database}.\n";
+            echo "\nNext steps:\n";
+            echo "  php bin/console serve 127.0.0.1 8090\n";
+            echo "  Open http://127.0.0.1:8090 and sign in with admin@stockvel.local / Password123!\n";
+            break;
+
         case 'migrate':
             $m = new Migrator($db->pdo(), $basePath . '/database/migrations');
             $ran = $m->migrate();
             echo 'Migrated ' . count($ran) . " file(s) on " . TestingGuard::currentDatabaseName() . ".\n";
+            break;
+
+        case 'migrate:status':
+            $m = new Migrator($db->pdo(), $basePath . '/database/migrations');
+            $status = $m->status();
+            echo 'Database: ' . TestingGuard::currentDatabaseName() . "\n";
+            echo 'Ran (' . count($status['ran']) . "):\n";
+            foreach ($status['ran'] as $name) {
+                echo "  [x] {$name}\n";
+            }
+            echo 'Pending (' . count($status['pending']) . "):\n";
+            if ($status['pending'] === []) {
+                echo "  (none)\n";
+            } else {
+                foreach ($status['pending'] as $name) {
+                    echo "  [ ] {$name}\n";
+                }
+            }
             break;
 
         case 'migrate:rollback':
@@ -216,9 +256,11 @@ try {
             echo <<<HELP
 stockvel console
 
+  setup                       Create storage dirs, migrate, seed demo data
   migrate [--env=testing]     Run pending migrations
+  migrate:status              Show applied / pending migrations
   migrate:rollback [n]        Roll back migrations
-  seed [--env=testing]        Run DemoSeeder
+  seed [--env=testing]        Run DemoSeeder (safe to re-run)
   seed:e2e --env=testing      Run E2E matrix seeder (test DB only)
   db:reset --env=testing      Drop all tables + remigrate (test DB only)
   test / test:all             Full verified suite (non-zero on failure)
@@ -259,6 +301,31 @@ function ensureTestingEnv(): void
     $dbName = TestingGuard::currentDatabaseName();
     TestingGuard::assertSafeForDestructiveOps($dbName, 'test suite');
     echo "Using test database: {$dbName}\n";
+}
+
+function ensureStorageDirectories(string $basePath): void
+{
+    $dirs = [
+        'storage/logs',
+        'storage/sessions',
+        'storage/cache',
+        'storage/documents',
+        'storage/exports',
+        'storage/mail',
+        'storage/test-artifacts',
+        'public/uploads',
+    ];
+    foreach ($dirs as $relative) {
+        $path = $basePath . '/' . $relative;
+        if (!is_dir($path) && !mkdir($path, 0775, true) && !is_dir($path)) {
+            throw new RuntimeException('Unable to create directory: ' . $path);
+        }
+        $keep = $path . '/.gitkeep';
+        if (!is_file($keep)) {
+            file_put_contents($keep, '');
+        }
+    }
+    echo "Storage directories ready.\n";
 }
 
 function cronRunner(\App\Core\Container $container): CronRunner

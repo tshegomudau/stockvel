@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Meetings, governance rules, and document management tables.
+ * Migration 005 — Meetings, rules/constitution, folders, and documents.
  */
 return [
     'up' => [

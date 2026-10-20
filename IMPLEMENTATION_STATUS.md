@@ -12,35 +12,32 @@ Legend: `[ ]` pending · `[~]` partial · `[x]` complete · `[!]` blocked (exter
 - [x] Front controller (`public/index.php`)
 - [x] Router (GET, POST, PUT/PATCH simulation, DELETE)
 - [x] Dependency container / service registry
-- [x] Environment loader
+- [x] Environment loader (`.env` + `.env.testing`)
 - [x] Central exception handler
 - [x] Structured logger
-- [x] Flash messages
-- [x] Pagination component
-- [x] Validation component
-- [x] CSRF protection
-- [x] Secure session handler
+- [x] Flash messages / CSRF / sessions
+- [x] Pagination + validation
 - [x] View renderer with layouts and partials
 - [x] Middleware pipeline
-- [x] Database migration runner
-- [x] Database seeder
-- [x] CLI entry point (`bin/console`)
-- [x] Apache `.htaccess`
+- [x] Database migrator (`001`–`008`) + seeders
+- [x] CLI (`bin/console`) including `setup`, `migrate:status`, test suites
+- [x] TestingGuard (refuse destructive ops on non-test DB names)
 
 ## 2–25. Product domains
 
-All checklist domains from the product specification are implemented:
+Implemented domains from the product specification:
 
 - Multi-tenancy with `stokvel_id` enforcement and switcher
 - Auth (register, login, logout, reset, verify, lockout, remember-me, Argon2id)
 - RBAC (platform + stokvel roles/permissions)
-- Onboarding wizard with resume
+- Onboarding wizard with resume (`stokvel_onboarding`)
 - Membership, invitations, status history
 - Fee structures with versioning
 - Double-entry style ledger services
 - Contributions, allocations, idempotency, mock payment gateway
-- Expenses, loans, rotational payouts
+- Expenses, loans, rotational payouts (`payout_cycles`)
 - Meetings, rules/constitution versioning
+- Approvals (`approval_requests`)
 - Secure documents outside public web root
 - Notifications with queue/retry + log mail driver
 - Platform / stokvel / member dashboards
@@ -48,22 +45,20 @@ All checklist domains from the product specification are implemented:
 - Custom CSS/JS UI (no CDN frameworks)
 - Audit trail, cron jobs with locks
 - Lightweight test runner (no PHPUnit dependency)
-- POPIA-oriented controls + legal disclaimer in README
 
 ---
 
-## Verification results (2026-10-15)
+## Verification results (2026-10-20)
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Migrations | **pass** | 7 migration files applied (001–007) |
-| Seeders | **pass** | DemoSeeder loads 2 stokvels + platform users |
-| Tests | **pass** | **24 passed, 0 failed** |
-| PHP syntax (`php -l`) | **pass** | All application PHP files clean |
-| HTTP smoke | **pass** | `/`, `/login`, `/health`, `/platform`, `/app`, `/app/members` |
-| Cron | **pass** | `php bin/console cron:run` completes with locks |
-| Tenant isolation tests | **pass** | Included in suite |
+| Migrations | **pass** | 8 files (`001`–`008`) on clean `stockvel_testing` |
+| Seeders | **pass** | `DemoSeeder` + `E2ETestSeeder` (idempotent demo re-run) |
+| Tests | **pass** | **50 passed, 0 failed, 0 blocked** (`test:all`) |
+| Role matrix HTTP | **pass** | Platform, Ubuntu roles, Masakhane chair |
+| Tenant isolation | **pass** | Included in suite |
 | Security tests | **pass** | CSRF, SQLi, IDOR covered |
+| Browser / Playwright | **blocked** | Not installed; see `docs/END_TO_END_TEST_PLAN.md` |
 
 ### Demo credentials (development)
 
@@ -74,18 +69,14 @@ All checklist domains from the product specification are implemented:
 | Ubuntu chairperson | `thabo.mokoena@example.co.za` | `Password123!` |
 | Ubuntu treasurer | `nomsa.dlamini@example.co.za` | `Password123!` |
 
-Seeded users have `must_change_password=1`. Force password change outside `APP_ENV=local|development`.
+### New developer commands
+
+```bash
+cp .env.example .env   # set DB_*
+php bin/console setup
+php bin/console serve 127.0.0.1 8090
+```
 
 ### External credentials still required for production
 
-- SMTP (if not using `MAIL_DRIVER=log`)
-- SMS provider API keys (optional; `SMS_DRIVER=log` works in dev)
-- Payment gateway keys (optional; `PAYMENT_DRIVER=mock` works without)
-- WhatsApp Business API (optional placeholder)
-- Strong unique `APP_KEY` and `PAYMENT_WEBHOOK_SECRET`
-
-### Local runtime used for verification
-
-- PHP 8.3.35
-- MySQL 8.0.46 in Docker (`stockvel-mysql` on port **3307**)
-- Built-in server: `php -S 127.0.0.1:8090 -t public`
+SMTP, SMS provider, and real payment gateway keys — local uses `log` / `mock` drivers.
