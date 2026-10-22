@@ -7,6 +7,7 @@ namespace App\Controllers\Member;
 use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Session;
 use App\Exceptions\HttpException;
 use App\Services\Documents\DocumentService;
 
@@ -17,17 +18,44 @@ final class DocumentController extends Controller
         $this->requireAuth();
         $sid = $this->requireStokvel();
         $documents = $this->db()->fetchAll(
-            "SELECT * FROM documents
-             WHERE stokvel_id = :sid AND status = 'active'
-             ORDER BY created_at DESC LIMIT 100",
+            "SELECT d.*, dc.name AS category_name
+             FROM documents d
+             LEFT JOIN document_categories dc ON dc.id = d.document_category_id AND dc.stokvel_id = d.stokvel_id
+             WHERE d.stokvel_id = :sid AND d.status = 'active'
+             ORDER BY d.created_at DESC LIMIT 100",
             ['sid' => $sid]
         );
 
-        return $this->render('member/documents', [
+        return $this->render('member/documents/index', [
             'title' => 'Documents',
             'activeNav' => 'member-documents',
             'navContext' => 'member',
             'documents' => $documents,
+        ]);
+    }
+
+    public function show(Request $request, string $id): Response
+    {
+        $this->requireAuth();
+        $sid = $this->requireStokvel();
+        $doc = $this->db()->fetch(
+            "SELECT d.*, dc.name AS category_name
+             FROM documents d
+             LEFT JOIN document_categories dc ON dc.id = d.document_category_id AND dc.stokvel_id = d.stokvel_id
+             WHERE d.id = :id AND d.stokvel_id = :sid AND d.status = 'active'
+             LIMIT 1",
+            ['id' => (int) $id, 'sid' => $sid]
+        );
+        if (!$doc) {
+            Session::flash('error', 'Document not found.');
+            return $this->redirect('/member/documents');
+        }
+
+        return $this->render('member/documents/show', [
+            'title' => (string) ($doc['title'] ?? 'Document'),
+            'activeNav' => 'member-documents',
+            'navContext' => 'member',
+            'document' => $doc,
         ]);
     }
 

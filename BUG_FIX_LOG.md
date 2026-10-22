@@ -120,3 +120,14 @@
 - **Fix:** Align to `invitations`, `payment_transactions`/`member_charges`, `stokvel_onboarding`, `webhook_events`, `memberships`, documents `status` + DocumentService; add meeting acknowledgement + bank reconciliation tables
 - **Regression test:** `Chairperson core modules load without SQL errors` (+ treasurer/secretary/platform/B matrix)
 - **Final status:** Fixed / passing
+
+## BF-012 — Reports CSV export queried non-existent tables
+
+- **Error:** Would fail with missing `contributions` / `member_arrears` (or wrong schema) on `/app/reports/{type}.csv`
+- **Route / action:** `GET /app/reports/contributions.csv`, `/app/reports/{type}/export`
+- **Reproduction:** Product-upgrade regression crawl after fresh `db:reset` + `seed:e2e`
+- **Root cause:** `ReportController::fetchReportRows` used an inline anonymous query layer instead of `ReportService`
+- **Files changed:** `app/Controllers/Stokvel/ReportController.php`, `tests/ProductUpgradeRegressionTest.php`
+- **Fix:** Delegate to `ReportService::run()`; add upgrade regression HTTP/e2e cases
+- **Regression test:** `Upgrade routes load for chairperson without SQL errors` (includes CSV export paths)
+- **Final status:** Fixed / passing (2026-10-20 regression: 57/57)

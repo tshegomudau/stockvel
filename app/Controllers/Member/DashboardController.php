@@ -41,13 +41,28 @@ final class DashboardController extends Controller
             ['sid' => $sid]
         );
 
+        $pendingChanges = 0;
+        if ($membershipId > 0) {
+            try {
+                $pendingChanges = (int) ($this->db()->fetch(
+                    "SELECT COUNT(*) AS c FROM member_change_requests
+                     WHERE membership_id = :mid AND stokvel_id = :sid AND status = 'pending_member'",
+                    ['mid' => $membershipId, 'sid' => $sid]
+                )['c'] ?? 0);
+            } catch (\Throwable) {
+                $pendingChanges = 0;
+            }
+        }
+
         return $this->render('member/dashboard', [
             'title' => 'My dashboard',
             'activeNav' => 'member-dashboard',
             'navContext' => 'member',
             'membership' => $membership,
             'balance' => $balance,
+            'balanceDue' => max(0, -$balance),
             'upcomingMeetings' => $upcoming,
+            'pendingChangeCount' => $pendingChanges,
         ]);
     }
 }

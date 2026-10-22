@@ -1,5 +1,10 @@
 .auth-shell { width: min(1040px, calc(100% - 2rem)); margin: 0 auto; }
+
+.auth-card {
+  padding: 1.5rem 1.35rem;
+}
 .auth-card .checkbox { margin: 0.25rem 0 0.5rem; }
+
 .auth-security-note {
   margin-top: 1.25rem;
   padding-top: 1rem;
@@ -7,10 +12,19 @@
   font-size: 0.8rem;
   color: var(--color-text-muted);
 }
+
 .invite-summary {
-  background: var(--color-surface-alt);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-primary-soft) 70%, var(--color-surface-alt)), var(--color-surface-alt));
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 0.9rem 1rem;
   margin-bottom: 1rem;
   font-size: 0.925rem;
+}
+
+/* Auth pages: ensure card sits cleanly on full-bleed atmosphere */
+body.guest-layout .auth-split > .card,
+body.guest-layout .auth-card {
+  backdrop-filter: blur(2px);
 }

@@ -41,13 +41,18 @@ return static function (TestRunner $runner): void {
             '/app/fees',
             '/app/contributions',
             '/app/expenses',
+            '/app/expenses/categories',
             '/app/approvals',
             '/app/loans',
+            '/app/loans/products',
             '/app/payouts',
             '/app/meetings',
             '/app/rules',
             '/app/documents',
             '/app/reports',
+            '/app/support',
+            '/app/burial-claims',
+            '/app/grocery',
             '/app/notifications',
             '/app/settings',
         ] as $path) {
@@ -105,6 +110,10 @@ return static function (TestRunner $runner): void {
         $client = new HttpClient();
         $assertOk($client->get('/platform'), 'Platform dashboard');
         $assertOk($client->get('/platform/jobs'), 'Platform jobs');
+        $assertOk($client->get('/platform/support'), 'Platform support');
+        $assertOk($client->get('/platform/roles'), 'Platform roles');
+        $assertOk($client->get('/platform/users'), 'Platform users');
+        $assertOk($client->get('/platform/audit'), 'Platform audit');
         $auth->logout();
     }, 'http');
 

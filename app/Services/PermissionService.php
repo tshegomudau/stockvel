@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Core\Database;
 use App\Core\TenantContext as CoreTenantContext;
 use App\Exceptions\AuthorizationException;
+use App\Support\ModuleRegistry;
 
 final class PermissionService
 {
@@ -24,6 +25,10 @@ final class PermissionService
         'approvals.action',
         'loans.manage',
         'payouts.manage',
+        'documents.manage_categories',
+        'beneficiaries.view',
+        'beneficiaries.manage',
+        'meetings.manage_minutes',
         'meetings.manage',
         'rules.manage',
         'documents.view',
@@ -34,6 +39,9 @@ final class PermissionService
         'notifications.view',
         'onboarding.manage',
         'audit.view',
+        'support.manage',
+        'burial.manage',
+        'grocery.manage',
     ];
 
     /** @var array<string, list<string>> */
@@ -53,6 +61,7 @@ final class PermissionService
             'reports.view',
             'reports.export',
             'documents.view',
+            'beneficiaries.view',
             'audit.view',
             'notifications.view',
         ],
@@ -60,24 +69,35 @@ final class PermissionService
             'members.view',
             'members.invite',
             'members.manage',
+            'beneficiaries.view',
+            'beneficiaries.manage',
             'meetings.manage',
+            'meetings.manage_minutes',
             'rules.manage',
             'documents.view',
             'documents.upload',
+            'documents.manage_categories',
             'reports.view',
             'notifications.view',
             'audit.view',
+            'support.manage',
+            'burial.manage',
+            'grocery.manage',
         ],
         'committee_member' => [
             'members.view',
             'approvals.view',
             'approvals.action',
             'meetings.manage',
+            'meetings.manage_minutes',
             'expenses.manage',
             'loans.manage',
             'reports.view',
             'documents.view',
+            'beneficiaries.view',
             'notifications.view',
+            'burial.manage',
+            'grocery.manage',
         ],
         'ordinary_member' => [
             'contributions.view',
@@ -172,6 +192,23 @@ final class PermissionService
         }
     }
 
+    public function isModuleEnabled(string $moduleKey): bool
+    {
+        return $this->tenant->moduleEnabled($moduleKey);
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    public function enabledModules(): array
+    {
+        $cached = $this->tenant->enabledModules();
+        if ($cached !== []) {
+            return $cached;
+        }
+        return ModuleRegistry::defaults(true);
+    }
+
     /** @return list<string> */
     public function codesForMembership(array $membership): array
     {
@@ -186,6 +223,21 @@ final class PermissionService
 
         $role = $this->resolveRoleCode($membership);
         $codes = self::ROLE_PERMISSIONS[$role] ?? self::ROLE_PERMISSIONS['ordinary_member'];
+
+        try {
+            $stokvelId = (int) ($membership['stokvel_id'] ?? 0);
+            if ($stokvelId > 0) {
+                $settingsRow = $this->db->fetch(
+                    'SELECT settings_json FROM stokvel_settings WHERE stokvel_id = :sid LIMIT 1',
+                    ['sid' => $stokvelId]
+                );
+                $settingsJson = json_decode((string) ($settingsRow['settings_json'] ?? '{}'), true);
+                if (is_array($settingsJson['role_permissions'][$role] ?? null)) {
+                    $codes = $settingsJson['role_permissions'][$role];
+                }
+            }
+        } catch (\Throwable) {
+        }
 
         try {
             $rows = $this->db->fetchAll(

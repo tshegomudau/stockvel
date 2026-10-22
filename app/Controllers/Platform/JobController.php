@@ -8,6 +8,7 @@ use App\Controllers\Controller;
 use App\Core\Paginator;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Session;
 
 final class JobController extends Controller
 {
@@ -40,5 +41,22 @@ final class JobController extends Controller
             'navContext' => 'platform',
             'paginator' => $paginator,
         ]);
+    }
+
+    public function retry(Request $request, string $id): Response
+    {
+        $this->requireAuth();
+        if (!$this->tenant()->isPlatformAdmin()) {
+            return $this->redirect('/app');
+        }
+        $this->db()->exec(
+            "UPDATE notification_jobs
+             SET status = 'pending', last_error = NULL, attempt_count = 0,
+                 available_at = UTC_TIMESTAMP(), updated_at = :ua
+             WHERE id = :id AND status IN ('failed', 'dead')",
+            ['ua' => now_utc(), 'id' => (int) $id]
+        );
+        Session::flash('success', 'Job queued for retry.');
+        return $this->redirect('/platform/jobs');
     }
 }

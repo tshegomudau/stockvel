@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
+    <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
     <title><?= e(($title ?? 'stockvel') . ' · stockvel') ?></title>
     <?= view('partials/styles', [], null) ?>
 </head>
@@ -11,7 +12,10 @@
 <a class="skip-link" href="#main-content">Skip to content</a>
 <header class="site-header">
     <div class="container header-inner">
-        <a class="brand" href="<?= e(url('/')) ?>">stockvel</a>
+        <a class="brand-lockup" href="<?= e(url('/')) ?>" aria-label="stockvel home">
+            <span class="brand-mark" aria-hidden="true">S</span>
+            <span class="brand-wordmark">stockvel</span>
+        </a>
         <nav class="header-nav" aria-label="Primary">
             <a href="<?= e(url('/login')) ?>">Sign in</a>
             <a class="btn btn-primary" href="<?= e(url('/register')) ?>">Register</a>

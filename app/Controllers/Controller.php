@@ -64,7 +64,7 @@ abstract class Controller
     protected function requirePermission(string $permission): void
     {
         $this->requireAuth();
-        $this->tenant()->requirePermission($permission);
+        app()->container()->get(\App\Services\PermissionService::class)->require($permission);
     }
 
     protected function requireStokvel(): int
@@ -80,6 +80,37 @@ abstract class Controller
         $data['activeNav'] = $data['activeNav'] ?? '';
         $data['navContext'] = $data['navContext'] ?? 'app';
 
+        if ($this->stokvelId() !== null) {
+            try {
+                $settingsRow = $this->db()->fetch(
+                    'SELECT loans_enabled, branding_primary_colour, payout_mode, settings_json
+                     FROM stokvel_settings WHERE stokvel_id = :sid LIMIT 1',
+                    ['sid' => $this->stokvelId()]
+                ) ?? [];
+                // Controllers often pass a partial $settings (e.g. loans only) — merge so brand colour is never lost.
+                $data['settings'] = array_merge($settingsRow, $data['settings'] ?? []);
+                if (!array_key_exists('branding_primary_colour', $data['settings'])
+                    || $data['settings']['branding_primary_colour'] === null
+                    || $data['settings']['branding_primary_colour'] === '') {
+                    $data['settings']['branding_primary_colour'] = $settingsRow['branding_primary_colour'] ?? null;
+                }
+            } catch (\Throwable) {
+                $data['settings'] = $data['settings'] ?? [];
+            }
+        }
+
+        if (!isset($data['enabledModules']) && $this->stokvelId() !== null) {
+            try {
+                $data['enabledModules'] = app()->container()
+                    ->get(\App\Services\PermissionService::class)
+                    ->enabledModules();
+            } catch (\Throwable) {
+                $data['enabledModules'] = \App\Support\ModuleRegistry::defaults(
+                    !empty($data['settings']['loans_enabled'] ?? false)
+                );
+            }
+        }
+
         if (!isset($data['memberships']) && $this->userId() !== null && class_exists(\App\Services\Auth\AuthService::class)) {
             try {
                 $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
@@ -91,16 +122,31 @@ abstract class Controller
             }
         }
 
-        if (!isset($data['unreadNotifications']) && $this->userId() !== null && $this->stokvelId() !== null) {
-            try {
-                $row = $this->db()->fetch(
-                    "SELECT COUNT(*) AS c FROM notifications
-                     WHERE stokvel_id = :sid AND user_id = :uid AND read_at IS NULL",
-                    ['sid' => $this->stokvelId(), 'uid' => $this->userId()]
-                );
-                $data['unreadNotifications'] = (int) ($row['c'] ?? 0);
-            } catch (\Throwable) {
-                $data['unreadNotifications'] = 0;
+        if (!isset($data['unreadNotifications']) && $this->userId() !== null) {
+            if (($data['navContext'] ?? '') === 'platform' && $this->tenant()->isPlatformAdmin()) {
+                try {
+                    $failed = (int) ($this->db()->fetch(
+                        "SELECT COUNT(*) AS c FROM notification_jobs WHERE status IN ('failed', 'dead')"
+                    )['c'] ?? 0);
+                    $tickets = (int) ($this->db()->fetch(
+                        "SELECT COUNT(*) AS c FROM support_tickets
+                         WHERE status NOT IN ('closed', 'resolved', 'cancelled')"
+                    )['c'] ?? 0);
+                    $data['unreadNotifications'] = $failed + $tickets;
+                } catch (\Throwable) {
+                    $data['unreadNotifications'] = 0;
+                }
+            } elseif ($this->stokvelId() !== null) {
+                try {
+                    $row = $this->db()->fetch(
+                        "SELECT COUNT(*) AS c FROM notifications
+                         WHERE stokvel_id = :sid AND user_id = :uid AND read_at IS NULL",
+                        ['sid' => $this->stokvelId(), 'uid' => $this->userId()]
+                    );
+                    $data['unreadNotifications'] = (int) ($row['c'] ?? 0);
+                } catch (\Throwable) {
+                    $data['unreadNotifications'] = 0;
+                }
             }
         }
 

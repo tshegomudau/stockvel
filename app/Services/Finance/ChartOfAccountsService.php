@@ -39,37 +39,65 @@ final class ChartOfAccountsService
 
     public function seedDefault(int $stokvelId): int
     {
-        $existing = $this->db->fetch(
-            'SELECT COUNT(*) AS cnt FROM chart_of_accounts WHERE stokvel_id = :stokvel_id',
-            ['stokvel_id' => $stokvelId]
-        );
-        if ($existing !== null && (int) $existing['cnt'] > 0) {
-            return (int) $existing['cnt'];
-        }
+        return $this->ensureDefaultAccounts($stokvelId);
+    }
 
+    /**
+     * Upsert the full system chart so finance posting never fails on missing sub_types.
+     */
+    public function ensureDefaultAccounts(int $stokvelId): int
+    {
         $now = now_utc();
-        $inserted = 0;
+        $touched = 0;
         foreach (self::DEFAULT_ACCOUNTS as $account) {
-            $this->db->insert(
-                'INSERT INTO chart_of_accounts
-                    (stokvel_id, code, name, account_type, sub_type, parent_id, is_system, is_active, created_at, updated_at)
-                 VALUES
-                    (:stokvel_id, :code, :name, :account_type, :sub_type, NULL, :is_system, 1, :created_at, :updated_at)',
-                [
-                    'stokvel_id' => $stokvelId,
-                    'code' => $account['code'],
-                    'name' => $account['name'],
-                    'account_type' => $account['account_type'],
-                    'sub_type' => $account['sub_type'],
-                    'is_system' => $account['is_system'],
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]
+            $existing = $this->db->fetch(
+                'SELECT id FROM chart_of_accounts WHERE stokvel_id = :stokvel_id AND code = :code LIMIT 1',
+                ['stokvel_id' => $stokvelId, 'code' => $account['code']]
             );
-            ++$inserted;
+            if ($existing) {
+                $this->db->exec(
+                    'UPDATE chart_of_accounts
+                     SET name = :name, account_type = :account_type, sub_type = :sub_type,
+                         is_system = :is_system, is_active = 1, updated_at = :updated_at
+                     WHERE id = :id AND stokvel_id = :stokvel_id',
+                    [
+                        'name' => $account['name'],
+                        'account_type' => $account['account_type'],
+                        'sub_type' => $account['sub_type'],
+                        'is_system' => $account['is_system'],
+                        'updated_at' => $now,
+                        'id' => (int) $existing['id'],
+                        'stokvel_id' => $stokvelId,
+                    ]
+                );
+            } else {
+                $this->db->insert(
+                    'INSERT INTO chart_of_accounts
+                        (stokvel_id, code, name, account_type, sub_type, parent_id, is_system, is_active, created_at, updated_at)
+                     VALUES
+                        (:stokvel_id, :code, :name, :account_type, :sub_type, NULL, :is_system, 1, :created_at, :updated_at)',
+                    [
+                        'stokvel_id' => $stokvelId,
+                        'code' => $account['code'],
+                        'name' => $account['name'],
+                        'account_type' => $account['account_type'],
+                        'sub_type' => $account['sub_type'],
+                        'is_system' => $account['is_system'],
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
+            }
+            ++$touched;
         }
 
-        return $inserted;
+        return $touched;
+    }
+
+    /** @return list<array{code: string, name: string, account_type: string, sub_type: string, is_system: int}> */
+    public static function defaultAccounts(): array
+    {
+        return self::DEFAULT_ACCOUNTS;
     }
 
     public function findByCode(int $stokvelId, string $code): ?array
@@ -93,6 +121,10 @@ final class ChartOfAccountsService
     public function requireBySubType(int $stokvelId, string $subType): array
     {
         $account = $this->findBySubType($stokvelId, $subType);
+        if ($account === null) {
+            $this->ensureDefaultAccounts($stokvelId);
+            $account = $this->findBySubType($stokvelId, $subType);
+        }
         if ($account === null) {
             throw new FinanceException("Chart of accounts entry missing for sub_type: {$subType}");
         }

@@ -21,6 +21,7 @@ use App\Repositories\UserRepository;
 use App\Services\AuditService;
 use App\Services\Auth\AuthService;
 use App\Services\Auth\EmailVerificationService;
+use App\Services\Auth\MfaService;
 use App\Services\Auth\PasswordResetService;
 use App\Services\Auth\RememberTokenService;
 use App\Services\Finance\ChargeService;
@@ -44,6 +45,7 @@ use App\Services\Loans\LoanScheduleCalculator;
 use App\Services\Loans\LoanService;
 use App\Services\Meetings\MeetingService;
 use App\Services\Membership\InvitationService;
+use App\Services\Membership\MemberChangeRequestService;
 use App\Services\Membership\MembershipService;
 use App\Services\Onboarding\OnboardingService;
 use App\Services\Payments\MockPaymentGateway;
@@ -85,6 +87,7 @@ return static function (Container $container, string $basePath, array $dbConfig)
     ));
     $container->singleton(PasswordResetService::class, static fn (Container $c) => new PasswordResetService($c->get(Database::class), $c->get(UserRepository::class), $c->get(AuditService::class)));
     $container->singleton(EmailVerificationService::class, static fn (Container $c) => new EmailVerificationService($c->get(Database::class), $c->get(UserRepository::class), $c->get(AuditService::class)));
+    $container->singleton(MfaService::class, static fn (Container $c) => new MfaService($c->get(Database::class)));
 
     $container->singleton(ChartOfAccountsService::class, static fn (Container $c) => new ChartOfAccountsService($c->get(Database::class)));
     $container->singleton(LedgerService::class, static fn (Container $c) => new LedgerService($c->get(Database::class)));
@@ -118,7 +121,8 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(AuthService::class),
         $c->get(LegacyTenantContext::class),
         $c->get(TenantContext::class),
-        $c->get(PermissionService::class)
+        $c->get(PermissionService::class),
+        $c->get(Database::class)
     ));
     $container->singleton(PlatformAuthMiddleware::class, static fn (Container $c) => new PlatformAuthMiddleware($c->get(AuthService::class)));
     $container->singleton(SecurityHeadersMiddleware::class, static fn () => new SecurityHeadersMiddleware());
@@ -145,8 +149,8 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(ChartOfAccountsService::class)
     ));
     $container->singleton(CsvImportService::class, static fn (Container $c) => new CsvImportService(
-        $c->get(Database::class),
-        $c->get(ContributionService::class)
+        $c->get(ContributionService::class),
+        $c->get(Database::class)
     ));
     $container->singleton(ReconciliationService::class, static fn (Container $c) => new ReconciliationService($c->get(Database::class)));
     $container->singleton(DocumentService::class, static fn (Container $c) => new DocumentService(
@@ -166,6 +170,9 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(InvitationService::class),
         $c->get(TenantContext::class),
         $c->get(AuditService::class)
+    ));
+    $container->singleton(MemberChangeRequestService::class, static fn (Container $c) => new MemberChangeRequestService(
+        $c->get(Database::class)
     ));
     $container->singleton(MeetingService::class, static fn (Container $c) => new MeetingService(
         $c->get(Database::class),

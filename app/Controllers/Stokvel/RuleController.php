@@ -40,10 +40,12 @@ final class RuleController extends Controller
     public function create(Request $request): Response
     {
         $this->requirePermission('rules.manage');
+        $sid = $this->requireStokvel();
         return $this->render('stokvel/rules/create', [
             'title' => 'New Rule',
             'activeNav' => 'rules',
             'navContext' => 'app',
+            'categories' => $this->ruleCategoryMap($sid),
         ]);
     }
 
@@ -51,27 +53,39 @@ final class RuleController extends Controller
     {
         $this->requirePermission('rules.manage');
         $sid = $this->requireStokvel();
+        $categoryMap = $this->ruleCategoryMap($sid);
         $data = [
             'title' => trim((string) $request->input('title', '')),
             'body' => trim((string) $request->input('body', '')),
-            'category' => trim((string) $request->input('category', 'general')),
+            'category' => trim((string) $request->input('category', 'general')) ?: 'general',
         ];
+        if (!isset($categoryMap[$data['category']])) {
+            $data['category'] = array_key_first($categoryMap) ?: 'general';
+        }
         $validator = Validator::make($data, [
-            'title' => 'required|string',
-            'body' => 'required|string',
+            'title' => 'required|string|min:3|max:255',
+            'body' => 'required|string|min:5',
+            'category' => 'required|string',
+        ], [
+            'title.required' => 'Please enter a rule title.',
+            'title.min' => 'Title must be at least 3 characters.',
+            'title.max' => 'Title must be at most 255 characters.',
+            'body.required' => 'Please enter the rule text.',
+            'body.min' => 'Rule text must be at least 5 characters.',
         ]);
         if ($validator->fails()) {
             $this->flashOld($request);
-            Session::flash('error', 'Invalid rule details.');
+            $this->flashErrors($validator->errors());
+            Session::flash('error', $validator->firstError() ?? 'Please complete the rule details.');
             return $this->redirect('/app/rules/create');
         }
 
         /** @var RuleService $rules */
         $rules = app()->container()->get(RuleService::class);
-        $rules->create($sid, (int) $this->userId(), $data);
+        $ruleId = $rules->create($sid, (int) $this->userId(), $data);
 
         Session::flash('success', 'Rule saved.');
-        return $this->redirect('/app/rules');
+        return $this->redirect('/app/rules/' . $ruleId);
     }
 
     public function show(Request $request, string $id): Response
@@ -120,6 +134,7 @@ final class RuleController extends Controller
             'activeNav' => 'rules',
             'navContext' => 'app',
             'item' => $row,
+            'categories' => $this->ruleCategoryMap($sid),
         ]);
     }
 
@@ -127,20 +142,55 @@ final class RuleController extends Controller
     {
         $this->requirePermission('rules.manage');
         $sid = $this->requireStokvel();
-        $title = trim((string) $request->input('title', ''));
-        $body = trim((string) $request->input('body', ''));
-        if ($title === '' || $body === '') {
-            Session::flash('error', 'Title and body are required.');
+        $existing = $this->db()->fetch(
+            'SELECT id FROM rules WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
+        if (!$existing) {
+            Session::flash('error', 'Rule not found.');
+            return $this->redirect('/app/rules');
+        }
+
+        $categoryMap = $this->ruleCategoryMap($sid);
+        $data = [
+            'title' => trim((string) $request->input('title', '')),
+            'body' => trim((string) $request->input('body', '')),
+            'category' => trim((string) $request->input('category', 'general')) ?: 'general',
+        ];
+        if (!isset($categoryMap[$data['category']])) {
+            $data['category'] = array_key_first($categoryMap) ?: 'general';
+        }
+        $validator = Validator::make($data, [
+            'title' => 'required|string|min:3|max:255',
+            'body' => 'required|string|min:5',
+            'category' => 'required|string',
+        ], [
+            'title.required' => 'Please enter a rule title.',
+            'title.min' => 'Title must be at least 3 characters.',
+            'title.max' => 'Title must be at most 255 characters.',
+            'body.required' => 'Please enter the rule text.',
+            'body.min' => 'Rule text must be at least 5 characters.',
+        ]);
+        if ($validator->fails()) {
+            $this->flashOld($request);
+            $this->flashErrors($validator->errors());
+            Session::flash('error', $validator->firstError() ?? 'Please complete the rule details.');
             return $this->redirect('/app/rules/' . $id . '/edit');
         }
 
         $this->db()->exec(
-            'UPDATE rules SET title = :title, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
-            ['title' => $title, 'ua' => now_utc(), 'id' => (int) $id, 'sid' => $sid]
+            'UPDATE rules SET title = :title, category = :category, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+            [
+                'title' => $data['title'],
+                'category' => $data['category'],
+                'ua' => now_utc(),
+                'id' => (int) $id,
+                'sid' => $sid,
+            ]
         );
         /** @var RuleService $rules */
         $rules = app()->container()->get(RuleService::class);
-        $rules->createNewVersion($sid, (int) $id, (int) $this->userId(), $body);
+        $rules->createNewVersion($sid, (int) $id, (int) $this->userId(), $data['body']);
 
         Session::flash('success', 'Rule updated.');
         return $this->redirect('/app/rules/' . $id);
@@ -156,5 +206,43 @@ final class RuleController extends Controller
         );
         Session::flash('success', 'Rule removed.');
         return $this->redirect('/app/rules');
+    }
+
+    /**
+     * @return array<string, string> code => name
+     */
+    private function ruleCategoryMap(int $stokvelId): array
+    {
+        $fallback = [
+            'general' => 'General',
+            'constitution' => 'Constitution',
+            'contributions' => 'Contributions',
+            'loans' => 'Loans',
+            'meetings' => 'Meetings',
+            'payouts' => 'Payouts',
+            'discipline' => 'Discipline',
+            'other' => 'Other',
+        ];
+        try {
+            $rows = $this->db()->fetchAll(
+                'SELECT code, name FROM rule_categories
+                 WHERE stokvel_id = :sid AND is_active = 1
+                 ORDER BY name ASC',
+                ['sid' => $stokvelId]
+            );
+            if ($rows === []) {
+                return $fallback;
+            }
+            $map = [];
+            foreach ($rows as $row) {
+                $code = (string) ($row['code'] ?? '');
+                if ($code !== '') {
+                    $map[$code] = (string) ($row['name'] ?? $code);
+                }
+            }
+            return $map !== [] ? $map : $fallback;
+        } catch (\Throwable) {
+            return $fallback;
+        }
     }
 }

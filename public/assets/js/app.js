@@ -240,6 +240,142 @@
     });
   }
 
+  function initWysiwyg() {
+    qsa('[data-wysiwyg]').forEach(function (ta) {
+      if (ta.getAttribute('data-wysiwyg-ready') === '1') return;
+      ta.setAttribute('data-wysiwyg-ready', '1');
+      var wrap = doc.createElement('div');
+      wrap.className = 'wysiwyg';
+      if (ta.classList.contains('wysiwyg--tall') || ta.getAttribute('data-wysiwyg-size') === 'tall') {
+        wrap.classList.add('wysiwyg--tall');
+      }
+      var toolbar = doc.createElement('div');
+      toolbar.className = 'wysiwyg__toolbar';
+      toolbar.setAttribute('role', 'toolbar');
+      var editor = doc.createElement('div');
+      editor.className = 'wysiwyg__editor';
+      editor.contentEditable = 'true';
+      editor.setAttribute('role', 'textbox');
+      editor.setAttribute('aria-multiline', 'true');
+      editor.setAttribute('spellcheck', 'true');
+      if (ta.getAttribute('aria-label')) {
+        editor.setAttribute('aria-label', ta.getAttribute('aria-label'));
+      }
+      editor.innerHTML = ta.value || '';
+      ta.classList.add('is-hidden');
+      ta.parentNode.insertBefore(wrap, ta);
+      wrap.appendChild(toolbar);
+      wrap.appendChild(editor);
+      wrap.appendChild(ta);
+
+      function sync() {
+        ta.value = editor.innerHTML;
+      }
+
+      function cmd(command, value) {
+        try {
+          doc.execCommand(command, false, value || null);
+        } catch (e) { /* ignore unsupported */ }
+        editor.focus();
+        sync();
+      }
+
+      function promptLink() {
+        var url = window.prompt('Link URL (https:// or /path)', 'https://');
+        if (!url) return;
+        url = String(url).trim();
+        if (!/^(https?:\/\/|mailto:|\/|#|\.\/)/i.test(url)) {
+          window.alert('Only http(s), mailto, or relative links are allowed.');
+          return;
+        }
+        cmd('createLink', url);
+      }
+
+      function addSep() {
+        var sep = doc.createElement('span');
+        sep.className = 'wysiwyg__sep';
+        sep.setAttribute('aria-hidden', 'true');
+        toolbar.appendChild(sep);
+      }
+
+      var buttons = [
+        { label: 'H2', title: 'Heading', action: function () { cmd('formatBlock', 'h2'); } },
+        { label: 'H3', title: 'Subheading', action: function () { cmd('formatBlock', 'h3'); } },
+        { label: '¶', title: 'Paragraph', action: function () { cmd('formatBlock', 'p'); } },
+        null,
+        { label: 'B', title: 'Bold', action: function () { cmd('bold'); } },
+        { label: 'I', title: 'Italic', action: function () { cmd('italic'); } },
+        { label: 'U', title: 'Underline', action: function () { cmd('underline'); } },
+        { label: 'S', title: 'Strikethrough', action: function () { cmd('strikeThrough'); } },
+        null,
+        { label: '•', title: 'Bullet list', action: function () { cmd('insertUnorderedList'); } },
+        { label: '1.', title: 'Numbered list', action: function () { cmd('insertOrderedList'); } },
+        { label: '“', title: 'Quote', action: function () { cmd('formatBlock', 'blockquote'); } },
+        null,
+        { label: '🔗', title: 'Insert link', action: promptLink },
+        { label: '⌀', title: 'Remove link', action: function () { cmd('unlink'); } },
+        { label: '—', title: 'Horizontal rule', action: function () { cmd('insertHorizontalRule'); } },
+        null,
+        { label: '↺', title: 'Undo', action: function () { cmd('undo'); } },
+        { label: '↻', title: 'Redo', action: function () { cmd('redo'); } },
+        { label: '⌫', title: 'Clear formatting', action: function () { cmd('removeFormat'); } }
+      ];
+
+      buttons.forEach(function (btnDef) {
+        if (!btnDef) {
+          addSep();
+          return;
+        }
+        var btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.className = 'wysiwyg__btn';
+        btn.title = btnDef.title;
+        btn.setAttribute('aria-label', btnDef.title);
+        btn.textContent = btnDef.label;
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          btnDef.action();
+        });
+        toolbar.appendChild(btn);
+      });
+
+      // Text-only editor: block image/file drops and paste of binary content.
+      editor.addEventListener('dragover', function (e) { e.preventDefault(); });
+      editor.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var text = e.dataTransfer && e.dataTransfer.getData('text/plain');
+        if (text) {
+          cmd('insertText', text);
+        }
+      });
+      editor.addEventListener('paste', function (e) {
+        var items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        var i;
+        for (i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.indexOf('image') === 0) {
+            e.preventDefault();
+            return;
+          }
+        }
+        if (e.clipboardData.files && e.clipboardData.files.length) {
+          e.preventDefault();
+          var plain = e.clipboardData.getData('text/plain');
+          if (plain) {
+            cmd('insertText', plain);
+          }
+        }
+      });
+
+      editor.addEventListener('input', sync);
+      editor.addEventListener('blur', sync);
+      var form = ta.closest('form');
+      if (form) {
+        form.addEventListener('submit', sync);
+      }
+    });
+  }
+
   doc.addEventListener('DOMContentLoaded', function () {
     initDrawer();
     initDropdowns();
@@ -251,5 +387,6 @@
     initTableFilter();
     initTabs();
     initCharts();
+    initWysiwyg();
   });
 })();

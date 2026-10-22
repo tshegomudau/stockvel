@@ -27,6 +27,14 @@ function e(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * Re-sanitize HTML on output so only an allowlisted tag set is rendered.
+ */
+function safe_html(?string $html): string
+{
+    return \App\Support\HtmlSanitizer::clean($html);
+}
+
 function csrf_token(): string
 {
     return Csrf::token();
@@ -80,8 +88,16 @@ function base_path_uri(): string
         return $cached;
     }
 
-    // Auto-detect from script location when APP_BASE_PATH is empty.
+    // Auto-detect only from the front controller (index.php / router.php).
+    // PHP's built-in server may set SCRIPT_NAME to the request path for routed
+    // URIs (e.g. /assets/css/app.css), which must not become the app base path.
     $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $scriptBase = basename($script);
+    if (!in_array($scriptBase, ['index.php', 'router.php'], true)) {
+        $cached = '';
+        return $cached;
+    }
+
     $dir = rtrim(str_replace('\\', '/', dirname($script)), '/');
     if ($dir === '' || $dir === '/' || $dir === '.') {
         $cached = '';
@@ -168,16 +184,33 @@ function route(string $name, array $parameters = []): string
         'app.reports' => '/app/reports',
         'app.approvals' => '/app/approvals',
         'app.settings' => '/app/settings',
+        'app.settings.roles' => '/app/settings/roles',
+        'app.settings.categories' => '/app/settings/categories',
+        'app.beneficiaries' => '/app/beneficiaries',
+        'app.expense_categories' => '/app/expenses/categories',
+        'app.payout_categories' => '/app/payouts/categories',
+        'app.document_categories' => '/app/documents/categories',
+        'app.fee_categories' => '/app/fees/categories',
+        'app.meeting_categories' => '/app/meetings/categories',
+        'app.rule_categories' => '/app/rules/categories',
+        'app.loan_products' => '/app/loans/products',
         'app.notifications' => '/app/notifications',
         'app.onboarding' => '/app/onboarding',
         'member.dashboard' => '/member',
         'member.statement' => '/member/statement',
         'member.profile' => '/member/profile',
+        'member.change-requests' => '/member/change-requests',
         'platform.dashboard' => '/platform',
         'platform.tenants' => '/platform/tenants',
         'platform.users' => '/platform/users',
         'platform.audit' => '/platform/audit',
         'platform.jobs' => '/platform/jobs',
+        'platform.roles' => '/platform/roles',
+        'platform.stokvel-types' => '/platform/stokvel-types',
+        'platform.support' => '/platform/support',
+        'platform.profile' => '/platform/profile',
+        'platform.security' => '/platform/security',
+        'app.support' => '/app/support',
     ];
 
     $path = $routes[$name] ?? (str_starts_with($name, '/') ? $name : '/' . ltrim($name, '/'));
@@ -262,4 +295,83 @@ function initials(?string $name): string
         $letters .= mb_strtoupper(mb_substr($part, 0, 1));
     }
     return $letters !== '' ? $letters : '?';
+}
+
+/**
+ * Permission check against the active tenant context (false when unauthenticated / no tenant).
+ * Also fails closed when the permission's feature module is disabled for the stokvel.
+ */
+function can(string $permission): bool
+{
+    try {
+        return app()->container()->get(\App\Services\PermissionService::class)->can($permission);
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Whether a feature module is enabled for the active stokvel.
+ */
+function module_enabled(string $moduleKey): bool
+{
+    try {
+        return app()->container()->get(\App\Services\PermissionService::class)->isModuleEnabled($moduleKey);
+    } catch (\Throwable) {
+        return true;
+    }
+}
+
+/**
+ * Best landing path after auth for a user row (platform → /platform, committee → /app, else /member).
+ *
+ * @param array<string, mixed>|null $user
+ */
+function home_path_for_user(?array $user): string
+{
+    if ($user === null || empty($user['id'])) {
+        return '/login';
+    }
+
+    $platformRole = (string) ($user['platform_role'] ?? '');
+    if (in_array($platformRole, [
+        'platform_super_admin',
+        'platform_support',
+        'platform_auditor',
+        'super_admin',
+        'support',
+        'auditor',
+    ], true)) {
+        return '/platform';
+    }
+
+    $userId = (int) $user['id'];
+    try {
+        /** @var \App\Services\Auth\AuthService $auth */
+        $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
+        $memberships = $auth->membershipsForUser($userId);
+        if ($memberships === []) {
+            return '/member';
+        }
+
+        /** @var \App\Services\PermissionService $permissions */
+        $permissions = app()->container()->get(\App\Services\PermissionService::class);
+        $adminPerms = ['*', 'members.view', 'settings.manage', 'approvals.view', 'contributions.capture', 'fees.manage'];
+        foreach ($memberships as $membership) {
+            $codes = $permissions->codesForMembership($membership);
+            foreach ($adminPerms as $perm) {
+                if (in_array($perm, $codes, true)) {
+                    Session::set('active_stokvel_id', (int) $membership['stokvel_id']);
+                    Session::set('stokvel_id', (int) $membership['stokvel_id']);
+                    return '/app';
+                }
+            }
+        }
+
+        Session::set('active_stokvel_id', (int) $memberships[0]['stokvel_id']);
+        Session::set('stokvel_id', (int) $memberships[0]['stokvel_id']);
+        return '/member';
+    } catch (\Throwable) {
+        return '/app';
+    }
 }

@@ -5,6 +5,19 @@
         <div class="form-group"><label for="name">Name</label><input type="text" id="name" name="name" value="<?= e((string) old('name', (string) ($item['name'] ?? ''))) ?>" required></div>
         <div class="form-group"><label for="amount">Amount (ZAR)</label><input type="number" id="amount" name="amount" value="<?= e((string) old('amount', (string) ($item['amount'] ?? ''))) ?>" required step="0.01"></div>
         <div class="form-group"><label for="frequency">Frequency</label><select id="frequency" name="frequency" required><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="once">Once</option></select></div>
+        <?php if (!empty($feeCategories)): ?>
+        <div class="form-group">
+            <label for="category">Category</label>
+            <select id="category" name="category">
+                <?php foreach ($feeCategories as $cat): ?>
+                    <option value="<?= e($cat['code'] ?? '') ?>"<?= old('category', 'monthly') === ($cat['code'] ?? '') ? ' selected' : '' ?>>
+                        <?= e($cat['name'] ?? $cat['code'] ?? '') ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <p class="help-text"><a href="<?= e(url('/app/fees/categories')) ?>">Manage fee categories</a></p>
+        </div>
+        <?php endif; ?>
         <button type="submit" class="btn btn-primary">Save</button>
     </form>
 </div>

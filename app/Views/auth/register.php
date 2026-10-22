@@ -1,6 +1,9 @@
 <div class="auth-shell auth-split">
     <section class="auth-hero">
-        <p class="text-sm text-muted fw-600">Get started</p>
+        <p class="brand-kicker">
+            <span class="brand-mark" aria-hidden="true">S</span>
+            <span>Get started</span>
+        </p>
         <h1>Create your stockvel account</h1>
         <p>Register once, then join or create a stokvel. Your personal information is handled with POPIA-oriented controls.</p>
     </section>

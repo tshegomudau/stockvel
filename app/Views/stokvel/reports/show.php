@@ -5,7 +5,7 @@
         <input type="date" name="to" value="<?= e($to ?? '') ?>">
         <button type="submit" class="btn">Apply</button>
         <a class="btn" href="<?= e(url('/app/reports/' . ($type ?? '') . '?from=' . urlencode($from ?? '') . '&to=' . urlencode($to ?? '') . '&print=1')) ?>">Print</a>
-        <a class="btn btn-primary" href="<?= e(url('/app/reports/' . ($type ?? '') . '/export?from=' . urlencode($from ?? '') . '&to=' . urlencode($to ?? ''))) ?>">Export CSV</a>
+        <a class="btn btn-primary" href="<?= e(url('/app/reports/' . rawurlencode((string) ($type ?? '')) . '/export?from=' . urlencode((string) ($from ?? '')) . '&to=' . urlencode((string) ($to ?? '')))) ?>">Export CSV</a>
     </form>
 </div>
 <?php if (empty($rows)): ?>

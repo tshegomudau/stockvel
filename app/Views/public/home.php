@@ -1,6 +1,9 @@
-<section class="auth-shell auth-split" style="padding:2rem 0 1rem;">
+<section class="auth-shell auth-split landing-hero" style="padding-bottom:1rem;">
     <div class="auth-hero">
-        <p class="text-sm text-muted fw-600">stockvel · Stokvel management</p>
+        <p class="brand-kicker">
+            <span class="brand-mark" aria-hidden="true">S</span>
+            <span>stockvel</span>
+        </p>
         <h1>Run your stokvel with confidence</h1>
         <p>Contributions, loans, payouts, meetings, and compliance-ready records — built for South African groups that need clarity without complexity.</p>
         <div class="quick-actions" style="margin-top:1.25rem;">

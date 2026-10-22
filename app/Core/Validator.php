@@ -64,14 +64,27 @@ final class Validator
             case 'required':
                 $failed = $value === null || $value === '' || $value === [];
                 break;
+            case 'string':
+                $failed = $value !== null && $value !== '' && !is_string($value) && !is_numeric($value);
+                break;
             case 'email':
                 $failed = $value !== null && $value !== '' && !filter_var((string) $value, FILTER_VALIDATE_EMAIL);
                 break;
             case 'min':
-                $failed = is_string($value) && strlen($value) < (int) ($params[0] ?? 0);
+                $min = (int) ($params[0] ?? 0);
+                if (is_numeric($value) && !is_string($value)) {
+                    $failed = (float) $value < $min;
+                } else {
+                    $failed = is_string($value) && mb_strlen($value) < $min;
+                }
                 break;
             case 'max':
-                $failed = is_string($value) && strlen($value) > (int) ($params[0] ?? 0);
+                $max = (int) ($params[0] ?? 0);
+                if (is_numeric($value) && !is_string($value)) {
+                    $failed = (float) $value > $max;
+                } else {
+                    $failed = is_string($value) && mb_strlen($value) > $max;
+                }
                 break;
             case 'numeric':
                 $failed = $value !== null && $value !== '' && !is_numeric($value);
@@ -100,7 +113,30 @@ final class Validator
 
         if ($failed) {
             $key = "{$field}.{$rule}";
-            $this->errors[$field][] = $this->messages[$key] ?? $this->messages[$field] ?? ucfirst(str_replace('_', ' ', $field)) . " failed {$rule} validation.";
+            $label = ucfirst(str_replace('_', ' ', $field));
+            $default = match ($rule) {
+                'required' => "Please enter the {$label}.",
+                'email' => "Please enter a valid email address.",
+                'min' => "{$label} must be at least " . ($params[0] ?? 0) . " characters.",
+                'max' => "{$label} must be at most " . ($params[0] ?? 0) . " characters.",
+                'numeric' => "{$label} must be a number.",
+                'integer' => "{$label} must be a whole number.",
+                'in' => "Please choose a valid {$label}.",
+                'confirmed' => "{$label} confirmation does not match.",
+                'date' => "Please enter a valid date for {$label}.",
+                default => "{$label} is invalid.",
+            };
+            $this->errors[$field][] = $this->messages[$key] ?? $this->messages[$field] ?? $default;
         }
+    }
+
+    public function firstError(): ?string
+    {
+        foreach ($this->errors as $msgs) {
+            if (is_array($msgs) && $msgs !== []) {
+                return (string) $msgs[0];
+            }
+        }
+        return null;
     }
 }

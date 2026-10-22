@@ -1,17 +1,44 @@
 <?php
-$brandPrimary = $stokvel['primary_colour'] ?? $stokvel['brand_color'] ?? '#14532d';
+$settings = $settings ?? [];
+$stokvel = $stokvel ?? [];
+$brandPrimary = $settings['branding_primary_colour']
+    ?? $stokvel['primary_colour']
+    ?? $stokvel['brand_color']
+    ?? '#1a3d2b';
+if (!is_string($brandPrimary) || !preg_match('/^#[0-9A-Fa-f]{6}$/', $brandPrimary)) {
+    $brandPrimary = '#1a3d2b';
+}
 $brandDark = $stokvel['primary_colour_dark'] ?? null;
+if (!is_string($brandDark) || !preg_match('/^#[0-9A-Fa-f]{6}$/', $brandDark)) {
+    // Darken brand for hover / gradients when no explicit dark colour is set.
+    $r = hexdec(substr($brandPrimary, 1, 2));
+    $g = hexdec(substr($brandPrimary, 3, 2));
+    $b = hexdec(substr($brandPrimary, 5, 2));
+    $brandDark = sprintf('#%02x%02x%02x', (int) max(0, $r * 0.82), (int) max(0, $g * 0.82), (int) max(0, $b * 0.82));
+}
+$brandThemeStyle = sprintf(
+    '--brand-primary: %1$s; --brand-primary-dark: %2$s; --color-primary: %1$s; --color-primary-hover: %2$s; --color-sidebar: color-mix(in srgb, %1$s 88%%, #000);',
+    $brandPrimary,
+    $brandDark
+);
 $userName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
 $memberships = $memberships ?? [];
 $unreadNotifications = (int) ($unreadNotifications ?? 0);
+$navCtx = $navContext ?? 'app';
+$topbarAlertsUrl = match ($navCtx) {
+    'member' => '/member/notifications',
+    'platform' => '/platform/jobs',
+    default => '/app/notifications',
+};
+$topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/profile';
 ?>
 <!DOCTYPE html>
-<html lang="en-ZA" data-stokvel-theme style="--brand-primary: <?= e($brandPrimary) ?>;<?= $brandDark ? ' --brand-primary-dark: ' . e($brandDark) . ';' : '' ?>">
+<html lang="en-ZA" data-stokvel-theme style="<?= e($brandThemeStyle) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <title><?= e(($title ?? 'Dashboard') . ' · ' . ($stokvel['name'] ?? 'stockvel')) ?></title>
+    <title><?= e(($title ?? 'Dashboard') . ' · ' . ($stokvel['name'] ?? ($navCtx === 'platform' ? 'stockvel Platform' : 'stockvel'))) ?></title>
     <?= view('partials/styles', [], null) ?>
 </head>
 <body class="app-layout">
@@ -56,8 +83,12 @@ $unreadNotifications = (int) ($unreadNotifications ?? 0);
                         </form>
                     <?php endif; ?>
 
-                    <a class="btn btn-secondary btn-sm" href="<?= e(url(($navContext ?? 'app') === 'member' ? '/member/notifications' : '/app/notifications')) ?>" aria-label="Notifications">
-                        Alerts<?php if ($unreadNotifications > 0): ?> <span class="badge badge-warning"><?= (int) $unreadNotifications ?></span><?php endif; ?>
+                    <a class="btn btn-secondary btn-sm alert-bell" href="<?= e(url($topbarAlertsUrl)) ?>" aria-label="Notifications<?= $unreadNotifications > 0 ? ' (' . $unreadNotifications . ' unread)' : '' ?>">
+                        <span class="bell-icon" aria-hidden="true"></span>
+                        <span class="desktop-only">Alerts</span>
+                        <?php if ($unreadNotifications > 0): ?>
+                            <span class="badge badge-warning"><?= (int) $unreadNotifications ?></span>
+                        <?php endif; ?>
                     </a>
 
                     <div class="dropdown" data-dropdown>
@@ -66,9 +97,14 @@ $unreadNotifications = (int) ($unreadNotifications ?? 0);
                             <span class="desktop-only"><?= e($userName !== '' ? $userName : 'Account') ?></span>
                         </button>
                         <div class="dropdown-menu" role="menu">
-                            <a href="<?= e(url('/member/profile')) ?>" role="menuitem">Profile</a>
-                            <?php if (($navContext ?? 'app') !== 'member'): ?>
-                                <a href="<?= e(url('/app/settings')) ?>" role="menuitem">Settings</a>
+                            <a href="<?= e(url($topbarProfileUrl)) ?>" role="menuitem">Profile</a>
+                            <?php if ($navCtx === 'platform'): ?>
+                                <a href="<?= e(url('/platform/security')) ?>" role="menuitem">Security &amp; MFA</a>
+                            <?php else: ?>
+                                <a href="<?= e(url('/member/security')) ?>" role="menuitem">Security &amp; MFA</a>
+                                <?php if ($navCtx !== 'member'): ?>
+                                    <a href="<?= e(url('/app/settings')) ?>" role="menuitem">Settings</a>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <form method="post" action="<?= e(url('/logout')) ?>">
                                 <?= csrf_field() ?>

@@ -11,7 +11,9 @@ use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
 use App\Exceptions\FinanceException;
+use App\Services\Finance\ChartOfAccountsService;
 use App\Services\Finance\ContributionService;
+use App\Services\Finance\CsvImportService;
 
 final class ContributionController extends Controller
 {
@@ -72,6 +74,7 @@ final class ContributionController extends Controller
         }
 
         try {
+            app()->container()->get(ChartOfAccountsService::class)->ensureDefaultAccounts($sid);
             $this->contributions()->capturePayment(
                 $sid,
                 $data['member_id'],
@@ -132,6 +135,7 @@ final class ContributionController extends Controller
         }
 
         try {
+            app()->container()->get(ChartOfAccountsService::class)->ensureDefaultAccounts($sid);
             $results = $this->contributions()->captureBulk(
                 $sid,
                 $payload,
@@ -157,6 +161,17 @@ final class ContributionController extends Controller
         ]);
     }
 
+    public function importTemplate(Request $request): Response
+    {
+        $this->requirePermission('contributions.import');
+        /** @var CsvImportService $csv */
+        $csv = app()->container()->get(CsvImportService::class);
+        return new Response($csv->templateCsv(), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="contributions-import-template.csv"',
+        ]);
+    }
+
     public function importStore(Request $request): Response
     {
         $this->requirePermission('contributions.import');
@@ -167,47 +182,35 @@ final class ContributionController extends Controller
             return $this->redirect('/app/contributions/import');
         }
 
-        $handle = fopen($file['tmp_name'], 'r');
-        if ($handle === false) {
-            Session::flash('error', 'Could not read CSV.');
+        $content = file_get_contents((string) $file['tmp_name']);
+        if ($content === false || trim($content) === '') {
+            Session::flash('error', 'Could not read the CSV file.');
             return $this->redirect('/app/contributions/import');
         }
 
-        $header = fgetcsv($handle);
-        $count = 0;
-        $svc = $this->contributions();
-        while (($row = fgetcsv($handle)) !== false) {
-            if (count($row) < 3) {
-                continue;
-            }
-            [$memberRef, $amount, $paidAt] = $row;
-            $member = $this->db()->fetch(
-                'SELECT sm.id FROM memberships sm JOIN users u ON u.id = sm.user_id WHERE sm.stokvel_id = :sid AND (u.email = :ref OR sm.member_number = :ref) LIMIT 1',
-                ['sid' => $sid, 'ref' => trim((string) $memberRef)]
+        try {
+            /** @var CsvImportService $importer */
+            $importer = app()->container()->get(CsvImportService::class);
+            $result = $importer->import(
+                $sid,
+                $content,
+                (int) $this->userId(),
+                'bulk-csv-' . $sid . '-' . hash('sha256', $content)
             );
-            if (!$member) {
-                continue;
-            }
-            try {
-                $svc->capturePayment(
-                    $sid,
-                    (int) $member['id'],
-                    (string) $amount,
-                    'other',
-                    (int) $this->userId(),
-                    'import-' . hash('sha256', $sid . ':' . $member['id'] . ':' . $amount . ':' . $paidAt),
-                    null,
-                    $paidAt ?: date('Y-m-d')
-                );
-                $count++;
-            } catch (FinanceException) {
-                continue;
-            }
+        } catch (FinanceException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/contributions/import');
         }
-        fclose($handle);
 
-        Session::flash('success', "Imported {$count} contributions.");
-        return $this->redirect('/app/contributions');
+        if ($result['errors'] !== []) {
+            Session::flash('error', implode(' ', array_slice($result['errors'], 0, 8)));
+        }
+        Session::flash(
+            'success',
+            $result['imported'] . ' contribution(s) imported'
+            . ($result['skipped'] > 0 ? ' (' . $result['skipped'] . ' row(s) skipped).' : '.')
+        );
+        return $this->redirect($result['imported'] > 0 ? '/app/contributions' : '/app/contributions/import');
     }
 
     public function arrears(Request $request): Response

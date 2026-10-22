@@ -1,28 +1,60 @@
+<?php
+$can = $can ?? [];
+$hasAnyStat = !empty($stats);
+?>
 <div class="dashboard-hero">
     <div>
         <h1><?= e($stokvel['name'] ?? 'Stokvel dashboard') ?></h1>
-        <p>Live figures from your ledger, memberships, and approvals.</p>
+        <p>Live figures from your ledger, memberships, and approvals</p>
     </div>
     <div class="quick-actions">
-        <a class="btn btn-primary" href="<?= e(url('/app/contributions/create')) ?>">Record contribution</a>
-        <a class="btn btn-secondary" href="<?= e(url('/app/members/invite')) ?>">Invite member</a>
-        <a class="btn btn-secondary" href="<?= e(url('/app/reports')) ?>">Reports</a>
+        <?php if (!empty($can['capture'])): ?>
+            <a class="btn btn-primary" href="<?= e(url('/app/contributions/create')) ?>">Record contribution</a>
+        <?php endif; ?>
+        <?php if (!empty($can['invite'])): ?>
+            <a class="btn btn-secondary" href="<?= e(url('/app/members/invite')) ?>">Invite member</a>
+        <?php endif; ?>
+        <?php if (!empty($can['reports'])): ?>
+            <a class="btn btn-secondary" href="<?= e(url('/app/reports')) ?>">Reports</a>
+        <?php endif; ?>
     </div>
 </div>
 
+<?php if ($hasAnyStat): ?>
 <div class="grid grid-4">
-    <?= view('partials/stat-card', ['label' => 'Active members', 'value' => (string) ($stats['members'] ?? 0)], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Contributions (MTD)', 'value' => money($stats['contributions_mtd'] ?? 0), 'isMoney' => true], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Outstanding', 'value' => money($stats['arrears'] ?? 0), 'isMoney' => true, 'meta' => 'Unpaid charges'], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Pending approvals', 'value' => (string) ($stats['pending_approvals'] ?? 0)], null) ?>
+    <?php if (array_key_exists('members', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Active members', 'value' => (string) $stats['members']], null) ?>
+    <?php endif; ?>
+    <?php if (array_key_exists('contributions_mtd', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Contributions (MTD)', 'value' => money($stats['contributions_mtd']), 'isMoney' => true], null) ?>
+    <?php endif; ?>
+    <?php if (array_key_exists('arrears', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Outstanding', 'value' => money($stats['arrears']), 'isMoney' => true, 'meta' => 'Unpaid charges'], null) ?>
+    <?php endif; ?>
+    <?php if (array_key_exists('pending_approvals', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Pending approvals', 'value' => (string) $stats['pending_approvals']], null) ?>
+    <?php endif; ?>
 </div>
 
+<?php if (array_key_exists('upcoming_meetings', $stats) || array_key_exists('active_loans', $stats)): ?>
 <div class="grid grid-2 mt-6">
-    <?= view('partials/stat-card', ['label' => 'Upcoming meetings', 'value' => (string) ($stats['upcoming_meetings'] ?? 0)], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Active loans', 'value' => (string) ($stats['active_loans'] ?? 0), 'meta' => 'Shown when lending is enabled'], null) ?>
+    <?php if (array_key_exists('upcoming_meetings', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Upcoming meetings', 'value' => (string) $stats['upcoming_meetings']], null) ?>
+    <?php endif; ?>
+    <?php if (array_key_exists('active_loans', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Active loans', 'value' => (string) $stats['active_loans']], null) ?>
+    <?php endif; ?>
 </div>
+<?php endif; ?>
+<?php else: ?>
+    <?= view('partials/empty', [
+        'emptyTitle' => 'No dashboard metrics for your role',
+        'emptyMessage' => 'Use the member portal for your personal statement, or ask a committee member if you need admin access.',
+    ], null) ?>
+<?php endif; ?>
 
 <div class="panel-grid dashboard-main mt-6">
+    <?php if (!empty($can['contributions'])): ?>
     <section class="card chart-panel">
         <div class="card-header">
             <div>
@@ -39,28 +71,36 @@
             ], null) ?>
         <?php endif; ?>
     </section>
+    <?php endif; ?>
 
+    <?php if (!empty($can['approvals']) || !empty($can['contributions']) || !empty($can['meetings'])): ?>
     <section class="card">
         <div class="card-header">
             <div>
-                <h2 class="card-title">Recent activity</h2>
-                <p class="card-subtitle">Latest audited actions in this stokvel</p>
+                <h2 class="card-title">Needs attention</h2>
+                <p class="card-subtitle">Items within your permissions</p>
             </div>
         </div>
-        <?php if (empty($recentActivity)): ?>
-            <?= view('partials/empty', ['emptyTitle' => 'No activity yet', 'emptyMessage' => 'Member, finance, and settings changes will show here.'], null) ?>
-        <?php else: ?>
-            <ul class="activity-list">
-                <?php foreach ($recentActivity as $row): ?>
-                    <li class="activity-item">
-                        <div>
-                            <strong><?= e($row['action'] ?? '') ?></strong>
-                            <div class="text-sm text-muted"><?= e($row['entity_type'] ?? '') ?></div>
-                        </div>
-                        <time datetime="<?= e($row['created_at'] ?? '') ?>"><?= e(sa_datetime($row['created_at'] ?? '')) ?></time>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        <?php endif; ?>
+        <ul class="activity-list">
+            <?php if (array_key_exists('pending_approvals', $stats)): ?>
+            <li class="activity-item">
+                <div><strong>Pending approvals</strong></div>
+                <a href="<?= e(url('/app/approvals')) ?>"><?= (int) $stats['pending_approvals'] ?></a>
+            </li>
+            <?php endif; ?>
+            <?php if (array_key_exists('arrears', $stats)): ?>
+            <li class="activity-item">
+                <div><strong>Outstanding arrears</strong></div>
+                <a href="<?= e(url('/app/contributions/arrears')) ?>"><?= e(money($stats['arrears'])) ?></a>
+            </li>
+            <?php endif; ?>
+            <?php if (array_key_exists('upcoming_meetings', $stats)): ?>
+            <li class="activity-item">
+                <div><strong>Upcoming meetings</strong></div>
+                <a href="<?= e(url('/app/meetings')) ?>"><?= (int) $stats['upcoming_meetings'] ?></a>
+            </li>
+            <?php endif; ?>
+        </ul>
     </section>
+    <?php endif; ?>
 </div>

@@ -22,6 +22,15 @@ return static function (TestRunner $runner): void {
         test_assert($threw, 'Expected CsrfException');
     });
 
+    $runner->add('CSRF regenerates when TTL expired', function (): void {
+        Session::start();
+        $old = Csrf::token();
+        Session::set('_csrf_token_time', time() - 10_000);
+        $fresh = Csrf::token();
+        test_assert($fresh !== $old, 'Expired CSRF token should be regenerated on read');
+        Csrf::validate($fresh);
+    });
+
     $runner->add('Validation rules', function (): void {
         $v = Validator::make(['email' => 'not-an-email'], ['email' => 'required|email']);
         test_assert($v->fails());

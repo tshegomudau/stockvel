@@ -41,10 +41,12 @@ final class FeeStructureController extends Controller
     public function create(Request $request): Response
     {
         $this->requirePermission('fees.manage');
+        $sid = $this->requireStokvel();
         return $this->render('stokvel/fees/create', [
             'title' => 'New Fee structure',
             'activeNav' => 'fees',
             'navContext' => 'app',
+            'feeCategories' => $this->activeFeeCategories($sid),
         ]);
     }
 
@@ -55,6 +57,15 @@ final class FeeStructureController extends Controller
         $name = trim((string) $request->input('name', ''));
         $amount = (string) $request->input('amount', '');
         $frequency = (string) $request->input('frequency', 'monthly');
+        $categoryCode = strtolower(trim((string) $request->input('category', 'monthly')));
+        $allowedCodes = array_column($this->activeFeeCategories($sid), 'code');
+        if ($allowedCodes !== [] && !in_array($categoryCode, $allowedCodes, true)) {
+            $categoryCode = $allowedCodes[0];
+        }
+        if ($allowedCodes === [] && $categoryCode === '') {
+            $categoryCode = 'contribution';
+        }
+        $structureType = $categoryCode !== '' ? $categoryCode : 'contribution';
         $validator = Validator::make(
             ['name' => $name, 'amount' => $amount, 'frequency' => $frequency],
             ['name' => 'required|string', 'amount' => 'required|numeric', 'frequency' => 'required|string']
@@ -71,7 +82,7 @@ final class FeeStructureController extends Controller
             $fees->createStructure(
                 $sid,
                 $name,
-                'contribution',
+                $structureType,
                 $amount,
                 $frequency
             );
@@ -83,6 +94,21 @@ final class FeeStructureController extends Controller
 
         Session::flash('success', 'Fee structure saved.');
         return $this->redirect('/app/fees');
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function activeFeeCategories(int $stokvelId): array
+    {
+        try {
+            return $this->db()->fetchAll(
+                'SELECT code, name FROM fee_categories
+                 WHERE stokvel_id = :sid AND is_active = 1
+                 ORDER BY name ASC',
+                ['sid' => $stokvelId]
+            );
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     public function show(Request $request, string $id): Response

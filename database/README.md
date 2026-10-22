@@ -9,6 +9,8 @@ Migrations and seeders for stockvel. Apply with `php bin/console migrate` and `p
 | `001_create_core_tables.php` | Users, profiles, auth tokens, login attempts, rate limits |
 | `002_create_stokvel_tables.php` | Tenants, settings, onboarding, RBAC, memberships, invitations |
 | `003_create_finance_tables.php` | Fees, charges, payments, ledger, approval_requests, expenses, webhooks |
+| `009_product_upgrade_features.php` | Support tickets, encrypted ID, typed docs, member change requests, settings/meeting notes |
+| `010_sa_market_modules.php` | Burial claims + grocery cycles (SA market parity) |
 | `004_create_loans_payouts.php` | Loan products/applications, payout cycles, distributions |
 | `005_create_meetings_docs.php` | Meetings, rules, folders, documents |
 | `006_create_notifications_audit.php` | Notifications, notification_jobs, audit_logs, cron locks |

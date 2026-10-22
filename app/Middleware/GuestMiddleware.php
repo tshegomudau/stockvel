@@ -17,7 +17,7 @@ final class GuestMiddleware implements MiddlewareInterface
     public function handle(Request $request, callable $next): mixed
     {
         if ($this->auth->check()) {
-            redirect(url('/dashboard'));
+            redirect(url(home_path_for_user($this->auth->user())));
         }
 
         return $next($request);

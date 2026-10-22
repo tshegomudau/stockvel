@@ -11,9 +11,9 @@ $basePath = dirname(__DIR__);
 $_ENV['APP_ENV'] = 'testing';
 $_SERVER['APP_ENV'] = 'testing';
 putenv('APP_ENV=testing');
-$_ENV['STOCKVEL_ENV'] = 'testing';
-$_SERVER['STOCKVEL_ENV'] = 'testing';
-putenv('STOCKVEL_ENV=testing');
+$_ENV['APP_ENV'] = 'testing';
+$_SERVER['APP_ENV'] = 'testing';
+putenv('APP_ENV=testing');
 
 require_once $basePath . '/bootstrap/autoload.php';
 \App\Core\Env::load($basePath . '/.env', false);

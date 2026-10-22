@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Exceptions\HttpException;
+use App\Support\ModuleRegistry;
 
 final class TenantContext
 {
@@ -13,6 +14,8 @@ final class TenantContext
     private ?array $membership = null;
     private ?array $user = null;
     private array $permissions = [];
+    /** @var array<string, bool> */
+    private array $enabledModules = [];
     private ?string $platformRole = null;
 
     public function setUser(?array $user): void
@@ -31,12 +34,34 @@ final class TenantContext
         return isset($this->user['id']) ? (int) $this->user['id'] : null;
     }
 
-    public function setTenant(?array $stokvel, ?array $membership = null, array $permissions = []): void
+    /**
+     * @param list<string> $permissions
+     * @param array<string, bool> $enabledModules
+     */
+    public function setTenant(?array $stokvel, ?array $membership = null, array $permissions = [], array $enabledModules = []): void
     {
         $this->stokvel = $stokvel;
         $this->stokvelId = $stokvel ? (int) $stokvel['id'] : null;
         $this->membership = $membership;
         $this->permissions = $permissions;
+        $this->enabledModules = $enabledModules !== []
+            ? $enabledModules
+            : ModuleRegistry::defaults(!empty($stokvel['loans_enabled']));
+    }
+
+    /** @return array<string, bool> */
+    public function enabledModules(): array
+    {
+        return $this->enabledModules;
+    }
+
+    public function moduleEnabled(string $module): bool
+    {
+        if ($this->stokvelId === null) {
+            return true;
+        }
+
+        return ModuleRegistry::isEnabled($this->enabledModules, $module);
     }
 
     public function stokvelId(): ?int
@@ -69,9 +94,15 @@ final class TenantContext
 
     public function can(string $permission): bool
     {
+        $module = ModuleRegistry::moduleForPermission($permission);
+        if ($module !== null && !$this->moduleEnabled($module)) {
+            return false;
+        }
+
         if (in_array('*', $this->permissions, true)) {
             return true;
         }
+
         return in_array($permission, $this->permissions, true);
     }
 

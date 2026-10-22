@@ -10,6 +10,10 @@
     RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
     # Serve existing files and directories directly (CSS, JS, images, uploads).
+    # Application CSV download routes are not real files — force them through PHP.
+    RewriteCond %{REQUEST_URI} \.csv$ [NC]
+    RewriteRule ^ index.php [L,QSA]
+
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]

@@ -53,11 +53,15 @@ final class ReportService
         [$from, $to] = $this->dateRange($filters);
 
         return $this->db->fetchAll(
-            'SELECT id, membership_id AS member_id, transaction_ref AS receipt_number, amount,
-                    payment_method, status, paid_at, external_reference AS reference
-             FROM payment_transactions
-             WHERE stokvel_id = :stokvel_id AND paid_at BETWEEN :from_date AND :to_date
-             ORDER BY paid_at DESC',
+            'SELECT pt.transaction_ref AS receipt_number, pt.amount, pt.payment_method, pt.status, pt.paid_at,
+                    pt.external_reference AS reference,
+                    sm.member_number, p.first_name, p.last_name, u.email
+             FROM payment_transactions pt
+             LEFT JOIN memberships sm ON sm.id = pt.membership_id AND sm.stokvel_id = pt.stokvel_id
+             LEFT JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             WHERE pt.stokvel_id = :stokvel_id AND pt.paid_at BETWEEN :from_date AND :to_date
+             ORDER BY pt.paid_at DESC',
             ['stokvel_id' => $stokvelId, 'from_date' => $from . ' 00:00:00', 'to_date' => $to . ' 23:59:59']
         );
     }
@@ -99,10 +103,13 @@ final class ReportService
         }
 
         return $this->db->fetchAll(
-            'SELECT mc.id, mc.membership_id, mc.charge_code, mc.description, mc.amount, mc.amount_paid,
-                    mc.due_date, mc.status,
-                    (mc.amount - mc.amount_paid) AS balance_due
+            'SELECT mc.charge_code, mc.description, mc.amount, mc.amount_paid, mc.due_date, mc.status,
+                    (mc.amount - mc.amount_paid) AS balance_due,
+                    sm.member_number, p.first_name, p.last_name, u.email
              FROM member_charges mc
+             LEFT JOIN memberships sm ON sm.id = mc.membership_id AND sm.stokvel_id = mc.stokvel_id
+             LEFT JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
              WHERE mc.stokvel_id = :stokvel_id
                AND mc.status IN (\'pending\', \'partial\', \'overdue\')
              ORDER BY mc.due_date ASC',
@@ -265,9 +272,9 @@ final class ReportService
     public function loanPortfolio(int $stokvelId, array $filters = []): array
     {
         return $this->db->fetchAll(
-            'SELECT l.id, l.loan_ref, l.principal_amount, l.interest_rate_percent, l.term_months,
+            'SELECT l.loan_ref, l.principal_amount, l.interest_rate_percent, l.term_months,
                     l.status, l.outstanding_balance, l.disbursed_at, m.member_number,
-                    p.first_name, p.last_name
+                    p.first_name, p.last_name, u.email
              FROM loans l
              INNER JOIN memberships m ON m.id = l.membership_id AND m.stokvel_id = l.stokvel_id
              INNER JOIN users u ON u.id = m.user_id
@@ -341,9 +348,8 @@ final class ReportService
         [$from, $to] = $this->dateRange($filters);
 
         return $this->db->fetchAll(
-            'SELECT m.title, m.scheduled_at, m.status,
-                    ma.membership_id, ma.status AS attendance_status,
-                    p.first_name, p.last_name
+            'SELECT m.title, m.scheduled_at, m.status, ma.attendance_status,
+                    p.first_name, p.last_name, u.email, ms.member_number
              FROM meetings m
              LEFT JOIN meeting_attendance ma ON ma.meeting_id = m.id AND ma.stokvel_id = m.stokvel_id
              LEFT JOIN memberships ms ON ms.id = ma.membership_id AND ms.stokvel_id = m.stokvel_id

@@ -77,9 +77,10 @@ php bin/console seed
 
 ```bash
 php bin/console serve 127.0.0.1 8090
+# equivalent: php -S 127.0.0.1:8090 -t public public/router.php
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090).
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090). The `public/router.php` script serves CSS/JS as static files; do not point the built-in server at `index.php` alone or assets will 404.
 
 ## Demo accounts
 

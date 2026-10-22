@@ -7,6 +7,7 @@ namespace App\Controllers\Stokvel;
 use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Services\Reports\ReportService;
 
 final class ReportController extends Controller
 {
@@ -44,7 +45,7 @@ final class ReportController extends Controller
         $from = (string) $request->query('from', date('Y-m-01'));
         $to = (string) $request->query('to', date('Y-m-d'));
 
-        $result = $this->fetchReportRows($type, $sid, $from, $to);
+        $result = $this->presentExportRows($this->fetchReportRows($type, $sid, $from, $to));
 
         $layout = $request->query('print') ? 'layouts/print' : 'layouts/app';
 
@@ -70,10 +71,10 @@ final class ReportController extends Controller
         $from = (string) $request->query('from', date('Y-m-01'));
         $to = (string) $request->query('to', date('Y-m-d'));
 
-        $dataRows = $this->fetchReportRows($type, $sid, $from, $to);
+        $dataRows = $this->presentExportRows($this->fetchReportRows($type, $sid, $from, $to));
 
         if ($dataRows === []) {
-            return Response::csv($type . '-report.csv', ['message'], [['No data for selected period']]);
+            return Response::csv($type . '-report.csv', ['Message'], [['No data for selected period']]);
         }
 
         $headers = array_keys($dataRows[0]);
@@ -82,53 +83,76 @@ final class ReportController extends Controller
         return Response::csv($type . '-' . date('Y-m-d') . '.csv', $headers, $body);
     }
 
+    /**
+     * Map internal column names to business-friendly export headings.
+     * Drops internal IDs and sensitive/metadata fields.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private function presentExportRows(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $drop = [
+            'id', 'stokvel_id', 'user_id', 'membership_id', 'created_by_user_id',
+            'updated_by_user_id', 'deleted_at', 'password', 'password_hash',
+            'remember_token', 'token_hash', 'id_number_encrypted', 'id_number_hash',
+        ];
+        $labels = [
+            'member_number' => 'Member number',
+            'first_name' => 'First name',
+            'last_name' => 'Last name',
+            'email' => 'Email',
+            'mobile' => 'Mobile',
+            'amount' => 'Amount',
+            'status' => 'Status',
+            'paid_at' => 'Payment date',
+            'payment_method' => 'Payment method',
+            'category' => 'Category',
+            'category_name' => 'Category',
+            'description' => 'Description',
+            'incurred_at' => 'Expense date',
+            'scheduled_at' => 'Scheduled',
+            'title' => 'Title',
+            'principal_amount' => 'Principal',
+            'outstanding_balance' => 'Outstanding',
+            'requested_amount' => 'Requested amount',
+            'joined_at' => 'Joined',
+            'entry_date' => 'Date',
+            'account_code' => 'Account code',
+            'account_name' => 'Account',
+            'debit' => 'Debit',
+            'credit' => 'Credit',
+        ];
+
+        $out = [];
+        foreach ($rows as $row) {
+            $mapped = [];
+            foreach ($row as $key => $value) {
+                $key = (string) $key;
+                if (in_array($key, $drop, true) || str_ends_with($key, '_id')) {
+                    continue;
+                }
+                $label = $labels[$key] ?? ucwords(str_replace('_', ' ', $key));
+                $mapped[$label] = is_scalar($value) || $value === null ? $value : json_encode($value);
+            }
+            if ($mapped !== []) {
+                $out[] = $mapped;
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return list<array<string, mixed>> */
     private function fetchReportRows(string $type, int $sid, string $from, string $to): array
     {
-        return $this->service(\App\Services\Reports\ReportService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function run(string $type, int $stokvelId, string $from, string $to): array
-            {
-                return match ($type) {
-                    'contributions' => $this->db->fetchAll(
-                        'SELECT * FROM contributions WHERE stokvel_id = :sid AND paid_at BETWEEN :f AND :t ORDER BY paid_at',
-                        ['sid' => $stokvelId, 'f' => $from, 't' => $to]
-                    ),
-                    'arrears' => $this->db->fetchAll(
-                        'SELECT * FROM member_arrears WHERE stokvel_id = :sid ORDER BY balance_due DESC',
-                        ['sid' => $stokvelId]
-                    ),
-                    'members' => $this->db->fetchAll(
-                        'SELECT sm.*, p.first_name, p.last_name, u.email FROM memberships sm JOIN users u ON u.id = sm.user_id LEFT JOIN user_profiles p ON p.user_id = u.id WHERE sm.stokvel_id = :sid',
-                        ['sid' => $stokvelId]
-                    ),
-                    'expenses' => $this->db->fetchAll(
-                        'SELECT * FROM expenses WHERE stokvel_id = :sid AND incurred_at BETWEEN :f AND :t',
-                        ['sid' => $stokvelId, 'f' => $from, 't' => $to]
-                    ),
-                    'loans' => $this->db->fetchAll('SELECT * FROM loans WHERE stokvel_id = :sid', ['sid' => $stokvelId]),
-                    'payouts' => $this->db->fetchAll(
-                        'SELECT ps.*, pc.name AS cycle_name FROM payout_schedule ps
-                         INNER JOIN payout_cycles pc ON pc.id = ps.payout_cycle_id
-                         WHERE ps.stokvel_id = :sid ORDER BY ps.scheduled_date ASC',
-                        ['sid' => $stokvelId]
-                    ),
-                    'ledger' => $this->db->fetchAll(
-                        'SELECT jl.* FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journal_entry_id WHERE je.stokvel_id = :sid AND je.entry_date BETWEEN :f AND :t',
-                        ['sid' => $stokvelId, 'f' => $from, 't' => $to]
-                    ),
-                    'cashflow' => $this->db->fetchAll(
-                        "SELECT DATE(paid_at) AS day, SUM(amount) AS total FROM payment_transactions
-                         WHERE stokvel_id = :sid AND status = 'completed' AND paid_at BETWEEN :f AND :t
-                         GROUP BY DATE(paid_at)",
-                        ['sid' => $stokvelId, 'f' => $from . ' 00:00:00', 't' => $to . ' 23:59:59']
-                    ),
-                    'meetings' => $this->db->fetchAll(
-                        'SELECT * FROM meetings WHERE stokvel_id = :sid AND scheduled_at BETWEEN :f AND :t',
-                        ['sid' => $stokvelId, 'f' => $from . ' 00:00:00', 't' => $to . ' 23:59:59']
-                    ),
-                    default => [],
-                };
-            }
-        })->run($type, $sid, $from, $to);
+        /** @var ReportService $reports */
+        $reports = app()->container()->get(ReportService::class);
+
+        return $reports->run($type, $sid, $from, $to);
     }
 }

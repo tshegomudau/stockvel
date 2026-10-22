@@ -78,10 +78,16 @@ $labels = [
             <div class="form-group">
                 <label class="form-label required" for="stokvel_type">Stokvel type</label>
                 <select id="stokvel_type" name="stokvel_type" required>
-                    <?php foreach (['savings','burial','grocery','investment','loan','rotational','social','custom'] as $type): ?>
-                        <option value="<?= e($type) ?>"<?= (($saved['stokvel_type'] ?? '') === $type) ? ' selected' : '' ?>><?= e(ucfirst($type)) ?></option>
+                    <?php
+                    $typeOptions = $stokvelTypeOptions ?? \App\Support\StokvelTypeCatalog::activeOptions();
+                    $currentType = (string) ($saved['stokvel_type'] ?? '');
+                    foreach ($typeOptions as $opt):
+                        $code = (string) ($opt['code'] ?? '');
+                    ?>
+                        <option value="<?= e($code) ?>"<?= $currentType === $code ? ' selected' : '' ?>><?= e($opt['name'] ?? $code) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <p class="help-text">Types are defined by the platform; you choose which applies to this stokvel.</p>
             </div>
         <?php elseif ($stepKey === 'branding'): ?>
             <div class="form-group">

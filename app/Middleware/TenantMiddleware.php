@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Middleware;
 
+use App\Core\Database;
 use App\Core\Request;
 use App\Core\TenantContext as CoreTenantContext;
 use App\Exceptions\TenantException;
 use App\Services\Auth\AuthService;
 use App\Services\TenantContext;
 use App\Services\PermissionService;
+use App\Support\ModuleRegistry;
 
 final class TenantMiddleware implements MiddlewareInterface
 {
@@ -17,7 +19,8 @@ final class TenantMiddleware implements MiddlewareInterface
         private readonly AuthService $auth,
         private readonly TenantContext $tenantContext,
         private readonly CoreTenantContext $coreTenant,
-        private readonly PermissionService $permissions
+        private readonly PermissionService $permissions,
+        private readonly Database $db,
     ) {
     }
 
@@ -55,14 +58,38 @@ final class TenantMiddleware implements MiddlewareInterface
         }
 
         $permissionCodes = $this->permissions->codesForMembership($membership);
+        $enabledModules = $this->loadEnabledModules($stokvelId);
 
         $this->coreTenant->setUser($this->auth->user());
-        $this->coreTenant->setTenant($stokvel, $membership, $permissionCodes);
+        $this->coreTenant->setTenant($stokvel, $membership, $permissionCodes, $enabledModules);
 
         $request->setAttribute('stokvel_id', $stokvelId);
         $request->setAttribute('membership', $membership);
         $request->setAttribute('stokvel', $stokvel);
 
         return $next($request);
+    }
+
+    /** @return array<string, bool> */
+    private function loadEnabledModules(int $stokvelId): array
+    {
+        try {
+            $row = $this->db->fetch(
+                'SELECT loans_enabled, settings_json FROM stokvel_settings WHERE stokvel_id = :sid LIMIT 1',
+                ['sid' => $stokvelId]
+            );
+            $json = json_decode((string) ($row['settings_json'] ?? '{}'), true);
+            if (!is_array($json)) {
+                $json = [];
+            }
+
+            $modules = ModuleRegistry::fromSettings($json, !empty($row['loans_enabled']));
+            // Keep loans module aligned with the dedicated column (source of truth).
+            $modules['loans'] = !empty($row['loans_enabled']);
+
+            return $modules;
+        } catch (\Throwable) {
+            return ModuleRegistry::defaults(true);
+        }
     }
 }

@@ -25,7 +25,15 @@ final class LoanController extends Controller
         $paginator = Paginator::fromQuery(
             $this->db(),
             'SELECT COUNT(*) AS c FROM loan_applications WHERE stokvel_id = :sid',
-            'SELECT * FROM loan_applications WHERE stokvel_id = :sid ORDER BY created_at DESC',
+            'SELECT la.*, la.application_ref, la.requested_amount, la.membership_id AS member_id,
+                    p.first_name, p.last_name, lp.name AS product_name
+             FROM loan_applications la
+             LEFT JOIN memberships sm ON sm.id = la.membership_id
+             LEFT JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             LEFT JOIN loan_products lp ON lp.id = la.loan_product_id
+             WHERE la.stokvel_id = :sid
+             ORDER BY la.created_at DESC',
             ['sid' => $sid],
             $page,
             $perPage,
@@ -66,6 +74,7 @@ final class LoanController extends Controller
     {
         $this->requirePermission('loans.manage');
         $sid = $this->requireStokvel();
+        $userId = (int) $this->userId();
         $data = [
             'member_id' => (int) $request->input('member_id', 0),
             'loan_product_id' => (int) $request->input('loan_product_id', 0),
@@ -88,15 +97,16 @@ final class LoanController extends Controller
         try {
             /** @var LoanService $loans */
             $loans = app()->container()->get(LoanService::class);
-            $loans->apply(
+            $applicationId = $loans->apply(
                 $sid,
                 $data['member_id'],
                 $data['loan_product_id'],
                 $data['principal'],
                 $data['term_months'],
-                (int) $this->userId(),
+                $userId,
                 $data['purpose']
             );
+            $loans->createPendingApprovalRequest($sid, $applicationId, $userId);
         } catch (FinanceException $e) {
             $this->flashOld($request);
             Session::flash('error', $e->getMessage());
@@ -111,25 +121,135 @@ final class LoanController extends Controller
     {
         $this->requirePermission('loans.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch(
-            'SELECT * FROM loan_applications WHERE id = :id AND stokvel_id = :sid LIMIT 1',
-            ['id' => (int) $id, 'sid' => $sid]
+        $applicationId = (int) $id;
+
+        $item = $this->db()->fetch(
+            'SELECT la.*, la.membership_id AS member_id, la.requested_amount,
+                    p.first_name, p.last_name, lp.name AS product_name, lp.code AS product_code
+             FROM loan_applications la
+             LEFT JOIN memberships sm ON sm.id = la.membership_id
+             LEFT JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             LEFT JOIN loan_products lp ON lp.id = la.loan_product_id
+             WHERE la.id = :id AND la.stokvel_id = :sid LIMIT 1',
+            ['id' => $applicationId, 'sid' => $sid]
         );
-        if (!$row) {
-            $row = $this->db()->fetch(
-                'SELECT * FROM loans WHERE id = :id AND stokvel_id = :sid LIMIT 1',
-                ['id' => (int) $id, 'sid' => $sid]
+        $loanRecord = null;
+        if (!$item) {
+            $loanRecord = $this->db()->fetch(
+                'SELECT l.*, l.membership_id AS member_id, l.principal_amount AS requested_amount,
+                        p.first_name, p.last_name, lp.name AS product_name
+                 FROM loans l
+                 LEFT JOIN memberships sm ON sm.id = l.membership_id
+                 LEFT JOIN users u ON u.id = sm.user_id
+                 LEFT JOIN user_profiles p ON p.user_id = u.id
+                 LEFT JOIN loan_products lp ON lp.id = l.loan_product_id
+                 WHERE l.id = :id AND l.stokvel_id = :sid LIMIT 1',
+                ['id' => $applicationId, 'sid' => $sid]
+            );
+            if (!$loanRecord) {
+                return $this->redirect('/app/loans');
+            }
+            $item = $loanRecord;
+        } else {
+            $loanRecord = $this->db()->fetch(
+                'SELECT * FROM loans WHERE loan_application_id = :aid AND stokvel_id = :sid LIMIT 1',
+                ['aid' => $applicationId, 'sid' => $sid]
             );
         }
-        if (!$row) {
-            return $this->redirect('/app/loans');
-        }
+
+        $approvalRequest = $this->db()->fetch(
+            "SELECT * FROM approval_requests
+             WHERE stokvel_id = :sid AND reference_type = 'loan_application' AND reference_id = :ref
+             ORDER BY id DESC LIMIT 1",
+            ['sid' => $sid, 'ref' => $applicationId]
+        );
+
         return $this->render('stokvel/loans/show', [
-            'title' => 'Loan #' . $id,
+            'title' => 'Loan application',
             'activeNav' => 'loans',
             'navContext' => 'app',
-            'item' => $row,
+            'item' => $item,
+            'loanRecord' => $loanRecord,
+            'approvalRequest' => $approvalRequest,
+            'regulatoryNotice' => LoanService::REGULATORY_WARNING,
         ]);
+    }
+
+    public function approve(Request $request, string $id): Response
+    {
+        $this->requirePermission('loans.manage');
+        $sid = $this->requireStokvel();
+        $userId = (int) $this->userId();
+        $applicationId = (int) $id;
+        $notes = trim((string) $request->input('notes', ''));
+        $approvedAmount = trim((string) $request->input('approved_amount', ''));
+
+        try {
+            /** @var LoanService $loans */
+            $loans = app()->container()->get(LoanService::class);
+            $loans->committeeApprove(
+                $sid,
+                $applicationId,
+                $userId,
+                $approvedAmount !== '' ? $approvedAmount : null,
+                $notes !== '' ? $notes : null
+            );
+            $loans->finalizeApprovalRequest($sid, $applicationId, $userId, 'approved', $notes);
+        } catch (FinanceException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/loans/' . $id);
+        }
+
+        Session::flash('success', 'Loan application approved.');
+        return $this->redirect('/app/loans/' . $id);
+    }
+
+    public function reject(Request $request, string $id): Response
+    {
+        $this->requirePermission('loans.manage');
+        $sid = $this->requireStokvel();
+        $userId = (int) $this->userId();
+        $applicationId = (int) $id;
+        $reason = trim((string) $request->input('notes', $request->input('reason', '')));
+        if ($reason === '') {
+            Session::flash('error', 'A rejection reason is required.');
+            return $this->redirect('/app/loans/' . $id);
+        }
+
+        try {
+            /** @var LoanService $loans */
+            $loans = app()->container()->get(LoanService::class);
+            $loans->committeeReject($sid, $applicationId, $userId, $reason);
+            $loans->finalizeApprovalRequest($sid, $applicationId, $userId, 'rejected', $reason);
+        } catch (FinanceException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/loans/' . $id);
+        }
+
+        Session::flash('success', 'Loan application rejected.');
+        return $this->redirect('/app/loans/' . $id);
+    }
+
+    public function disburse(Request $request, string $id): Response
+    {
+        $this->requirePermission('loans.manage');
+        $sid = $this->requireStokvel();
+        $userId = (int) $this->userId();
+        $applicationId = (int) $id;
+
+        try {
+            app()->container()->get(\App\Services\Finance\ChartOfAccountsService::class)->ensureDefaultAccounts($sid);
+            /** @var LoanService $loans */
+            $loans = app()->container()->get(LoanService::class);
+            $loans->disburse($sid, $applicationId, $userId);
+        } catch (FinanceException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/loans/' . $id);
+        }
+
+        Session::flash('success', 'Loan disbursed.');
+        return $this->redirect('/app/loans/' . $id);
     }
 
     public function edit(Request $request, string $id): Response

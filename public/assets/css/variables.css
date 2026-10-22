@@ -1,41 +1,47 @@
 :root {
-  --color-primary: #14532d;
-  --color-primary-hover: #166534;
-  --color-primary-soft: #dcfce7;
-  --color-secondary: #0f766e;
-  --color-accent: #d97706;
+  /* Deep veld green — trustworthy, rooted */
+  --color-primary: #1a3d2b;
+  --color-primary-hover: #245239;
+  --color-primary-soft: #e2efe7;
+  /* Soft teal-earth companion (not purple) */
+  --color-secondary: #3d6b58;
+  /* Warm gold / ochre accent */
+  --color-accent: #c9922a;
 
-  --color-background: #f6f8f7;
-  --color-surface: #ffffff;
-  --color-surface-alt: #f0f4f2;
+  /* Soft clay / sand surfaces */
+  --color-background: #f1ebe3;
+  --color-surface: #fffcf8;
+  --color-surface-alt: #ebe4da;
 
-  --color-text: #17211b;
-  --color-text-muted: #647067;
-  --color-border: #dce5df;
+  /* Charcoal text */
+  --color-text: #1c211e;
+  --color-text-muted: #5a635c;
+  --color-border: #d6cec2;
 
-  --color-success: #15803d;
-  --color-warning: #b45309;
+  --color-success: #1f6b3a;
+  --color-warning: #a16207;
   --color-danger: #b91c1c;
-  --color-info: #0369a1;
+  --color-info: #0e6494;
 
-  --color-sidebar: #0f2918;
-  --color-sidebar-text: #e8f5ec;
-  --color-sidebar-muted: #9cb8a6;
-  --color-sidebar-active: rgba(220, 252, 231, 0.14);
+  --color-sidebar: #0e2418;
+  --color-sidebar-text: #eaf3ed;
+  --color-sidebar-muted: #9ab0a2;
+  --color-sidebar-active: rgba(201, 146, 42, 0.18);
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-sm: 0 1px 2px rgba(28, 33, 30, 0.06);
+  --shadow-md: 0 10px 28px rgba(28, 33, 30, 0.09);
+  --shadow-card: 0 1px 2px rgba(28, 33, 30, 0.04), 0 8px 20px rgba(26, 61, 43, 0.06);
 
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-lg: 14px;
 
   --sidebar-width: 16.5rem;
   --sidebar-collapsed: 4.5rem;
   --topbar-height: 3.75rem;
 
-  --font-sans: "Segoe UI", Candara, Calibri, "Gill Sans", "Trebuchet MS", sans-serif;
-  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --font-sans: "Outfit", "Segoe UI", Candara, Calibri, sans-serif;
+  --font-display: "Source Serif 4", "Iowan Old Style", Georgia, serif;
   --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
 
   --space-1: 0.25rem;
@@ -47,17 +53,50 @@
   --space-8: 2rem;
   --space-10: 2.5rem;
 
-  --focus-ring: 0 0 0 3px rgba(20, 83, 45, 0.28);
+  --focus-ring: 0 0 0 3px rgba(26, 61, 43, 0.32);
 
-  /* Brand aliases used by stokvel theming */
-  --brand-primary: var(--color-primary);
-  --brand-primary-dark: var(--color-primary-hover);
-  --brand-soft: var(--color-primary-soft);
+  /* Subtle Ndebele-inspired geometric atmosphere (CSS-only) */
+  --pattern-geo:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 27px,
+      rgba(26, 61, 43, 0.035) 27px,
+      rgba(26, 61, 43, 0.035) 28px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 27px,
+      rgba(201, 146, 42, 0.045) 27px,
+      rgba(201, 146, 42, 0.045) 28px
+    ),
+    linear-gradient(
+      135deg,
+      transparent 46%,
+      rgba(26, 61, 43, 0.03) 46%,
+      rgba(26, 61, 43, 0.03) 50%,
+      transparent 50%
+    ),
+    linear-gradient(
+      45deg,
+      transparent 46%,
+      rgba(201, 146, 42, 0.035) 46%,
+      rgba(201, 146, 42, 0.035) 50%,
+      transparent 50%
+    );
+  --pattern-size: 56px 56px, 56px 56px, 28px 28px, 28px 28px;
+
+  /* Defaults; html[data-stokvel-theme][style] overrides these at higher priority via inline --color-primary */
+  --brand-primary: #1a3d2b;
+  --brand-primary-dark: #245239;
+  --brand-soft: #e2efe7;
 }
 
-[data-stokvel-theme] {
-  --color-primary: var(--brand-primary, #14532d);
-  --color-primary-hover: var(--brand-primary-dark, #166534);
-  --color-primary-soft: var(--brand-soft, #dcfce7);
-  --color-sidebar: color-mix(in srgb, var(--color-primary) 88%, #000);
+html[data-stokvel-theme] {
+  --color-primary: var(--brand-primary);
+  --color-primary-hover: var(--brand-primary-dark);
+  --color-primary-soft: color-mix(in srgb, var(--brand-primary) 14%, #fffcf8);
+  --color-sidebar: color-mix(in srgb, var(--brand-primary) 88%, #000);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 32%, transparent);
 }

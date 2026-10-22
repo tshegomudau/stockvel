@@ -15,7 +15,7 @@ final class AuthController extends Controller
     public function showLogin(Request $request): Response
     {
         if ($this->userId() !== null) {
-            return $this->redirect('/app');
+            return $this->redirect(home_path_for_user($this->user()));
         }
         return $this->render('auth/login', ['title' => 'Sign in'], 'layouts/guest');
     }
@@ -38,27 +38,38 @@ final class AuthController extends Controller
             return $this->redirect('/login');
         }
 
-        $auth = $this->service(\App\Services\Auth\AuthService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function attempt(string $email, string $password, bool $remember): ?array
-            {
-                $user = $this->db->fetch('SELECT * FROM users WHERE email = :email LIMIT 1', ['email' => $email]);
-                if (!$user || !password_verify($password, (string) ($user['password_hash'] ?? $user['password'] ?? ''))) {
-                    return null;
-                }
-                return $user;
-            }
-        });
-
-        $user = $auth->attempt($data['email'], $data['password'], $data['remember']);
-        if ($user === null) {
+        $user = $this->db()->fetch(
+            'SELECT * FROM users WHERE email = :email LIMIT 1',
+            ['email' => strtolower($data['email'])]
+        );
+        if (!$user || !password_verify($data['password'], (string) ($user['password_hash'] ?? $user['password'] ?? ''))) {
             $this->flashOld($request);
             Session::flash('error', 'Invalid email or password.');
             return $this->redirect('/login');
         }
 
-        Session::regenerate(true);
-        Session::set('user_id', (int) $user['id']);
+        $userId = (int) $user['id'];
+
+        /** @var \App\Services\Auth\MfaService $mfa */
+        $mfa = app()->container()->get(\App\Services\Auth\MfaService::class);
+        if ($mfa->requiresMfa($userId)) {
+            Session::regenerate(true);
+            Session::forget('user_id');
+            Session::set('mfa_pending_user_id', $userId);
+            Session::set('mfa_pending_remember', $data['remember']);
+            return $this->redirect('/login/mfa');
+        }
+
+        /** @var \App\Services\Auth\AuthService $auth */
+        $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
+        $auth->establishSession($user);
+        if ($data['remember']) {
+            try {
+                app()->container()->get(\App\Services\Auth\RememberTokenService::class)->create($userId);
+            } catch (\Throwable) {
+                // optional
+            }
+        }
         if (!empty($user['email_verified_at'])) {
             Session::flash('success', 'Welcome back, ' . ($user['first_name'] ?? 'member') . '.');
         }
@@ -66,17 +77,13 @@ final class AuthController extends Controller
         if (is_string($intended) && $intended !== '') {
             return $this->redirect($intended);
         }
-        $platformRole = (string) ($user['platform_role'] ?? '');
-        if (in_array($platformRole, ['platform_super_admin', 'platform_support', 'platform_auditor', 'super_admin'], true)) {
-            return $this->redirect('/platform');
-        }
-        return $this->redirect('/app');
+        return $this->redirect(home_path_for_user($user));
     }
 
     public function showRegister(Request $request): Response
     {
         if ($this->userId() !== null) {
-            return $this->redirect('/app');
+            return $this->redirect(home_path_for_user($this->user()));
         }
         return $this->render('auth/register', ['title' => 'Create account'], 'layouts/guest');
     }
@@ -121,6 +128,17 @@ final class AuthController extends Controller
         Session::set('user_id', $userId);
         Session::flash('success', 'Account created. Please verify your email.');
         return $this->redirect('/verify-email/notice');
+    }
+
+    public function showLogout(Request $request): Response
+    {
+        if ($this->userId() === null) {
+            return $this->redirect('/login');
+        }
+
+        return $this->render('auth/logout', [
+            'title' => 'Sign out',
+        ], 'layouts/guest');
     }
 
     public function logout(Request $request): Response

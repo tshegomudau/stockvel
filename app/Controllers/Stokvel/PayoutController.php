@@ -24,7 +24,10 @@ final class PayoutController extends Controller
         $paginator = Paginator::fromQuery(
             $this->db(),
             'SELECT COUNT(*) AS c FROM payout_cycles WHERE stokvel_id = :sid',
-            'SELECT * FROM payout_cycles WHERE stokvel_id = :sid ORDER BY created_at DESC',
+            'SELECT pc.*, cat.name AS category_name, cat.code AS category_code
+             FROM payout_cycles pc
+             LEFT JOIN payout_categories cat ON cat.id = pc.payout_category_id AND cat.stokvel_id = pc.stokvel_id
+             WHERE pc.stokvel_id = :sid ORDER BY pc.created_at DESC',
             ['sid' => $sid],
             $page,
             $perPage,
@@ -50,11 +53,17 @@ final class PayoutController extends Controller
              ORDER BY p.last_name, p.first_name',
             ['sid' => $sid, 'st' => 'active']
         );
+        $categories = $this->db()->fetchAll(
+            'SELECT id, name, code FROM payout_categories WHERE stokvel_id = :sid AND is_active = 1 ORDER BY name ASC',
+            ['sid' => $sid]
+        );
+
         return $this->render('stokvel/payouts/create', [
             'title' => 'New Payout',
             'activeNav' => 'payouts',
             'navContext' => 'app',
             'members' => $members,
+            'categories' => $categories,
         ]);
     }
 
@@ -67,6 +76,7 @@ final class PayoutController extends Controller
             'member_id' => (int) $request->input('member_id', 0),
             'amount' => (string) $request->input('amount', ''),
             'scheduled_at' => (string) $request->input('scheduled_at', date('Y-m-d')),
+            'payout_category_id' => (int) $request->input('payout_category_id', 0),
         ];
         $validator = Validator::make($data, [
             'name' => 'required|string',
@@ -97,6 +107,18 @@ final class PayoutController extends Controller
                 $data['amount'],
                 $data['scheduled_at']
             );
+            if ($data['payout_category_id'] > 0) {
+                $this->db()->exec(
+                    'UPDATE payout_cycles SET payout_category_id = :cat, updated_at = :ua
+                     WHERE id = :id AND stokvel_id = :sid',
+                    [
+                        'cat' => $data['payout_category_id'],
+                        'ua' => now_utc(),
+                        'id' => $cycleId,
+                        'sid' => $sid,
+                    ]
+                );
+            }
         } catch (FinanceException $e) {
             $this->flashOld($request);
             Session::flash('error', $e->getMessage());
@@ -112,7 +134,10 @@ final class PayoutController extends Controller
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
         $row = $this->db()->fetch(
-            'SELECT * FROM payout_cycles WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            'SELECT pc.*, cat.name AS category_name, cat.code AS category_code
+             FROM payout_cycles pc
+             LEFT JOIN payout_categories cat ON cat.id = pc.payout_category_id AND cat.stokvel_id = pc.stokvel_id
+             WHERE pc.id = :id AND pc.stokvel_id = :sid LIMIT 1',
             ['id' => (int) $id, 'sid' => $sid]
         );
         if (!$row) {
@@ -141,17 +166,24 @@ final class PayoutController extends Controller
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
         $row = $this->db()->fetch(
-            'SELECT * FROM payout_cycles WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            'SELECT pc.*, cat.name AS category_name FROM payout_cycles pc
+             LEFT JOIN payout_categories cat ON cat.id = pc.payout_category_id
+             WHERE pc.id = :id AND pc.stokvel_id = :sid LIMIT 1',
             ['id' => (int) $id, 'sid' => $sid]
         );
         if (!$row) {
             return $this->redirect('/app/payouts');
         }
+        $categories = $this->db()->fetchAll(
+            'SELECT id, name, code FROM payout_categories WHERE stokvel_id = :sid AND is_active = 1 ORDER BY name ASC',
+            ['sid' => $sid]
+        );
         return $this->render('stokvel/payouts/edit', [
             'title' => 'Edit Payout cycle',
             'activeNav' => 'payouts',
             'navContext' => 'app',
             'item' => $row,
+            'categories' => $categories,
         ]);
     }
 
@@ -161,16 +193,18 @@ final class PayoutController extends Controller
         $sid = $this->requireStokvel();
         $name = trim((string) $request->input('name', ''));
         $amount = $request->input('payout_amount');
+        $categoryId = (int) $request->input('payout_category_id', 0);
         if ($name === '') {
             Session::flash('error', 'Name is required.');
             return $this->redirect('/app/payouts/' . $id . '/edit');
         }
         $this->db()->exec(
-            'UPDATE payout_cycles SET name = :name, payout_amount = :amount, updated_at = :ua
+            'UPDATE payout_cycles SET name = :name, payout_amount = :amount, payout_category_id = :cat, updated_at = :ua
              WHERE id = :id AND stokvel_id = :sid',
             [
                 'name' => $name,
                 'amount' => $amount !== null && $amount !== '' ? $amount : null,
+                'cat' => $categoryId > 0 ? $categoryId : null,
                 'ua' => now_utc(),
                 'id' => (int) $id,
                 'sid' => $sid,

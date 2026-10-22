@@ -1,6 +1,9 @@
 <div class="auth-shell auth-split">
     <section class="auth-hero">
-        <p class="text-sm text-muted fw-600">stockvel</p>
+        <p class="brand-kicker">
+            <span class="brand-mark" aria-hidden="true">S</span>
+            <span>stockvel</span>
+        </p>
         <h1>Manage your stokvel with clarity and trust</h1>
         <p>Secure multi-tenant tooling for contributions, expenses, meetings, payouts, and member statements — built for South African groups.</p>
         <ul class="auth-points">

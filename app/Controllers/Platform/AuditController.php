@@ -25,18 +25,25 @@ final class AuditController extends Controller
         $params = [];
         $where = '1=1';
         if ($action !== '') {
-            $where .= ' AND action = :action';
+            $where .= ' AND a.action = :action';
             $params['action'] = $action;
         }
         if ($userId !== null && $userId !== '') {
-            $where .= ' AND user_id = :uid';
+            $where .= ' AND a.user_id = :uid';
             $params['uid'] = (int) $userId;
         }
 
         $paginator = Paginator::fromQuery(
             $this->db(),
-            "SELECT COUNT(*) AS c FROM audit_logs WHERE {$where}",
-            "SELECT id, user_id, stokvel_id, action, entity_type, entity_id, ip_address, created_at FROM audit_logs WHERE {$where} ORDER BY created_at DESC",
+            "SELECT COUNT(*) AS c FROM audit_logs a WHERE {$where}",
+            "SELECT a.id, a.user_id, a.stokvel_id, a.action, a.entity_type, a.entity_id, a.ip_address, a.created_at,
+                    u.email, p.first_name, p.last_name, s.name AS stokvel_name
+             FROM audit_logs a
+             LEFT JOIN users u ON u.id = a.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             LEFT JOIN stokvels s ON s.id = a.stokvel_id
+             WHERE {$where}
+             ORDER BY a.created_at DESC",
             $params,
             $page,
             $perPage,

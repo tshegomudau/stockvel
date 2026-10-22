@@ -50,6 +50,7 @@ final class MembershipService
         $previousStokvel = $this->tenant->stokvel();
         $previousMembership = $this->tenant->membership();
         $previousPermissions = $this->tenant->permissions();
+        $previousModules = $this->tenant->enabledModules();
         $this->tenant->setTenant(['id' => $stokvelId]);
 
         try {
@@ -81,7 +82,7 @@ final class MembershipService
                 return $membership ?? [];
             });
         } finally {
-            $this->tenant->setTenant($previousStokvel, $previousMembership, $previousPermissions);
+            $this->tenant->setTenant($previousStokvel, $previousMembership, $previousPermissions, $previousModules);
         }
     }
 
@@ -95,6 +96,7 @@ final class MembershipService
         $previousStokvel = $this->tenant->stokvel();
         $previousMembership = $this->tenant->membership();
         $previousPermissions = $this->tenant->permissions();
+        $previousModules = $this->tenant->enabledModules();
         $this->tenant->setTenant(['id' => (int) $invitation['stokvel_id']]);
 
         try {
@@ -103,7 +105,7 @@ final class MembershipService
                 'rejected_at' => now_utc(),
             ]);
         } finally {
-            $this->tenant->setTenant($previousStokvel, $previousMembership, $previousPermissions);
+            $this->tenant->setTenant($previousStokvel, $previousMembership, $previousPermissions, $previousModules);
         }
 
         $this->audit->log('membership.invitation_rejected', 'invitation', (int) $invitation['id'], metadata: [

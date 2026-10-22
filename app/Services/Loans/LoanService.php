@@ -124,6 +124,95 @@ final class LoanService
         return $applicationId;
     }
 
+    public function createPendingApprovalRequest(int $stokvelId, int $applicationId, int $requestedByUserId): void
+    {
+        $existing = $this->db->fetch(
+            "SELECT id FROM approval_requests
+             WHERE stokvel_id = :stokvel_id AND reference_type = 'loan_application' AND reference_id = :reference_id
+               AND status = 'pending' LIMIT 1",
+            ['stokvel_id' => $stokvelId, 'reference_id' => $applicationId]
+        );
+        if ($existing !== null) {
+            return;
+        }
+
+        $now = now_utc();
+        $this->db->insert(
+            'INSERT INTO approval_requests
+                (stokvel_id, request_type, reference_type, reference_id, status,
+                 requested_by_user_id, requested_at, created_at, updated_at)
+             VALUES
+                (:stokvel_id, :request_type, :reference_type, :reference_id, :status,
+                 :requested_by_user_id, :requested_at, :created_at, :updated_at)',
+            [
+                'stokvel_id' => $stokvelId,
+                'request_type' => 'loan_application',
+                'reference_type' => 'loan_application',
+                'reference_id' => $applicationId,
+                'status' => 'pending',
+                'requested_by_user_id' => $requestedByUserId,
+                'requested_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]
+        );
+    }
+
+    public function finalizeApprovalRequest(
+        int $stokvelId,
+        int $applicationId,
+        int $actorUserId,
+        string $status,
+        string $notes = ''
+    ): void {
+        if (!in_array($status, ['approved', 'rejected'], true)) {
+            return;
+        }
+
+        $now = now_utc();
+        if ($status === 'approved') {
+            $this->db->exec(
+                'UPDATE approval_requests
+                 SET status = :status, approved_by_user_id = :by, rejected_by_user_id = NULL,
+                     decision_notes = :notes, decided_at = :decided_at, updated_at = :updated_at
+                 WHERE stokvel_id = :stokvel_id AND reference_type = :reference_type AND reference_id = :reference_id
+                   AND status = :pending',
+                [
+                    'status' => 'approved',
+                    'by' => $actorUserId,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'decided_at' => $now,
+                    'updated_at' => $now,
+                    'stokvel_id' => $stokvelId,
+                    'reference_type' => 'loan_application',
+                    'reference_id' => $applicationId,
+                    'pending' => 'pending',
+                ]
+            );
+
+            return;
+        }
+
+        $this->db->exec(
+            'UPDATE approval_requests
+             SET status = :status, rejected_by_user_id = :by, approved_by_user_id = NULL,
+                 decision_notes = :notes, decided_at = :decided_at, updated_at = :updated_at
+             WHERE stokvel_id = :stokvel_id AND reference_type = :reference_type AND reference_id = :reference_id
+               AND status = :pending',
+            [
+                'status' => 'rejected',
+                'by' => $actorUserId,
+                'notes' => $notes !== '' ? $notes : null,
+                'decided_at' => $now,
+                'updated_at' => $now,
+                'stokvel_id' => $stokvelId,
+                'reference_type' => 'loan_application',
+                'reference_id' => $applicationId,
+                'pending' => 'pending',
+            ]
+        );
+    }
+
     public function committeeApprove(
         int $stokvelId,
         int $loanId,

@@ -19,7 +19,8 @@ final class Router
 
     public function post(string $path, mixed $handler, array $middleware = []): void
     {
-        $this->add(['POST'], $path, $handler, $middleware);
+        // Accept PUT/PATCH as well: HTML forms POST with _method spoofing (method_field).
+        $this->add(['POST', 'PUT', 'PATCH'], $path, $handler, $middleware);
     }
 
     public function put(string $path, mixed $handler, array $middleware = []): void
@@ -86,7 +87,10 @@ final class Router
     {
         $routePath = rtrim($routePath, '/') ?: '/';
         $requestPath = rtrim($requestPath, '/') ?: '/';
-        $pattern = preg_replace('#\{([a-zA-Z_][a-zA-Z0-9_]*)\}#', '(?P<$1>[^/]+)', $routePath);
+        // Escape regex metacharacters in literal path segments (e.g. ".csv"),
+        // then restore {param} placeholders as named capture groups.
+        $escaped = preg_quote($routePath, '#');
+        $pattern = preg_replace('#\\\\\{([a-zA-Z_][a-zA-Z0-9_]*)\\\\\}#', '(?P<$1>[^/]+)', $escaped);
         $pattern = '#^' . $pattern . '$#';
         if (!preg_match($pattern, $requestPath, $matches)) {
             return null;

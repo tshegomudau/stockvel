@@ -16,7 +16,7 @@ $basePath = dirname(__DIR__);
 require $basePath . '/bootstrap/autoload.php';
 
 $envName = Env::resolveNameFromArgv($_SERVER['argv'] ?? [])
-    ?? ($_ENV['STOCKVEL_ENV'] ?? $_SERVER['STOCKVEL_ENV'] ?? null);
+    ?? ($_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? null);
 
 if ($envName === 'testing' || ($_ENV['APP_ENV'] ?? '') === 'testing') {
     Env::load($basePath . '/.env', false);

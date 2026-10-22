@@ -77,16 +77,20 @@ final class MeetingService
             'SELECT id FROM meeting_attendance WHERE stokvel_id = ? AND meeting_id = ? AND membership_id = ?',
             [$stokvelId, $meetingId, $membershipId]
         );
+        $notes = $apology;
         if ($existing) {
             $this->db->exec(
-                'UPDATE meeting_attendance SET status = ?, apology_reason = ?, updated_at = ? WHERE id = ? AND stokvel_id = ?',
-                [$status, $apology, now_utc(), $existing['id'], $stokvelId]
+                'UPDATE meeting_attendance
+                 SET attendance_status = ?, notes = ?, recorded_at = ?
+                 WHERE id = ? AND stokvel_id = ?',
+                [$status, $notes, now_utc(), $existing['id'], $stokvelId]
             );
         } else {
             $this->db->insert(
-                'INSERT INTO meeting_attendance (stokvel_id, meeting_id, membership_id, status, apology_reason, created_at, updated_at)
+                'INSERT INTO meeting_attendance
+                    (stokvel_id, meeting_id, membership_id, attendance_status, recorded_at, notes, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [$stokvelId, $meetingId, $membershipId, $status, $apology, now_utc(), now_utc()]
+                [$stokvelId, $meetingId, $membershipId, $status, now_utc(), $notes, now_utc()]
             );
         }
     }
@@ -97,23 +101,45 @@ final class MeetingService
         if (!$meeting) {
             throw new TenantException('Meeting not found.');
         }
-        $existing = $this->db->fetch(
-            'SELECT id FROM meeting_minutes WHERE stokvel_id = ? AND meeting_id = ?',
-            [$stokvelId, $meetingId]
+
+        $body = $minutes !== '' ? $minutes : null;
+        $this->db->exec(
+            'UPDATE meetings SET minutes_html = ?, updated_at = ? WHERE id = ? AND stokvel_id = ?',
+            [$body, now_utc(), $meetingId, $stokvelId]
         );
-        if ($existing) {
-            $this->db->exec(
-                'UPDATE meeting_minutes SET body = ?, updated_by = ?, updated_at = ? WHERE id = ? AND stokvel_id = ?',
-                [$minutes, $userId, now_utc(), $existing['id'], $stokvelId]
+
+        // Keep legacy meeting_minutes in sync when the table exists.
+        try {
+            $existing = $this->db->fetch(
+                'SELECT id FROM meeting_minutes WHERE stokvel_id = ? AND meeting_id = ?',
+                [$stokvelId, $meetingId]
             );
-        } else {
-            $this->db->insert(
-                'INSERT INTO meeting_minutes (stokvel_id, meeting_id, body, created_by, updated_by, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [$stokvelId, $meetingId, $minutes, $userId, $userId, now_utc(), now_utc()]
-            );
+            if ($existing) {
+                $this->db->exec(
+                    'UPDATE meeting_minutes SET body = ?, updated_by = ?, updated_at = ? WHERE id = ? AND stokvel_id = ?',
+                    [$body, $userId, now_utc(), $existing['id'], $stokvelId]
+                );
+            } else {
+                $this->db->insert(
+                    'INSERT INTO meeting_minutes (stokvel_id, meeting_id, body, created_by, updated_by, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [$stokvelId, $meetingId, $body, $userId, $userId, now_utc(), now_utc()]
+                );
+            }
+        } catch (\Throwable) {
+            // Legacy table optional — primary store is meetings.minutes_html.
         }
-        $this->audit?->log($stokvelId, $userId, 'meeting.minutes_saved', 'meeting', $meetingId, null, null);
+
+        $this->audit?->log(
+            'meeting.minutes_saved',
+            'meeting',
+            $meetingId,
+            null,
+            null,
+            null,
+            $stokvelId,
+            $userId
+        );
     }
 
     public function addResolution(int $stokvelId, int $meetingId, int $userId, string $title, string $body): int

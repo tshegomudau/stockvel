@@ -154,7 +154,16 @@ SQL;
             try {
                 $this->pdo->exec($sql);
             } catch (Throwable $e) {
-                throw new RuntimeException('Migration SQL failed: ' . $e->getMessage(), 0, $e);
+                $message = $e->getMessage();
+                // Idempotent ALTER TABLE ADD COLUMN / ADD INDEX on partially applied upgrades.
+                if (
+                    str_contains($message, 'Duplicate column name')
+                    || str_contains($message, 'Duplicate key name')
+                    || str_contains($message, 'already exists')
+                ) {
+                    continue;
+                }
+                throw new RuntimeException('Migration SQL failed: ' . $message, 0, $e);
             }
         }
     }

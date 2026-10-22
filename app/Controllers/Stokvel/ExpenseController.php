@@ -24,7 +24,13 @@ final class ExpenseController extends Controller
         $paginator = Paginator::fromQuery(
             $this->db(),
             'SELECT COUNT(*) AS c FROM expenses WHERE stokvel_id = :sid',
-            'SELECT * FROM expenses WHERE stokvel_id = :sid ORDER BY created_at DESC',
+            'SELECT e.*, ec.name AS category_name,
+                    TRIM(CONCAT(COALESCE(p.first_name, \'\'), \' \', COALESCE(p.last_name, \'\'))) AS captured_by_name
+             FROM expenses e
+             LEFT JOIN expense_categories ec ON ec.id = e.expense_category_id AND ec.stokvel_id = e.stokvel_id
+             LEFT JOIN users u ON u.id = e.recorded_by_user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             WHERE e.stokvel_id = :sid ORDER BY e.created_at DESC',
             ['sid' => $sid],
             $page,
             $perPage,
@@ -101,7 +107,16 @@ final class ExpenseController extends Controller
     {
         $this->requirePermission('expenses.manage');
         $sid = $this->requireStokvel();
-        $row = $this->db()->fetch('SELECT * FROM expenses WHERE id = :id AND stokvel_id = :sid LIMIT 1', ['id' => (int) $id, 'sid' => $sid]);
+        $row = $this->db()->fetch(
+            'SELECT e.*, ec.name AS category_name, ec.code AS category_code,
+                    TRIM(CONCAT(COALESCE(p.first_name, \'\'), \' \', COALESCE(p.last_name, \'\'))) AS captured_by_name
+             FROM expenses e
+             LEFT JOIN expense_categories ec ON ec.id = e.expense_category_id AND ec.stokvel_id = e.stokvel_id
+             LEFT JOIN users u ON u.id = e.recorded_by_user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             WHERE e.id = :id AND e.stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
         if (!$row) {
             return $this->redirect('/app/expenses');
         }
@@ -121,11 +136,14 @@ final class ExpenseController extends Controller
         if (!$row) {
             return $this->redirect('/app/expenses');
         }
+        /** @var ExpenseService $expenses */
+        $expenses = app()->container()->get(ExpenseService::class);
         return $this->render('stokvel/expenses/edit', [
             'title' => 'Edit Expense',
             'activeNav' => 'expenses',
             'navContext' => 'app',
             'item' => $row,
+            'categories' => $expenses->listCategories($sid),
         ]);
     }
 

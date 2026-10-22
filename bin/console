@@ -35,9 +35,9 @@ if ($forceTesting) {
     $envName = 'testing';
 }
 if ($envName !== null) {
-    $_ENV['STOCKVEL_ENV'] = $envName;
-    $_SERVER['STOCKVEL_ENV'] = $envName;
-    putenv('STOCKVEL_ENV=' . $envName);
+    $_ENV['APP_ENV'] = $envName;
+    $_SERVER['APP_ENV'] = $envName;
+    putenv('APP_ENV=' . $envName);
 }
 
 // Strip --env=* so command parsing stays clean.
@@ -241,8 +241,9 @@ try {
             $host = $argv[2] ?? '127.0.0.1';
             $port = $argv[3] ?? '8090';
             echo "stockvel dev server http://{$host}:{$port}\n";
+            // Use router.php so CSS/JS under public/ are served as static files.
             passthru(sprintf(
-                '%s -S %s:%s -t %s/public %s/public/index.php',
+                '%s -S %s:%s -t %s/public %s/public/router.php',
                 PHP_BINARY,
                 escapeshellarg($host),
                 escapeshellarg($port),

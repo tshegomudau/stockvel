@@ -133,6 +133,20 @@ final class LoanProductService
             $data['interest_type'] = $method === LoanScheduleCalculator::METHOD_FLAT ? 'flat' : 'reducing';
         }
 
+        if (isset($fields['min_term_months']) || isset($fields['instalment_fee']) || isset($fields['amortization_method'])) {
+            $existing = $this->get($stokvelId, $productId);
+            if ($existing === null) {
+                throw new FinanceException('Loan product not found.');
+            }
+            $method = (string) ($fields['amortization_method'] ?? $existing['amortization_method']);
+            $this->assertMethod($method);
+            $data['terms_json'] = json_encode([
+                'min_term_months' => (int) ($fields['min_term_months'] ?? $existing['min_term_months']),
+                'amortization_method' => $method,
+                'instalment_fee' => MoneyMath::normalize((string) ($fields['instalment_fee'] ?? $existing['instalment_fee'])),
+            ], JSON_THROW_ON_ERROR);
+        }
+
         if ($data === []) {
             return;
         }

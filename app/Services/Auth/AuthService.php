@@ -12,6 +12,7 @@ use App\Exceptions\HttpException;
 use App\Repositories\UserRepository;
 use App\Services\AuditService;
 use App\Services\PermissionService;
+use App\Support\ModuleRegistry;
 
 final class AuthService
 {
@@ -84,7 +85,12 @@ final class AuthService
     public function attempt(string $email, string $password, bool $remember = false): ?array
     {
         try {
-            return $this->login($email, $password, $remember);
+            $user = $this->login($email, $password, $remember);
+            // Password OK but MFA pending — not a completed login.
+            if (!empty($user['mfa_required'])) {
+                return null;
+            }
+            return $user;
         } catch (HttpException $e) {
             if (in_array($e->getStatus(), [401, 423], true)) {
                 return null;
@@ -118,6 +124,27 @@ final class AuthService
         }
 
         $this->users->resetLoginAttempts($userId);
+
+        // MFA gate: do not establish a full session until second factor succeeds.
+        if (class_exists(MfaService::class)) {
+            try {
+                /** @var MfaService $mfa */
+                $mfa = app()->container()->get(MfaService::class);
+                if ($mfa->requiresMfa($userId)) {
+                    Session::regenerate(true);
+                    Session::forget('user_id');
+                    Session::set('mfa_pending_user_id', $userId);
+                    Session::set('mfa_pending_remember', $remember);
+                    $this->recordLoginAttempt($email, true);
+                    $pending = $this->sanitizeUser($user);
+                    $pending['mfa_required'] = true;
+                    return $pending;
+                }
+            } catch (\Throwable) {
+                // Container may be unavailable in isolated unit contexts.
+            }
+        }
+
         $this->establishSession($user);
         if ($remember) {
             $this->rememberTokens->create($userId);
@@ -140,6 +167,8 @@ final class AuthService
         Session::forget('active_stokvel_id');
         Session::forget('stokvel_id');
         Session::forget('user_id');
+        Session::forget('mfa_pending_user_id');
+        Session::forget('mfa_pending_remember');
         Session::regenerate(true);
         $this->tenant->setUser(null);
         $this->tenant->setTenant(null);
@@ -241,7 +270,7 @@ final class AuthService
                 Session::set('active_stokvel_id', $stokvelId);
                 Session::set('stokvel_id', $stokvelId);
                 $perms = $this->permissions->forPlatformRole((string) ($this->tenant->platformRole() ?? ''));
-                $this->tenant->setTenant($stokvel, null, $perms);
+                $this->tenant->setTenant($stokvel, null, $perms, $this->loadEnabledModules($stokvelId));
             }
             return;
         }
@@ -269,7 +298,29 @@ final class AuthService
         $perms = $this->permissions->codesForMembership($membership);
         Session::set('active_stokvel_id', $stokvelId);
         Session::set('stokvel_id', $stokvelId);
-        $this->tenant->setTenant($stokvel, $membership, $perms);
+        $this->tenant->setTenant($stokvel, $membership, $perms, $this->loadEnabledModules($stokvelId));
+    }
+
+    /** @return array<string, bool> */
+    private function loadEnabledModules(int $stokvelId): array
+    {
+        try {
+            $row = $this->db->fetch(
+                'SELECT loans_enabled, settings_json FROM stokvel_settings WHERE stokvel_id = :sid LIMIT 1',
+                ['sid' => $stokvelId]
+            );
+            $json = json_decode((string) ($row['settings_json'] ?? '{}'), true);
+            if (!is_array($json)) {
+                $json = [];
+            }
+
+            $modules = ModuleRegistry::fromSettings($json, !empty($row['loans_enabled']));
+            $modules['loans'] = !empty($row['loans_enabled']);
+
+            return $modules;
+        } catch (\Throwable) {
+            return ModuleRegistry::defaults(true);
+        }
     }
 
     public function findUserByEmail(string $email): ?array

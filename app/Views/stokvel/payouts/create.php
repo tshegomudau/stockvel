@@ -4,6 +4,17 @@
         <?= csrf_field() ?>
         <div class="form-group"><label for="name">Cycle name</label><input type="text" id="name" name="name" value="<?= e((string) old('name', 'Monthly rotation')) ?>" required></div>
         <div class="form-group">
+            <label for="payout_category_id">Category</label>
+            <select id="payout_category_id" name="payout_category_id">
+                <option value="">— Optional —</option>
+                <?php foreach ($categories ?? [] as $cat): ?>
+                    <option value="<?= (int) $cat['id'] ?>" <?= (string) old('payout_category_id') === (string) $cat['id'] ? 'selected' : '' ?>>
+                        <?= e($cat['name'] ?? '') ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
             <label for="member_id">Member</label>
             <select id="member_id" name="member_id" required>
                 <option value="">Select member</option>

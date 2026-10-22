@@ -541,21 +541,45 @@ final class DemoSeeder
         $expenseCategoryId = (int) $this->pdo->lastInsertId();
 
         $coaStmt = $this->pdo->prepare(
-            'INSERT INTO chart_of_accounts (stokvel_id, code, name, account_type, is_system, created_at, updated_at)
-             VALUES (:stokvel_id, :code, :name, :account_type, 1, :created_at, :updated_at)'
+            'INSERT INTO chart_of_accounts
+                (stokvel_id, code, name, account_type, sub_type, is_system, is_active, created_at, updated_at)
+             VALUES
+                (:stokvel_id, :code, :name, :account_type, :sub_type, 1, 1, :created_at, :updated_at)
+             ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                account_type = VALUES(account_type),
+                sub_type = VALUES(sub_type),
+                is_active = 1,
+                updated_at = VALUES(updated_at)'
         );
-        foreach (
-            [
-                ['1000', 'Cash on Hand', 'asset'],
-                ['2000', 'Member Contributions', 'liability'],
-                ['4000', 'Administration Expense', 'expense'],
-            ] as [$code, $name, $type]
-        ) {
+        $defaultAccounts = [
+            ['1000', 'Cash on Hand', 'asset', 'cash'],
+            ['1010', 'Bank Account', 'asset', 'bank'],
+            ['1100', 'Member Receivables', 'asset', 'receivable'],
+            ['1200', 'Loan Receivables', 'asset', 'loan_receivable'],
+            ['2000', 'Member Credits (Overpayments)', 'liability', 'member_credit'],
+            ['2100', 'Accounts Payable', 'liability', 'payable'],
+            ['2200', 'Payouts Payable', 'liability', 'payout_payable'],
+            ['3000', 'Member Equity / Fund Balance', 'equity', 'fund_balance'],
+            ['3100', 'Retained Surplus', 'equity', 'retained'],
+            ['4000', 'Contribution Income', 'income', 'contributions'],
+            ['4100', 'Penalty Income', 'income', 'penalties'],
+            ['4200', 'Interest Income', 'income', 'interest'],
+            ['4300', 'Other Income', 'income', 'other_income'],
+            ['5000', 'Administrative Expenses', 'expense', 'admin'],
+            ['5100', 'Meeting Expenses', 'expense', 'meeting'],
+            ['5200', 'Bank Charges', 'expense', 'bank_charges'],
+            ['5300', 'Loan Loss / Write-off', 'expense', 'loan_loss'],
+            ['5400', 'Payout Expenses', 'expense', 'payout'],
+            ['5500', 'Other Expenses', 'expense', 'other_expense'],
+        ];
+        foreach ($defaultAccounts as [$code, $name, $type, $subType]) {
             $coaStmt->execute([
                 'stokvel_id' => $stokvelId,
                 'code' => $code,
                 'name' => $name,
                 'account_type' => $type,
+                'sub_type' => $subType,
                 'created_at' => $this->now,
                 'updated_at' => $this->now,
             ]);
