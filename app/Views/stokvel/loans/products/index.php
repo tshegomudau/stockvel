@@ -5,11 +5,23 @@
     'actionLabel' => 'New product',
 ], null) ?>
 <p class="text-muted"><a href="<?= e(url('/app/loans')) ?>">&larr; Back to applications</a></p>
+<form method="get" action="<?= e(url('/app/loans/products')) ?>" class="filter-bar" role="search">
+    <div class="form-group">
+        <label for="q">Search</label>
+        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-secondary">Filter</button>
+        <?php if (($filterQ ?? '') !== ''): ?>
+            <a class="btn btn-ghost" href="<?= e(url('/app/loans/products')) ?>">Clear</a>
+        <?php endif; ?>
+    </div>
+</form>
 <?php $list = isset($paginator) ? $paginator->items : ($items ?? $rows ?? []); ?>
 <?php if (empty($list)): ?>
     <?= view('partials/empty', [
-        'emptyTitle' => 'No loan products',
-        'emptyMessage' => 'Create a product before members can apply for loans.',
+        'emptyTitle' => 'No loan products match',
+        'emptyMessage' => 'Try clearing filters, or create a product before members can apply for loans.',
         'emptyActionUrl' => url('/app/loans/products/create'),
         'emptyActionLabel' => 'Create product',
     ], null) ?>

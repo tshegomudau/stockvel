@@ -16,15 +16,25 @@ final class FeeCategoryController extends Controller
     {
         $this->requirePermission('fees.manage');
         $sid = $this->requireStokvel();
+        $q = trim((string) $request->query('q', ''));
+        $where = 'stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($q !== '') {
+            $where .= ' AND (name LIKE :q_name OR code LIKE :q_code)';
+            $like = '%' . $q . '%';
+            $params['q_name'] = $like;
+            $params['q_code'] = $like;
+        }
         $categories = $this->db()->fetchAll(
-            'SELECT * FROM fee_categories WHERE stokvel_id = :sid ORDER BY name ASC',
-            ['sid' => $sid]
+            'SELECT * FROM fee_categories WHERE ' . $where . ' ORDER BY name ASC',
+            $params
         );
         return $this->render('stokvel/fees/categories/index', [
             'title' => 'Fee categories',
             'activeNav' => 'fees',
             'navContext' => 'app',
             'categories' => $categories,
+            'filterQ' => $q,
         ]);
     }
 

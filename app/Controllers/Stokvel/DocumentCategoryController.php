@@ -16,9 +16,18 @@ final class DocumentCategoryController extends Controller
     {
         $this->requirePermission('documents.manage_categories');
         $sid = $this->requireStokvel();
+        $q = trim((string) $request->query('q', ''));
+        $where = 'stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($q !== '') {
+            $where .= ' AND (name LIKE :q_name OR code LIKE :q_code)';
+            $like = '%' . $q . '%';
+            $params['q_name'] = $like;
+            $params['q_code'] = $like;
+        }
         $categories = $this->db()->fetchAll(
-            'SELECT * FROM document_categories WHERE stokvel_id = :sid ORDER BY name ASC',
-            ['sid' => $sid]
+            'SELECT * FROM document_categories WHERE ' . $where . ' ORDER BY name ASC',
+            $params
         );
 
         return $this->render('stokvel/documents/categories/index', [
@@ -26,6 +35,7 @@ final class DocumentCategoryController extends Controller
             'activeNav' => 'documents',
             'navContext' => 'app',
             'categories' => $categories,
+            'filterQ' => $q,
         ]);
     }
 

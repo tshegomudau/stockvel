@@ -17,8 +17,6 @@ $heading = $heading ?? match ($status) {
     default => 'Error ' . $status,
 };
 $safeMessage = (string) ($message ?? 'Please try again or return to the dashboard.');
-$dashJs = json_encode($dashboardUrl, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
-$backJs = json_encode($safeBackUrl, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
 ?>
 <div class="card error-card">
     <p class="text-muted mb-2">Error <?= (int) $status ?></p>
@@ -33,26 +31,9 @@ $backJs = json_encode($safeBackUrl, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP 
                 <button type="submit" class="btn btn-secondary">Sign out</button>
             </form>
             <?php endif; ?>
-            <button type="button" class="btn btn-secondary" id="error-go-back">Go Back</button>
-            <script>
-            (function () {
-                var dash = <?= $dashJs ?: '""' ?>;
-                var safe = <?= $backJs ?: '""' ?>;
-                var btn = document.getElementById('error-go-back');
-                if (!btn) return;
-                btn.addEventListener('click', function () {
-                    if (safe && safe !== dash) {
-                        window.location.href = safe;
-                        return;
-                    }
-                    if (window.history.length > 1) {
-                        window.history.back();
-                        return;
-                    }
-                    window.location.href = dash;
-                });
-            })();
-            </script>
+            <button type="button" class="btn btn-secondary" id="error-go-back"
+                    data-dashboard-url="<?= e($dashboardUrl) ?>"
+                    data-safe-back-url="<?= e($safeBackUrl) ?>">Go Back</button>
         <?php else: ?>
             <a class="btn btn-primary" href="<?= e(url('/login')) ?>">Sign in</a>
             <a class="btn btn-secondary" href="<?= e(url('/')) ?>">Home</a>

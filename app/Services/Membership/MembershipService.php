@@ -55,27 +55,29 @@ final class MembershipService
 
         try {
             return $this->db->transaction(function () use ($invitation, $userId, $stokvelId) {
+                // Invitees join as pending — only admins (members.manage) activate membership.
                 $membershipId = $this->memberships->insert([
                     'stokvel_id' => $stokvelId,
                     'user_id' => $userId,
                     'member_number' => $this->memberships->nextMemberNumber(),
-                    'status' => 'active',
-                    'joined_at' => now_utc(),
-                    'approved_at' => now_utc(),
+                    'status' => 'pending',
+                    'joined_at' => null,
+                    'approved_at' => null,
+                    'notes' => 'Awaiting admin approval after invitation acceptance',
                 ]);
 
                 if (!empty($invitation['role_id'])) {
                     $this->assignRole((int) $membershipId, (int) $invitation['role_id'], (int) $invitation['invited_by_user_id']);
                 }
 
-                $this->transition($membershipId, null, 'active', (int) $invitation['invited_by_user_id'], 'Invitation accepted');
+                $this->transition($membershipId, null, 'pending', (int) $invitation['invited_by_user_id'], 'Invitation accepted — pending admin approval');
                 $this->memberships->updateInvitation((int) $invitation['id'], [
                     'status' => 'accepted',
                     'accepted_at' => now_utc(),
                 ]);
 
                 $membership = $this->memberships->findById($membershipId);
-                $this->audit->log('membership.accepted', 'membership', $membershipId, metadata: [
+                $this->audit->log('membership.accepted_pending', 'membership', $membershipId, metadata: [
                     'invitation_id' => (int) $invitation['id'],
                 ]);
 

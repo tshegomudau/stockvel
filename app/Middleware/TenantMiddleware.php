@@ -48,7 +48,8 @@ final class TenantMiddleware implements MiddlewareInterface
             throw new TenantException('You are not a member of the selected stokvel.');
         }
 
-        if (!in_array($membership['status'] ?? '', ['active', 'suspended'], true)) {
+        // pending = accepted invite, waiting for admin approval (limited portal access).
+        if (!in_array($membership['status'] ?? '', ['active', 'suspended', 'pending'], true)) {
             throw new TenantException('Your membership is not active for this stokvel.');
         }
 

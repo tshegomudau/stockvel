@@ -16,9 +16,19 @@ final class PayoutCategoryController extends Controller
     {
         $this->requirePermission('payouts.manage');
         $sid = $this->requireStokvel();
+        $q = trim((string) $request->query('q', ''));
+        $where = 'stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($q !== '') {
+            $where .= ' AND (name LIKE :q_name OR code LIKE :q_code OR description LIKE :q_desc)';
+            $like = '%' . $q . '%';
+            $params['q_name'] = $like;
+            $params['q_code'] = $like;
+            $params['q_desc'] = $like;
+        }
         $categories = $this->db()->fetchAll(
-            'SELECT * FROM payout_categories WHERE stokvel_id = :sid ORDER BY name ASC',
-            ['sid' => $sid]
+            'SELECT * FROM payout_categories WHERE ' . $where . ' ORDER BY name ASC',
+            $params
         );
 
         return $this->render('stokvel/payouts/categories/index', [
@@ -26,6 +36,7 @@ final class PayoutCategoryController extends Controller
             'activeNav' => 'payouts',
             'navContext' => 'app',
             'categories' => $categories,
+            'filterQ' => $q,
         ]);
     }
 

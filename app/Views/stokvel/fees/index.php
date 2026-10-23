@@ -4,9 +4,30 @@
     'actionUrl' => url('/app/fees/create'),
     'actionLabel' => 'New fee structure',
 ], null) ?>
+<form method="get" action="<?= e(url('/app/fees')) ?>" class="filter-bar" role="search">
+    <div class="form-group">
+        <label for="q">Search</label>
+        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
+    </div>
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="">All</option>
+            <?php foreach ($statusOptions ?? ['active', 'inactive'] as $st): ?>
+                <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-secondary">Filter</button>
+        <?php if (($filterQ ?? '') !== '' || ($filterStatus ?? '') !== ''): ?>
+            <a class="btn btn-ghost" href="<?= e(url('/app/fees')) ?>">Clear</a>
+        <?php endif; ?>
+    </div>
+</form>
 <?php $list = isset($paginator) ? $paginator->items : ($items ?? $rows ?? []); ?>
 <?php if (empty($list)): ?>
-    <?= view('partials/empty', ['emptyTitle' => 'No fee structures', 'emptyActionUrl' => url('/app/fees/create'), 'emptyActionLabel' => 'Create fee structure'], null) ?>
+    <?= view('partials/empty', ['emptyTitle' => 'No fee structures match', 'emptyActionUrl' => url('/app/fees/create'), 'emptyActionLabel' => 'Create fee structure'], null) ?>
 <?php else: ?>
 <div class="table-wrap"><table class="table">
 <thead><tr><th>Name</th><th>Type</th><th>Status</th><th></th></tr></thead>

@@ -27,7 +27,12 @@
   white-space: nowrap;
 }
 .table tbody tr:hover { background: #f9fbfa; }
+.table tbody tr.row-owing-low { background: #fff8e6; }
+.table tbody tr.row-owing-low:hover { background: #ffefc2; }
+.table tbody tr.row-owing-high { background: #fdecea; }
+.table tbody tr.row-owing-high:hover { background: #f9d6d2; }
 .table tbody tr:last-child td { border-bottom: 0; }
+.inline-form { display: inline-flex; margin: 0; }
 .table-compact th, .table-compact td { padding: 0.55rem 0.75rem; }
 .table .actions {
   display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end;

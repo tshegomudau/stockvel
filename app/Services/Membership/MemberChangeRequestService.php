@@ -167,7 +167,8 @@ final class MemberChangeRequestService
         array $payload
     ): void {
         $rows = $this->db->fetchAll(
-            'SELECT id, share_percent FROM beneficiaries WHERE stokvel_id = :sid AND membership_id = :mid',
+            "SELECT id, share_percent FROM beneficiaries
+             WHERE stokvel_id = :sid AND membership_id = :mid AND (status = 'active' OR status IS NULL OR status = '')",
             ['sid' => $stokvelId, 'mid' => $membershipId]
         );
 
@@ -189,9 +190,9 @@ final class MemberChangeRequestService
             $total = array_sum($shares);
         }
 
-        if (round($total, 2) > 100.01) {
+        if (round($total, 2) !== 100.0) {
             throw new \RuntimeException(
-                'Beneficiary shares would total ' . number_format($total, 2) . '% — keep the combined share at or under 100%.'
+                'Beneficiary shares must total exactly 100% (would be ' . number_format($total, 2) . '%). Adjust shares so they add up to 100%.'
             );
         }
     }

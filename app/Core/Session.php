@@ -18,17 +18,14 @@ final class Session
         $secure = filter_var(env('SESSION_SECURE', false), FILTER_VALIDATE_BOOL);
         $sameSite = (string) env('SESSION_SAME_SITE', 'Lax');
         $lifetime = (int) env('SESSION_LIFETIME', 120) * 60;
-        $savePath = dirname(__DIR__, 2) . '/storage/sessions';
-
-        if (!is_dir($savePath)) {
-            mkdir($savePath, 0775, true);
-        }
+        $savePath = self::resolveSavePath();
+        $cookiePath = function_exists('base_path_uri') ? (base_path_uri() ?: '/') : '/';
 
         session_name((string) env('SESSION_NAME', 'stockvel_session'));
         session_save_path($savePath);
         session_set_cookie_params([
             'lifetime' => $lifetime,
-            'path' => '/',
+            'path' => $cookiePath,
             'secure' => $secure,
             'httponly' => true,
             'samesite' => $sameSite,
@@ -36,8 +33,40 @@ final class Session
         ini_set('session.use_strict_mode', '1');
         ini_set('session.cookie_httponly', '1');
         ini_set('session.use_only_cookies', '1');
-        session_start();
-        self::$started = true;
+
+        // Suppress warnings if the save path is still not writable; fall back once.
+        $started = @session_start();
+        if (!$started || session_status() !== PHP_SESSION_ACTIVE) {
+            $fallback = self::ensureDir(sys_get_temp_dir() . '/stovel_sessions_' . substr(hash('sha256', dirname(__DIR__, 2)), 0, 12));
+            session_save_path($fallback);
+            @session_start();
+        }
+
+        self::$started = session_status() === PHP_SESSION_ACTIVE;
+    }
+
+    private static function resolveSavePath(): string
+    {
+        $preferred = dirname(__DIR__, 2) . '/storage/sessions';
+        $ensured = self::ensureDir($preferred);
+        if (is_writable($ensured)) {
+            return $ensured;
+        }
+
+        return self::ensureDir(sys_get_temp_dir() . '/stovel_sessions_' . substr(hash('sha256', dirname(__DIR__, 2)), 0, 12));
+    }
+
+    private static function ensureDir(string $path): string
+    {
+        if (!is_dir($path)) {
+            @mkdir($path, 0777, true);
+        }
+        // Local/dev: allow PHP-FPM/Apache (often "nobody"/"www-data") to write sessions.
+        if (is_dir($path) && !is_writable($path)) {
+            @chmod($path, 0777);
+        }
+
+        return $path;
     }
 
     public static function get(string $key, mixed $default = null): mixed

@@ -22,7 +22,8 @@ final class MemberController extends Controller
         $sid = $this->requireStokvel();
         $page = $this->page($request);
         $perPage = $this->perPage($request);
-        $status = (string) $request->query('status', '');
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
 
         $params = ['sid' => $sid];
         $where = 'sm.stokvel_id = :sid';
@@ -30,17 +31,53 @@ final class MemberController extends Controller
             $where .= ' AND sm.status = :status';
             $params['status'] = $status;
         }
+        if ($q !== '') {
+            $where .= ' AND (p.first_name LIKE :q_fn OR p.last_name LIKE :q_ln OR u.email LIKE :q_email
+                OR CONCAT(COALESCE(p.first_name, \'\'), \' \', COALESCE(p.last_name, \'\')) LIKE :q_full)';
+            $like = '%' . $q . '%';
+            $params['q_fn'] = $like;
+            $params['q_ln'] = $like;
+            $params['q_email'] = $like;
+            $params['q_full'] = $like;
+        }
+
+        $filterQuery = array_filter([
+            'status' => $status !== '' ? $status : null,
+            'q' => $q !== '' ? $q : null,
+        ], static fn ($v) => $v !== null);
+
+        $countSql = $q !== ''
+            ? "SELECT COUNT(*) AS c FROM memberships sm JOIN users u ON u.id = sm.user_id LEFT JOIN user_profiles p ON p.user_id = u.id WHERE {$where}"
+            : "SELECT COUNT(*) AS c FROM memberships sm WHERE {$where}";
 
         $paginator = Paginator::fromQuery(
             $this->db(),
-            "SELECT COUNT(*) AS c FROM memberships sm WHERE {$where}",
+            $countSql,
             "SELECT sm.*, p.first_name, p.last_name, u.email, u.mobile FROM memberships sm JOIN users u ON u.id = sm.user_id LEFT JOIN user_profiles p ON p.user_id = u.id WHERE {$where} ORDER BY sm.created_at DESC",
             $params,
             $page,
             $perPage,
             url('/app/members'),
-            array_filter(['status' => $status])
+            $filterQuery
         );
+
+        $owingByMember = [];
+        try {
+            $owingRows = $this->db()->fetchAll(
+                "SELECT membership_id, COUNT(*) AS owing_count
+                 FROM member_charges
+                 WHERE stokvel_id = :sid
+                   AND status IN ('pending', 'partial', 'overdue')
+                   AND amount > amount_paid
+                 GROUP BY membership_id",
+                ['sid' => $sid]
+            );
+            foreach ($owingRows as $or) {
+                $owingByMember[(int) $or['membership_id']] = (int) $or['owing_count'];
+            }
+        } catch (\Throwable) {
+            $owingByMember = [];
+        }
 
         return $this->render('stokvel/members/index', [
             'title' => 'Members',
@@ -48,6 +85,9 @@ final class MemberController extends Controller
             'navContext' => 'app',
             'paginator' => $paginator,
             'statusFilter' => $status,
+            'q' => $q,
+            'owingByMember' => $owingByMember,
+            'canManage' => $this->tenant()->can('members.manage'),
         ]);
     }
 
@@ -157,6 +197,10 @@ final class MemberController extends Controller
         }
 
         $idPlain = SensitiveData::decrypt($member['id_number_encrypted'] ?? null);
+        $stokvelMin = $this->db()->fetch(
+            'SELECT minimum_contribution FROM stokvel_settings WHERE stokvel_id = :sid LIMIT 1',
+            ['sid' => $sid]
+        );
 
         return $this->render('stokvel/members/edit', [
             'title' => 'Edit member',
@@ -164,6 +208,7 @@ final class MemberController extends Controller
             'navContext' => 'app',
             'member' => $member,
             'idMasked' => SensitiveData::maskId($idPlain),
+            'defaultMinimumContribution' => $stokvelMin['minimum_contribution'] ?? null,
         ]);
     }
 
@@ -196,6 +241,25 @@ final class MemberController extends Controller
             $data['id_number'] = '';
         }
 
+        // Minimum contribution is applied immediately (committee-managed).
+        $rawMin = trim((string) $request->input('minimum_contribution', ''));
+        $minValue = null;
+        if ($rawMin !== '') {
+            if (!is_numeric($rawMin) || (float) $rawMin < 0) {
+                Session::flash('error', 'Minimum contribution must be a non-negative amount.');
+                return $this->redirect('/app/members/' . $id . '/edit');
+            }
+            $minValue = number_format((float) $rawMin, 2, '.', '');
+        }
+        try {
+            $this->db()->exec(
+                'UPDATE memberships SET minimum_contribution = :min, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+                ['min' => $minValue, 'ua' => now_utc(), 'id' => (int) $id, 'sid' => $sid]
+            );
+        } catch (\Throwable) {
+            // Column may be missing before migration 013.
+        }
+
         try {
             $service = app()->container()->get(MemberChangeRequestService::class);
             $service->submit(
@@ -205,13 +269,142 @@ final class MemberController extends Controller
                 'profile_update',
                 $data
             );
-            Session::flash('success', 'Profile change submitted for member approval.');
+            Session::flash('success', 'Minimum contribution saved. Profile change submitted for member approval.');
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Could not submit profile change.');
             return $this->redirect('/app/members/' . $id . '/edit');
         }
 
         return $this->redirect('/app/members/' . $id);
+    }
+
+    public function createForm(Request $request): Response
+    {
+        $this->requirePermission('members.manage');
+        return $this->render('stokvel/members/create', [
+            'title' => 'Create member',
+            'activeNav' => 'members',
+            'navContext' => 'app',
+            'roles' => $this->assignableRoles(),
+        ]);
+    }
+
+    public function store(Request $request): Response
+    {
+        $this->requirePermission('members.manage');
+        $sid = $this->requireStokvel();
+        $data = [
+            'first_name' => trim((string) $request->input('first_name', '')),
+            'last_name' => trim((string) $request->input('last_name', '')),
+            'email' => strtolower(trim((string) $request->input('email', ''))),
+            'mobile' => trim((string) $request->input('mobile', '')),
+            'role_code' => trim((string) $request->input('role_code', 'ordinary_member')),
+            'minimum_contribution' => trim((string) $request->input('minimum_contribution', '')),
+            'joined_at' => trim((string) $request->input('joined_at', date('Y-m-d'))),
+        ];
+        $validator = Validator::make($data, [
+            'first_name' => 'required|min:2',
+            'last_name' => 'required|min:2',
+            'email' => 'required|email',
+            'joined_at' => 'required|date',
+        ]);
+        if ($validator->fails()) {
+            $this->flashOld($request);
+            Session::flash('error', $validator->firstError() ?? 'Could not create member.');
+            return $this->redirect('/app/members/create');
+        }
+
+        try {
+            $membershipId = $this->createMemberRecord($sid, $data, (int) $this->userId());
+            Session::flash('success', 'Member created.');
+            return $this->redirect('/app/members/' . $membershipId);
+        } catch (\Throwable $e) {
+            $this->flashOld($request);
+            Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Could not create member.');
+            return $this->redirect('/app/members/create');
+        }
+    }
+
+    public function importForm(Request $request): Response
+    {
+        $this->requirePermission('members.manage');
+        return $this->render('stokvel/members/import', [
+            'title' => 'Import members',
+            'activeNav' => 'members',
+            'navContext' => 'app',
+        ]);
+    }
+
+    public function importTemplate(Request $request): Response
+    {
+        $this->requirePermission('members.manage');
+        $csv = "first_name,last_name,email,mobile,role_code,minimum_contribution,joined_at\n"
+            . "Thabo,Molefe,thabo@example.com,0820000000,ordinary_member,200.00,2024-01-15\n";
+        return new Response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="members-import-template.csv"',
+        ]);
+    }
+
+    public function importStore(Request $request): Response
+    {
+        $this->requirePermission('members.manage');
+        $sid = $this->requireStokvel();
+        $file = $request->file('csv');
+        if ($file === null || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            Session::flash('error', 'Please upload a CSV file.');
+            return $this->redirect('/app/members/import');
+        }
+        $content = file_get_contents((string) $file['tmp_name']);
+        if ($content === false || trim($content) === '') {
+            Session::flash('error', 'Could not read the CSV file.');
+            return $this->redirect('/app/members/import');
+        }
+
+        $lines = preg_split('/\R/', trim($content)) ?: [];
+        if ($lines === []) {
+            Session::flash('error', 'CSV is empty.');
+            return $this->redirect('/app/members/import');
+        }
+        $header = str_getcsv(array_shift($lines) ?? '');
+        $header = array_map(static fn ($h) => strtolower(trim((string) $h)), $header);
+        $imported = 0;
+        $errors = [];
+        foreach ($lines as $i => $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+            $cols = str_getcsv($line);
+            $row = [];
+            foreach ($header as $idx => $key) {
+                $row[$key] = trim((string) ($cols[$idx] ?? ''));
+            }
+            $data = [
+                'first_name' => $row['first_name'] ?? '',
+                'last_name' => $row['last_name'] ?? '',
+                'email' => strtolower($row['email'] ?? ''),
+                'mobile' => $row['mobile'] ?? '',
+                'role_code' => ($row['role_code'] ?? '') !== '' ? $row['role_code'] : 'ordinary_member',
+                'minimum_contribution' => $row['minimum_contribution'] ?? '',
+                'joined_at' => ($row['joined_at'] ?? '') !== '' ? $row['joined_at'] : date('Y-m-d'),
+            ];
+            if ($data['email'] === '' || $data['first_name'] === '') {
+                $errors[] = 'Row ' . ($i + 2) . ': first_name and email are required.';
+                continue;
+            }
+            try {
+                $this->createMemberRecord($sid, $data, (int) $this->userId());
+                $imported++;
+            } catch (\Throwable $e) {
+                $errors[] = 'Row ' . ($i + 2) . ': ' . $e->getMessage();
+            }
+        }
+
+        if ($errors !== []) {
+            Session::flash('error', implode(' ', array_slice($errors, 0, 6)));
+        }
+        Session::flash('success', $imported . ' member(s) imported.');
+        return $this->redirect($imported > 0 ? '/app/members' : '/app/members/import');
     }
 
     public function storeBeneficiary(Request $request, string $id): Response
@@ -324,10 +517,12 @@ final class MemberController extends Controller
     public function inviteForm(Request $request): Response
     {
         $this->requirePermission('members.invite');
+        $canAssignRoles = $this->tenant()->can('members.manage');
         return $this->render('stokvel/members/invite', [
             'title' => 'Invite member',
             'activeNav' => 'members',
             'navContext' => 'app',
+            'canAssignRoles' => $canAssignRoles,
         ]);
     }
 
@@ -335,19 +530,27 @@ final class MemberController extends Controller
     {
         $this->requirePermission('members.invite');
         $this->requireStokvel();
+        $canAssignRoles = $this->tenant()->can('members.manage');
         $data = [
             'email' => trim((string) $request->input('email', '')),
             'mobile' => trim((string) $request->input('mobile', '')),
             'role' => (string) $request->input('role', 'ordinary'),
         ];
+        // Non-admins may only invite ordinary members; admins approve afterwards.
+        if (!$canAssignRoles) {
+            $data['role'] = 'ordinary';
+        }
         $roleMap = [
             'ordinary' => 'ordinary_member',
             'committee' => 'committee_member',
         ];
         $roleCode = $roleMap[$data['role']] ?? $data['role'];
+        $allowedRoles = $canAssignRoles
+            ? 'chairperson,treasurer,secretary,committee,ordinary,auditor,ordinary_member,committee_member'
+            : 'ordinary,ordinary_member';
         $validator = Validator::make($data, [
             'email' => 'required|email',
-            'role' => 'required|in:chairperson,treasurer,secretary,committee,ordinary,auditor,ordinary_member,committee_member',
+            'role' => 'required|in:' . $allowedRoles,
         ]);
         if ($validator->fails()) {
             $this->flashOld($request);
@@ -384,8 +587,36 @@ final class MemberController extends Controller
             return $this->redirect('/app/members/invite');
         }
 
-        Session::flash('success', 'Invitation sent to ' . $data['email'] . '.');
+        Session::flash('success', 'Invitation sent to ' . $data['email'] . '. An admin must approve them after they accept.');
         return $this->redirect('/app/members');
+    }
+
+    public function approveMembership(Request $request, string $id): Response
+    {
+        $this->requirePermission('members.manage');
+        $sid = $this->requireStokvel();
+        $member = $this->db()->fetch(
+            'SELECT id, status FROM memberships WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
+        );
+        if (!$member) {
+            return $this->redirect('/app/members');
+        }
+        if (($member['status'] ?? '') !== 'pending' && ($member['status'] ?? '') !== 'invited') {
+            Session::flash('error', 'Only pending memberships can be approved.');
+            return $this->redirect('/app/members/' . $id);
+        }
+
+        try {
+            /** @var \App\Services\Membership\MembershipService $memberships */
+            $memberships = app()->container()->get(\App\Services\Membership\MembershipService::class);
+            $memberships->approve((int) $id, (int) $this->userId());
+            Session::flash('success', 'Member approved and activated.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Could not approve member.');
+        }
+
+        return $this->redirect('/app/members/' . $id);
     }
 
     public function suspend(Request $request, string $id): Response
@@ -525,12 +756,124 @@ final class MemberController extends Controller
         try {
             $service = app()->container()->get(MemberChangeRequestService::class);
             $service->submit($sid, (int) $member['id'], (int) $this->userId(), $changeType, $payload);
-            Session::flash('success', 'Beneficiary change submitted for member approval.');
+            Session::flash('success', 'Beneficiary change submitted for member approval. Shares of active beneficiaries must total 100%.');
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Could not submit change.');
         }
 
         return $this->redirect('/app/members/' . $memberId);
+    }
+
+    /**
+     * @param array{first_name:string,last_name:string,email:string,mobile?:string,role_code?:string,minimum_contribution?:string,joined_at?:string} $data
+     */
+    private function createMemberRecord(int $stokvelId, array $data, int $actorUserId): int
+    {
+        /** @var \App\Repositories\UserRepository $users */
+        $users = app()->container()->get(\App\Repositories\UserRepository::class);
+        $existing = $users->findByEmail($data['email']);
+        if ($existing) {
+            $userId = (int) $existing['id'];
+            $dup = $this->db()->fetch(
+                'SELECT id FROM memberships WHERE stokvel_id = :sid AND user_id = :uid LIMIT 1',
+                ['sid' => $stokvelId, 'uid' => $userId]
+            );
+            if ($dup) {
+                throw new \RuntimeException('That email is already a member of this stokvel.');
+            }
+            $this->db()->exec(
+                'UPDATE user_profiles SET first_name = :fn, last_name = :ln, updated_at = :ua WHERE user_id = :id',
+                [
+                    'fn' => $data['first_name'],
+                    'ln' => $data['last_name'],
+                    'ua' => now_utc(),
+                    'id' => $userId,
+                ]
+            );
+        } else {
+            $tempPassword = bin2hex(random_bytes(8)) . 'Aa1!';
+            $userId = $users->create([
+                'email' => $data['email'],
+                'mobile' => ($data['mobile'] ?? '') !== '' ? $data['mobile'] : null,
+                'password_hash' => password_hash($tempPassword, PASSWORD_DEFAULT),
+                'status' => 'active',
+                'first_name' => $data['first_name'],
+                'last_name' => $data['last_name'],
+            ]);
+        }
+
+        /** @var \App\Repositories\MembershipRepository $memberships */
+        $memberships = app()->container()->get(\App\Repositories\MembershipRepository::class);
+        $tenant = $this->tenant();
+        $prevStokvel = $tenant->stokvel();
+        $prevMembership = $tenant->membership();
+        $prevPermissions = $tenant->permissions();
+        $prevModules = $tenant->enabledModules();
+        $tenant->setTenant(['id' => $stokvelId], $prevMembership, $prevPermissions, $prevModules);
+        try {
+            $joined = $data['joined_at'] ?? date('Y-m-d');
+            if (strlen($joined) === 10) {
+                $joined .= ' 00:00:00';
+            }
+            $min = null;
+            $rawMin = trim((string) ($data['minimum_contribution'] ?? ''));
+            if ($rawMin !== '' && is_numeric($rawMin)) {
+                $min = number_format((float) $rawMin, 2, '.', '');
+            }
+            $insert = [
+                'stokvel_id' => $stokvelId,
+                'user_id' => $userId,
+                'member_number' => $memberships->nextMemberNumber(),
+                'status' => 'active',
+                'joined_at' => $joined,
+                'approved_at' => now_utc(),
+            ];
+            if ($min !== null) {
+                $insert['minimum_contribution'] = $min;
+            }
+            $membershipId = $memberships->insert($insert);
+
+            $roleCode = (string) ($data['role_code'] ?? 'ordinary_member');
+            $role = $this->db()->fetch(
+                'SELECT id FROM roles WHERE code = :code AND stokvel_id IS NULL LIMIT 1',
+                ['code' => $roleCode]
+            );
+            if ($role) {
+                $this->db()->insert(
+                    'INSERT INTO membership_roles
+                        (stokvel_id, membership_id, role_id, assigned_by_user_id, assigned_at, created_at)
+                     VALUES (:sid, :mid, :rid, :by, :aa, :ca)',
+                    [
+                        'sid' => $stokvelId,
+                        'mid' => $membershipId,
+                        'rid' => (int) $role['id'],
+                        'by' => $actorUserId,
+                        'aa' => now_utc(),
+                        'ca' => now_utc(),
+                    ]
+                );
+            }
+
+            return $membershipId;
+        } finally {
+            $tenant->setTenant($prevStokvel, $prevMembership, $prevPermissions, $prevModules);
+        }
+    }
+
+    /** @return list<array{code:string,name:string}> */
+    private function assignableRoles(): array
+    {
+        try {
+            return $this->db()->fetchAll(
+                "SELECT code, name FROM roles
+                 WHERE stokvel_id IS NULL AND (scope = 'user' OR scope IS NULL OR scope = '')
+                 ORDER BY name ASC"
+            );
+        } catch (\Throwable) {
+            return $this->db()->fetchAll(
+                'SELECT code, name FROM roles WHERE stokvel_id IS NULL ORDER BY name ASC'
+            );
+        }
     }
 
     /** @return list<array{code: string, label: string}> */

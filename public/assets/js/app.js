@@ -376,6 +376,189 @@
     });
   }
 
+  function b64urlToBuf(s) {
+    s = String(s || '');
+    var pad = '='.repeat((4 - (s.length % 4)) % 4);
+    var b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var bin = atob(b64);
+    var buf = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return buf.buffer;
+  }
+
+  function bufToB64url(buf) {
+    var bytes = new Uint8Array(buf);
+    var str = '';
+    for (var i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function csrfToken() {
+    var meta = qs('meta[name="csrf-token"]');
+    if (meta && meta.content) return meta.content;
+    var input = qs('input[name="_token"]');
+    return input ? input.value : '';
+  }
+
+  function initPasskeyRegister() {
+    var root = doc.getElementById('passkey-section');
+    var btn = doc.getElementById('register-passkey-btn');
+    var status = doc.getElementById('passkey-status');
+    if (!root || !btn) return;
+
+    btn.addEventListener('click', async function () {
+      if (!window.PublicKeyCredential) {
+        if (status) status.textContent = 'Passkeys are not supported in this browser.';
+        return;
+      }
+      if (status) status.textContent = 'Waiting for authenticator…';
+      try {
+        var optRes = await fetch(root.dataset.optionsUrl, {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' }
+        });
+        var optJson = await optRes.json();
+        if (!optJson.ok) throw new Error(optJson.error || 'Could not start registration');
+        var o = optJson.options;
+        var publicKey = {
+          challenge: b64urlToBuf(o.challenge),
+          rp: o.rp,
+          user: {
+            id: b64urlToBuf(o.user.id),
+            name: o.user.name,
+            displayName: o.user.displayName
+          },
+          pubKeyCredParams: o.pubKeyCredParams,
+          timeout: o.timeout,
+          attestation: o.attestation,
+          authenticatorSelection: o.authenticatorSelection,
+          excludeCredentials: (o.excludeCredentials || []).map(function (c) {
+            return { type: c.type, id: b64urlToBuf(c.id) };
+          })
+        };
+        var cred = await navigator.credentials.create({ publicKey: publicKey });
+        if (!cred) throw new Error('No credential returned');
+        var att = cred.response;
+        var publicKeyB64 = '';
+        var algorithm = -7;
+        if (typeof att.getPublicKey === 'function') {
+          var pk = att.getPublicKey();
+          if (pk) publicKeyB64 = bufToB64url(pk);
+          if (typeof att.getPublicKeyAlgorithm === 'function') {
+            algorithm = att.getPublicKeyAlgorithm();
+          }
+        }
+        if (!publicKeyB64) {
+          throw new Error('Browser did not expose getPublicKey(). Use a current Chrome, Edge, Safari, or Firefox.');
+        }
+        var labelInput = doc.getElementById('passkey_label');
+        var label = (labelInput && labelInput.value) ? labelInput.value : 'Passkey';
+        var body = {
+          id: cred.id,
+          rawId: bufToB64url(cred.rawId),
+          clientDataJSON: bufToB64url(att.clientDataJSON),
+          publicKey: publicKeyB64,
+          algorithm: algorithm,
+          label: label
+        };
+        var reg = await fetch(root.dataset.registerUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': root.dataset.csrf || csrfToken()
+          },
+          body: JSON.stringify(body)
+        });
+        var regJson = await reg.json();
+        if (!regJson.ok) throw new Error(regJson.error || 'Registration failed');
+        if (status) status.textContent = 'Passkey registered. Reloading…';
+        window.location.reload();
+      } catch (err) {
+        if (status) {
+          status.textContent = err && err.message ? err.message : 'Passkey registration failed.';
+        }
+      }
+    });
+  }
+
+  function initPasskeyLogin() {
+    var root = qs('[data-mfa-passkey]');
+    var btn = doc.getElementById('mfa-passkey-btn');
+    var err = doc.getElementById('mfa-passkey-error');
+    if (!btn || !root) return;
+    if (!window.PublicKeyCredential) {
+      btn.hidden = true;
+      return;
+    }
+
+    btn.addEventListener('click', async function () {
+      if (err) err.hidden = true;
+      try {
+        var optRes = await fetch(root.dataset.optionsUrl, { credentials: 'same-origin' });
+        var optJson = await optRes.json();
+        if (!optJson.ok) throw new Error(optJson.error || 'Could not start passkey login');
+        var o = optJson.options;
+        o.challenge = b64urlToBuf(o.challenge);
+        if (o.allowCredentials) {
+          o.allowCredentials = o.allowCredentials.map(function (c) {
+            c.id = b64urlToBuf(c.id);
+            return c;
+          });
+        }
+        var cred = await navigator.credentials.get({ publicKey: o });
+        var body = {
+          id: cred.id,
+          rawId: bufToB64url(cred.rawId),
+          type: cred.type,
+          response: {
+            clientDataJSON: bufToB64url(cred.response.clientDataJSON),
+            authenticatorData: bufToB64url(cred.response.authenticatorData),
+            signature: bufToB64url(cred.response.signature),
+            userHandle: cred.response.userHandle ? bufToB64url(cred.response.userHandle) : null
+          }
+        };
+        var verifyRes = await fetch(root.dataset.verifyUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': csrfToken()
+          },
+          body: JSON.stringify(body)
+        });
+        var verifyJson = await verifyRes.json();
+        if (!verifyJson.ok) throw new Error(verifyJson.error || 'Passkey failed');
+        window.location.href = verifyJson.redirect || root.dataset.redirectUrl || '/';
+      } catch (e) {
+        if (err) {
+          err.textContent = e.message || 'Passkey sign-in failed';
+          err.hidden = false;
+        }
+      }
+    });
+  }
+
+  function initErrorGoBack() {
+    var btn = doc.getElementById('error-go-back');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var dash = btn.dataset.dashboardUrl || '/';
+      var safe = btn.dataset.safeBackUrl || '';
+      if (safe && safe !== dash) {
+        window.location.href = safe;
+        return;
+      }
+      if (window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+      window.location.href = dash;
+    });
+  }
+
   doc.addEventListener('DOMContentLoaded', function () {
     initDrawer();
     initDropdowns();
@@ -388,5 +571,8 @@
     initTabs();
     initCharts();
     initWysiwyg();
+    initPasskeyRegister();
+    initPasskeyLogin();
+    initErrorGoBack();
   });
 })();

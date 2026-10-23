@@ -1,6 +1,11 @@
+<?= view('partials/page-header', [
+    'title' => 'Invite member',
+    'description' => !empty($canAssignRoles)
+        ? 'Send an invitation. After they accept, an admin must approve before they become active.'
+        : 'Invite someone as an ordinary member. An admin must approve them after they accept.',
+], null) ?>
 <div class="card">
-    <h1>Invite member</h1>
-    <form method="post" action="<?= e(url('/app/members/invite')) ?>" class="form-stack">
+    <form method="post" action="<?= e(url(($inviteAction ?? '/app/members/invite'))) ?>" class="form-stack">
         <?= csrf_field() ?>
         <div class="form-group">
             <label for="email">Email</label>
@@ -10,6 +15,7 @@
             <label for="mobile">Mobile (optional)</label>
             <input type="tel" id="mobile" name="mobile" value="<?= e((string) old('mobile')) ?>">
         </div>
+        <?php if (!empty($canAssignRoles)): ?>
         <div class="form-group">
             <label for="role">Role</label>
             <select id="role" name="role" required>
@@ -18,6 +24,10 @@
                 <?php endforeach; ?>
             </select>
         </div>
+        <?php else: ?>
+            <input type="hidden" name="role" value="ordinary">
+            <p class="form-help">Invites from members are for ordinary membership only.</p>
+        <?php endif; ?>
         <button type="submit" class="btn btn-primary">Send invitation</button>
     </form>
 </div>

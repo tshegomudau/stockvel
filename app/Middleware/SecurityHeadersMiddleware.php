@@ -27,9 +27,11 @@ final class SecurityHeadersMiddleware implements MiddlewareInterface
                 "frame-ancestors 'none'",
                 "object-src 'none'",
                 "script-src 'self'",
-                "style-src 'self' 'unsafe-inline'",
+                // Google Fonts stylesheet + webfont files used by partials/styles.php
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+                "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
                 "img-src 'self' data:",
-                "font-src 'self'",
+                "font-src 'self' data: https://fonts.gstatic.com",
                 "connect-src 'self'",
             ];
             // Only upgrade insecure requests on HTTPS deployments.

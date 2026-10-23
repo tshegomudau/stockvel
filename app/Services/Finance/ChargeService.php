@@ -113,6 +113,71 @@ final class ChargeService
         );
     }
 
+    /**
+     * Capture historical / manual arrears without a fee structure (migration 016 makes fee version nullable).
+     */
+    public function createManualArrear(
+        int $stokvelId,
+        int $membershipId,
+        string $amount,
+        string $dueDate,
+        string $description = 'Historical arrears',
+        ?string $periodLabel = null
+    ): int {
+        $member = $this->db->fetch(
+            'SELECT id FROM memberships WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => $membershipId, 'sid' => $stokvelId]
+        );
+        if (!$member) {
+            throw new FinanceException('Member not found in this stokvel.');
+        }
+
+        $normalized = MoneyMath::normalize($amount);
+        if ((float) $normalized <= 0) {
+            throw new FinanceException('Arrears amount must be greater than zero.');
+        }
+        if (strtotime($dueDate) === false) {
+            throw new FinanceException('Invalid due date.');
+        }
+
+        $now = now_utc();
+        $periodStart = $periodLabel && preg_match('/^\d{4}-\d{2}/', $periodLabel)
+            ? substr($periodLabel, 0, 7) . '-01'
+            : substr($dueDate, 0, 7) . '-01';
+        $status = $dueDate < date('Y-m-d') ? self::STATUS_OVERDUE : self::STATUS_PENDING;
+        $code = 'ARR-' . $membershipId . '-' . str_replace('-', '', substr($dueDate, 0, 10)) . '-' . substr(bin2hex(random_bytes(3)), 0, 6);
+
+        try {
+            return (int) $this->db->insert(
+                'INSERT INTO member_charges
+                    (stokvel_id, membership_id, fee_structure_version_id, charge_code, description, amount, amount_paid,
+                     due_date, status, period_start, period_end, created_at, updated_at)
+                 VALUES
+                    (:stokvel_id, :membership_id, NULL, :charge_code, :description, :amount, :amount_paid,
+                     :due_date, :status, :period_start, :period_end, :created_at, :updated_at)',
+                [
+                    'stokvel_id' => $stokvelId,
+                    'membership_id' => $membershipId,
+                    'charge_code' => $code,
+                    'description' => $description !== '' ? $description : 'Historical arrears',
+                    'amount' => $normalized,
+                    'amount_paid' => '0.00',
+                    'due_date' => $dueDate,
+                    'status' => $status,
+                    'period_start' => $periodStart,
+                    'period_end' => $periodStart,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]
+            );
+        } catch (\Throwable $e) {
+            throw new FinanceException(
+                'Could not save arrears. Run migration 016 so charges can be captured without a fee structure. '
+                . $e->getMessage()
+            );
+        }
+    }
+
     public function markOverdue(int $stokvelId, ?string $asOfDate = null): int
     {
         $asOfDate = $asOfDate ?? (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d');

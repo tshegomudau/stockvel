@@ -23,19 +23,45 @@ final class RoleController extends Controller
             return $this->redirect('/app');
         }
 
-        $roles = $this->db()->fetchAll(
-            'SELECT r.*,
-                    (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id = r.id) AS permission_count
-             FROM roles r
-             WHERE r.stokvel_id IS NULL
-             ORDER BY r.name ASC'
-        );
+        $scope = trim((string) $request->query('scope', ''));
+        $params = [];
+        $where = 'r.stokvel_id IS NULL';
+        if (in_array($scope, ['platform', 'user'], true)) {
+            $where .= ' AND r.scope = :scope';
+            $params['scope'] = $scope;
+        }
+
+        try {
+            $roles = $this->db()->fetchAll(
+                "SELECT r.*,
+                        (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id = r.id) AS permission_count
+                 FROM roles r
+                 WHERE {$where}
+                 ORDER BY r.scope ASC, r.name ASC",
+                $params
+            );
+        } catch (\Throwable) {
+            // Pre-migration fallback without scope column.
+            $roles = $this->db()->fetchAll(
+                'SELECT r.*,
+                        (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id = r.id) AS permission_count
+                 FROM roles r
+                 WHERE r.stokvel_id IS NULL
+                 ORDER BY r.name ASC'
+            );
+            foreach ($roles as &$role) {
+                $code = (string) ($role['code'] ?? '');
+                $role['scope'] = str_starts_with($code, 'platform_') ? 'platform' : 'user';
+            }
+            unset($role);
+        }
 
         return $this->render('platform/roles/index', [
             'title' => 'Platform roles',
             'activeNav' => 'platform-roles',
             'navContext' => 'platform',
             'roles' => $roles,
+            'scopeFilter' => $scope,
         ]);
     }
 
@@ -62,31 +88,52 @@ final class RoleController extends Controller
         if (!$this->tenant()->isSuperAdmin()) {
             return $this->redirect('/platform/roles');
         }
+        $scope = (string) $request->input('scope', 'user');
+        if (!in_array($scope, ['platform', 'user'], true)) {
+            $scope = 'user';
+        }
         $data = [
             'code' => strtolower(trim((string) $request->input('code', ''))),
             'name' => trim((string) $request->input('name', '')),
             'description' => trim((string) $request->input('description', '')),
+            'scope' => $scope,
         ];
         $validator = Validator::make($data, [
             'code' => 'required|min:2',
             'name' => 'required|min:2',
+            'scope' => 'required|in:platform,user',
         ]);
         if ($validator->fails()) {
-            Session::flash('error', 'Role code and name are required.');
+            Session::flash('error', 'Role code, name, and category are required.');
             return $this->redirect('/platform/roles/create');
         }
         $now = now_utc();
-        $roleId = (int) $this->db()->insert(
-            'INSERT INTO roles (stokvel_id, code, name, description, is_system, created_at, updated_at)
-             VALUES (NULL, :code, :name, :desc, 0, :ca, :ua)',
-            [
-                'code' => $data['code'],
-                'name' => $data['name'],
-                'desc' => $data['description'] !== '' ? $data['description'] : null,
-                'ca' => $now,
-                'ua' => $now,
-            ]
-        );
+        try {
+            $roleId = (int) $this->db()->insert(
+                'INSERT INTO roles (stokvel_id, code, name, description, is_system, scope, created_at, updated_at)
+                 VALUES (NULL, :code, :name, :desc, 0, :scope, :ca, :ua)',
+                [
+                    'code' => $data['code'],
+                    'name' => $data['name'],
+                    'desc' => $data['description'] !== '' ? $data['description'] : null,
+                    'scope' => $data['scope'],
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+        } catch (\Throwable) {
+            $roleId = (int) $this->db()->insert(
+                'INSERT INTO roles (stokvel_id, code, name, description, is_system, created_at, updated_at)
+                 VALUES (NULL, :code, :name, :desc, 0, :ca, :ua)',
+                [
+                    'code' => $data['code'],
+                    'name' => $data['name'],
+                    'desc' => $data['description'] !== '' ? $data['description'] : null,
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+        }
         $this->syncPermissions($roleId, $request->input('permissions', []));
         Session::flash('success', 'Role created.');
         return $this->redirect('/platform/roles/' . $roleId . '/edit');
@@ -131,20 +178,38 @@ final class RoleController extends Controller
         $roleId = (int) $id;
         $name = trim((string) $request->input('name', ''));
         $description = trim((string) $request->input('description', ''));
+        $scope = (string) $request->input('scope', 'user');
+        if (!in_array($scope, ['platform', 'user'], true)) {
+            $scope = 'user';
+        }
         if ($name === '') {
             Session::flash('error', 'Name is required.');
             return $this->redirect('/platform/roles/' . $roleId . '/edit');
         }
-        $this->db()->exec(
-            'UPDATE roles SET name = :name, description = :desc, updated_at = :ua
-             WHERE id = :id AND stokvel_id IS NULL',
-            [
-                'name' => $name,
-                'desc' => $description !== '' ? $description : null,
-                'ua' => now_utc(),
-                'id' => $roleId,
-            ]
-        );
+        try {
+            $this->db()->exec(
+                'UPDATE roles SET name = :name, description = :desc, scope = :scope, updated_at = :ua
+                 WHERE id = :id AND stokvel_id IS NULL',
+                [
+                    'name' => $name,
+                    'desc' => $description !== '' ? $description : null,
+                    'scope' => $scope,
+                    'ua' => now_utc(),
+                    'id' => $roleId,
+                ]
+            );
+        } catch (\Throwable) {
+            $this->db()->exec(
+                'UPDATE roles SET name = :name, description = :desc, updated_at = :ua
+                 WHERE id = :id AND stokvel_id IS NULL',
+                [
+                    'name' => $name,
+                    'desc' => $description !== '' ? $description : null,
+                    'ua' => now_utc(),
+                    'id' => $roleId,
+                ]
+            );
+        }
         $this->syncPermissions($roleId, $request->input('permissions', []));
         Session::flash('success', 'Role updated.');
         return $this->redirect('/platform/roles/' . $roleId . '/edit');

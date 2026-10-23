@@ -18,6 +18,15 @@
         <input id="name" name="name" required value="<?= e($role['name'] ?? '') ?>">
     </div>
     <div class="form-group">
+        <label class="form-label" for="scope">Role category</label>
+        <?php $scope = (string) ($role['scope'] ?? old('scope', 'user')); ?>
+        <select id="scope" name="scope" required>
+            <option value="user"<?= $scope === 'user' ? ' selected' : '' ?>>User (stokvel member roles)</option>
+            <option value="platform"<?= $scope === 'platform' ? ' selected' : '' ?>>Platform (staff roles)</option>
+        </select>
+        <p class="form-help">Platform roles are for stockvel operators. User roles are assigned to stokvel members.</p>
+    </div>
+    <div class="form-group">
         <label class="form-label" for="description">Description</label>
         <textarea id="description" name="description" rows="2"><?= e($role['description'] ?? '') ?></textarea>
     </div>

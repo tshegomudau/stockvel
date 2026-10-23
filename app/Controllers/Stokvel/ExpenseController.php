@@ -21,26 +21,68 @@ final class ExpenseController extends Controller
         $sid = $this->requireStokvel();
         $page = $this->page($request);
         $perPage = $this->perPage($request);
+
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
+        $categoryId = (int) $request->query('category_id', 0);
+        $allowedStatuses = ['requested', 'approved', 'rejected', 'paid', 'reversed'];
+
+        $where = 'e.stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $where .= ' AND e.status = :status';
+            $params['status'] = $status;
+        }
+        if ($categoryId > 0) {
+            $where .= ' AND e.expense_category_id = :cat';
+            $params['cat'] = $categoryId;
+        }
+        if ($q !== '') {
+            $where .= ' AND (e.description LIKE :q_desc OR e.vendor_name LIKE :q_vendor OR e.expense_ref LIKE :q_ref)';
+            $like = '%' . $q . '%';
+            $params['q_desc'] = $like;
+            $params['q_vendor'] = $like;
+            $params['q_ref'] = $like;
+        }
+
+        $filterQuery = array_filter([
+            'status' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : null,
+            'category_id' => $categoryId > 0 ? $categoryId : null,
+            'q' => $q !== '' ? $q : null,
+        ], static fn ($v) => $v !== null);
+
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM expenses WHERE stokvel_id = :sid',
+            'SELECT COUNT(*) AS c FROM expenses e WHERE ' . $where,
             'SELECT e.*, ec.name AS category_name,
                     TRIM(CONCAT(COALESCE(p.first_name, \'\'), \' \', COALESCE(p.last_name, \'\'))) AS captured_by_name
              FROM expenses e
              LEFT JOIN expense_categories ec ON ec.id = e.expense_category_id AND ec.stokvel_id = e.stokvel_id
              LEFT JOIN users u ON u.id = e.recorded_by_user_id
              LEFT JOIN user_profiles p ON p.user_id = u.id
-             WHERE e.stokvel_id = :sid ORDER BY e.created_at DESC',
-            ['sid' => $sid],
+             WHERE ' . $where . ' ORDER BY e.created_at DESC',
+            $params,
             $page,
             $perPage,
-            url('/app/expenses')
+            url('/app/expenses'),
+            $filterQuery
         );
+
+        $categories = $this->db()->fetchAll(
+            'SELECT id, name FROM expense_categories WHERE stokvel_id = :sid AND is_active = 1 ORDER BY name ASC',
+            ['sid' => $sid]
+        );
+
         return $this->render('stokvel/expenses/index', [
             'title' => 'Expenses',
             'activeNav' => 'expenses',
             'navContext' => 'app',
             'paginator' => $paginator,
+            'filterStatus' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : '',
+            'filterQ' => $q,
+            'filterCategoryId' => $categoryId,
+            'filterCategories' => $categories,
+            'statusOptions' => $allowedStatuses,
         ]);
     }
 

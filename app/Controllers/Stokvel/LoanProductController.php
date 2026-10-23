@@ -20,14 +20,30 @@ final class LoanProductController extends Controller
     {
         $this->requirePermission('loans.manage');
         $sid = $this->requireStokvel();
+
+        $q = trim((string) $request->query('q', ''));
+        $where = 'stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($q !== '') {
+            $where .= ' AND (name LIKE :q_name OR code LIKE :q_code)';
+            $like = '%' . $q . '%';
+            $params['q_name'] = $like;
+            $params['q_code'] = $like;
+        }
+
+        $filterQuery = array_filter([
+            'q' => $q !== '' ? $q : null,
+        ], static fn ($v) => $v !== null);
+
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM loan_products WHERE stokvel_id = :sid',
-            'SELECT * FROM loan_products WHERE stokvel_id = :sid ORDER BY name ASC',
-            ['sid' => $sid],
+            'SELECT COUNT(*) AS c FROM loan_products WHERE ' . $where,
+            'SELECT * FROM loan_products WHERE ' . $where . ' ORDER BY name ASC',
+            $params,
             $this->page($request),
             $this->perPage($request),
-            url('/app/loans/products')
+            url('/app/loans/products'),
+            $filterQuery
         );
 
         /** @var LoanProductService $products */
@@ -50,6 +66,7 @@ final class LoanProductController extends Controller
             'activeNav' => 'loans',
             'navContext' => 'app',
             'paginator' => $paginator,
+            'filterQ' => $q,
         ]);
     }
 

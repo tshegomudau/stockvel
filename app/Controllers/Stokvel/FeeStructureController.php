@@ -21,20 +21,47 @@ final class FeeStructureController extends Controller
         $sid = $this->requireStokvel();
         $page = $this->page($request);
         $perPage = $this->perPage($request);
+
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
+        $allowedStatuses = ['active', 'inactive'];
+
+        $where = 'stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $where .= ' AND status = :status';
+            $params['status'] = $status;
+        }
+        if ($q !== '') {
+            $where .= ' AND (name LIKE :q_name OR code LIKE :q_code)';
+            $like = '%' . $q . '%';
+            $params['q_name'] = $like;
+            $params['q_code'] = $like;
+        }
+
+        $filterQuery = array_filter([
+            'status' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : null,
+            'q' => $q !== '' ? $q : null,
+        ], static fn ($v) => $v !== null);
+
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM fee_structures WHERE stokvel_id = :sid',
-            'SELECT * FROM fee_structures WHERE stokvel_id = :sid ORDER BY created_at DESC',
-            ['sid' => $sid],
+            'SELECT COUNT(*) AS c FROM fee_structures WHERE ' . $where,
+            'SELECT * FROM fee_structures WHERE ' . $where . ' ORDER BY created_at DESC',
+            $params,
             $page,
             $perPage,
-            url('/app/fees')
+            url('/app/fees'),
+            $filterQuery
         );
         return $this->render('stokvel/fees/index', [
             'title' => 'Fee structures',
             'activeNav' => 'fees',
             'navContext' => 'app',
             'paginator' => $paginator,
+            'filterStatus' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : '',
+            'filterQ' => $q,
+            'statusOptions' => $allowedStatuses,
         ]);
     }
 

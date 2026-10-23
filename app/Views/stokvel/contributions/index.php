@@ -8,9 +8,30 @@
     <a class="btn btn-secondary" href="<?= e(url('/app/contributions/import')) ?>">CSV import</a>
     <a class="btn btn-secondary" href="<?= e(url('/app/contributions/arrears')) ?>">Arrears</a>
 </div>
+<form method="get" action="<?= e(url('/app/contributions')) ?>" class="filter-bar" role="search">
+    <div class="form-group">
+        <label for="q">Search</label>
+        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Member name">
+    </div>
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            <option value="">All</option>
+            <?php foreach ($statusOptions ?? ['completed', 'pending', 'failed', 'reversed'] as $st): ?>
+                <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-secondary">Filter</button>
+        <?php if (($filterQ ?? '') !== '' || ($filterStatus ?? '') !== ''): ?>
+            <a class="btn btn-ghost" href="<?= e(url('/app/contributions')) ?>">Clear</a>
+        <?php endif; ?>
+    </div>
+</form>
 <?php $list = isset($paginator) ? $paginator->items : ($rows ?? []); ?>
 <?php if (empty($list)): ?>
-    <?= view('partials/empty', ['emptyTitle' => 'No contributions yet', 'emptyMessage' => 'Record a payment to see it listed here.', 'emptyActionUrl' => url('/app/contributions/create'), 'emptyActionLabel' => 'Record payment'], null) ?>
+    <?= view('partials/empty', ['emptyTitle' => 'No contributions match', 'emptyMessage' => 'Try clearing filters, or record a payment.', 'emptyActionUrl' => url('/app/contributions/create'), 'emptyActionLabel' => 'Record payment'], null) ?>
 <?php else: ?>
 <div class="table-wrap">
 <table class="table">

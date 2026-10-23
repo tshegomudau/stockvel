@@ -24,20 +24,48 @@ final class MeetingController extends Controller
         $sid = $this->requireStokvel();
         $page = $this->page($request);
         $perPage = $this->perPage($request);
+
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
+        $allowedStatuses = ['scheduled', 'completed', 'cancelled'];
+
+        $where = 'stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $where .= ' AND status = :status';
+            $params['status'] = $status;
+        }
+        if ($q !== '') {
+            $where .= ' AND (title LIKE :q_title OR venue LIKE :q_venue OR meeting_ref LIKE :q_ref)';
+            $like = '%' . $q . '%';
+            $params['q_title'] = $like;
+            $params['q_venue'] = $like;
+            $params['q_ref'] = $like;
+        }
+
+        $filterQuery = array_filter([
+            'status' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : null,
+            'q' => $q !== '' ? $q : null,
+        ], static fn ($v) => $v !== null);
+
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM meetings WHERE stokvel_id = :sid',
-            'SELECT * FROM meetings WHERE stokvel_id = :sid ORDER BY scheduled_at DESC',
-            ['sid' => $sid],
+            'SELECT COUNT(*) AS c FROM meetings WHERE ' . $where,
+            'SELECT * FROM meetings WHERE ' . $where . ' ORDER BY scheduled_at DESC',
+            $params,
             $page,
             $perPage,
-            url('/app/meetings')
+            url('/app/meetings'),
+            $filterQuery
         );
         return $this->render('stokvel/meetings/index', [
             'title' => 'Meetings',
             'activeNav' => 'meetings',
             'navContext' => 'app',
             'paginator' => $paginator,
+            'filterStatus' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : '',
+            'filterQ' => $q,
+            'statusOptions' => $allowedStatuses,
         ]);
     }
 

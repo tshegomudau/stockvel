@@ -28,7 +28,7 @@ Edit `.env`:
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` |
 | `DB_DATABASE` | `stockvel` |
 | `DB_USERNAME` / `DB_PASSWORD` | your MySQL user |
-| `APP_URL` | `http://127.0.0.1:8090` |
+| `APP_URL` | Prefer matching the browser host (e.g. `http://localhost`). Assets use the live request origin when available so CSP `self` works even if this differs. For Apache under `/projects/stovel/public/`, leave `APP_BASE_PATH` empty (auto-detected) or set it to `/projects/stovel/public`. Ensure `storage/sessions` is writable by the web user (`chmod 1777 storage/sessions`). |
 | `APP_KEY` | any long random string |
 | `MAIL_DRIVER` | `log` |
 | `PAYMENT_DRIVER` | `mock` |

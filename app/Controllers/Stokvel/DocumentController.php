@@ -20,12 +20,28 @@ final class DocumentController extends Controller
         $this->requirePermission('documents.view');
         $sid = $this->requireStokvel();
         $categoryFilter = (int) $request->query('category_id', 0);
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
+        $allowedStatuses = ['active'];
+
         $params = ['sid' => $sid];
         $where = "d.stokvel_id = :sid AND d.status <> 'deleted'";
         if ($categoryFilter > 0) {
             $where .= ' AND d.document_category_id = :cat';
             $params['cat'] = $categoryFilter;
         }
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $where .= ' AND d.status = :status';
+            $params['status'] = $status;
+        }
+        if ($q !== '') {
+            $where .= ' AND (d.title LIKE :q_title OR d.document_ref LIKE :q_ref OR d.category LIKE :q_cat)';
+            $like = '%' . $q . '%';
+            $params['q_title'] = $like;
+            $params['q_ref'] = $like;
+            $params['q_cat'] = $like;
+        }
+
         $documents = $this->db()->fetchAll(
             "SELECT d.*, dc.name AS category_name, dc.code AS category_code
              FROM documents d
@@ -46,6 +62,9 @@ final class DocumentController extends Controller
             'documents' => $documents,
             'filterCategories' => $filterCategories,
             'filterCategoryId' => $categoryFilter,
+            'filterStatus' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : '',
+            'filterQ' => $q,
+            'statusOptions' => $allowedStatuses,
         ]);
     }
 

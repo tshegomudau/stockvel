@@ -22,28 +22,62 @@ final class LoanController extends Controller
         $sid = $this->requireStokvel();
         $page = $this->page($request);
         $perPage = $this->perPage($request);
+
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
+        $allowedStatuses = ['submitted', 'approved', 'rejected', 'cancelled', 'disbursed'];
+
+        $where = 'la.stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $where .= ' AND la.status = :status';
+            $params['status'] = $status;
+        }
+        if ($q !== '') {
+            $where .= ' AND (p.first_name LIKE :q_fn OR p.last_name LIKE :q_ln
+                OR CONCAT(COALESCE(p.first_name, \'\'), \' \', COALESCE(p.last_name, \'\')) LIKE :q_full
+                OR la.application_ref LIKE :q_ref OR lp.name LIKE :q_product)';
+            $like = '%' . $q . '%';
+            $params['q_fn'] = $like;
+            $params['q_ln'] = $like;
+            $params['q_full'] = $like;
+            $params['q_ref'] = $like;
+            $params['q_product'] = $like;
+        }
+
+        $filterQuery = array_filter([
+            'status' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : null,
+            'q' => $q !== '' ? $q : null,
+        ], static fn ($v) => $v !== null);
+
+        $joins = 'LEFT JOIN memberships sm ON sm.id = la.membership_id
+             LEFT JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             LEFT JOIN loan_products lp ON lp.id = la.loan_product_id';
+
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM loan_applications WHERE stokvel_id = :sid',
+            'SELECT COUNT(*) AS c FROM loan_applications la ' . $joins . ' WHERE ' . $where,
             'SELECT la.*, la.application_ref, la.requested_amount, la.membership_id AS member_id,
                     p.first_name, p.last_name, lp.name AS product_name
              FROM loan_applications la
-             LEFT JOIN memberships sm ON sm.id = la.membership_id
-             LEFT JOIN users u ON u.id = sm.user_id
-             LEFT JOIN user_profiles p ON p.user_id = u.id
-             LEFT JOIN loan_products lp ON lp.id = la.loan_product_id
-             WHERE la.stokvel_id = :sid
+             ' . $joins . '
+             WHERE ' . $where . '
              ORDER BY la.created_at DESC',
-            ['sid' => $sid],
+            $params,
             $page,
             $perPage,
-            url('/app/loans')
+            url('/app/loans'),
+            $filterQuery
         );
         return $this->render('stokvel/loans/index', [
             'title' => 'Loans',
             'activeNav' => 'loans',
             'navContext' => 'app',
             'paginator' => $paginator,
+            'filterStatus' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : '',
+            'filterQ' => $q,
+            'statusOptions' => $allowedStatuses,
         ]);
     }
 

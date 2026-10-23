@@ -2,7 +2,7 @@
     <h1>Edit member</h1>
     <a class="btn" href="<?= e(url('/app/members/' . ($member['id'] ?? ''))) ?>">Back to profile</a>
 </div>
-<p class="text-muted mb-4">Changes are sent to the member for approval before they take effect.</p>
+<p class="text-muted mb-4">Profile fields are sent to the member for approval. Minimum contribution is saved immediately.</p>
 <form method="post" action="<?= e(url('/app/members/' . ($member['id'] ?? ''))) ?>" class="form-stack card">
     <?= csrf_field() ?>
     <div class="form-grid two-col">
@@ -24,6 +24,13 @@
         <input id="id_number" name="id_number" value="" placeholder="<?= e($idMasked ?? '••••') ?>" autocomplete="off">
         <p class="form-help">Leave blank to keep the current encrypted value. Stored encrypted when the member approves.</p>
     </div>
+    <div class="form-group">
+        <label class="form-label" for="minimum_contribution">Minimum contribution for this member (ZAR)</label>
+        <input id="minimum_contribution" name="minimum_contribution" type="number" step="0.01" min="0"
+               value="<?= e((string) old('minimum_contribution', (string) ($member['minimum_contribution'] ?? ''))) ?>"
+               placeholder="<?= e(($defaultMinimumContribution ?? null) !== null && $defaultMinimumContribution !== '' ? (string) $defaultMinimumContribution : 'Stokvel default') ?>">
+        <p class="form-help">Leave blank to use the stokvel default<?= ($defaultMinimumContribution ?? null) !== null && $defaultMinimumContribution !== '' ? ' (R ' . e(number_format((float) $defaultMinimumContribution, 2)) . ')' : '' ?>. Saved immediately.</p>
+    </div>
     <p class="text-muted">Email: <?= e($member['email'] ?? '') ?> (not changed here)</p>
-    <button class="btn btn-primary" type="submit">Submit for member approval</button>
+    <button class="btn btn-primary" type="submit">Save</button>
 </form>

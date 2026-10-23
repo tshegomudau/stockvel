@@ -21,23 +21,53 @@ final class PayoutController extends Controller
         $sid = $this->requireStokvel();
         $page = $this->page($request);
         $perPage = $this->perPage($request);
+
+        $status = trim((string) $request->query('status', ''));
+        $q = trim((string) $request->query('q', ''));
+        $allowedStatuses = ['planning', 'approved', 'paid', 'cancelled'];
+
+        $where = 'pc.stokvel_id = :sid';
+        $params = ['sid' => $sid];
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $where .= ' AND pc.status = :status';
+            $params['status'] = $status;
+        }
+        if ($q !== '') {
+            $where .= ' AND (pc.name LIKE :q_name OR pc.cycle_code LIKE :q_code OR cat.name LIKE :q_cat)';
+            $like = '%' . $q . '%';
+            $params['q_name'] = $like;
+            $params['q_code'] = $like;
+            $params['q_cat'] = $like;
+        }
+
+        $filterQuery = array_filter([
+            'status' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : null,
+            'q' => $q !== '' ? $q : null,
+        ], static fn ($v) => $v !== null);
+
+        $joins = 'LEFT JOIN payout_categories cat ON cat.id = pc.payout_category_id AND cat.stokvel_id = pc.stokvel_id';
+
         $paginator = Paginator::fromQuery(
             $this->db(),
-            'SELECT COUNT(*) AS c FROM payout_cycles WHERE stokvel_id = :sid',
+            'SELECT COUNT(*) AS c FROM payout_cycles pc ' . $joins . ' WHERE ' . $where,
             'SELECT pc.*, cat.name AS category_name, cat.code AS category_code
              FROM payout_cycles pc
-             LEFT JOIN payout_categories cat ON cat.id = pc.payout_category_id AND cat.stokvel_id = pc.stokvel_id
-             WHERE pc.stokvel_id = :sid ORDER BY pc.created_at DESC',
-            ['sid' => $sid],
+             ' . $joins . '
+             WHERE ' . $where . ' ORDER BY pc.created_at DESC',
+            $params,
             $page,
             $perPage,
-            url('/app/payouts')
+            url('/app/payouts'),
+            $filterQuery
         );
         return $this->render('stokvel/payouts/index', [
             'title' => 'Payouts',
             'activeNav' => 'payouts',
             'navContext' => 'app',
             'paginator' => $paginator,
+            'filterStatus' => $status !== '' && in_array($status, $allowedStatuses, true) ? $status : '',
+            'filterQ' => $q,
+            'statusOptions' => $allowedStatuses,
         ]);
     }
 

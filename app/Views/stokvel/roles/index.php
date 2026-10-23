@@ -10,8 +10,14 @@
         'emptyMessage' => 'Stokvel roles could not be loaded.',
     ], null) ?>
 <?php else: ?>
+<form class="filter-bar" role="search" onsubmit="return false;">
+    <div class="form-group">
+        <label for="role-search">Search</label>
+        <input type="search" id="role-search" placeholder="Role name or code" data-table-filter="roles-table">
+    </div>
+</form>
 <div class="table-wrap">
-    <table class="table">
+    <table class="table" id="roles-table">
         <thead>
             <tr>
                 <th>Role</th>

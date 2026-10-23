@@ -34,10 +34,13 @@ $appLinks = [
 $memberLinks = [
     'member-dashboard' => ['label' => 'Dashboard', 'url' => route('member.dashboard')],
     'member-statement' => ['label' => 'Statement', 'url' => route('member.statement')],
+    'member-beneficiaries' => ['label' => 'Beneficiaries', 'url' => url('/member/beneficiaries')],
+    'member-invite' => ['label' => 'Invite member', 'url' => url('/member/invite'), 'permission' => 'members.invite'],
     'member-loans' => ['label' => 'Apply for loan', 'url' => url('/member/loans/apply'), 'module' => 'loans', 'show' => $loansEnabled],
     'member-meetings' => ['label' => 'Meetings', 'url' => url('/member/meetings'), 'module' => 'meetings'],
     'member-documents' => ['label' => 'Documents', 'url' => url('/member/documents'), 'module' => 'documents'],
     'member-change-requests' => ['label' => 'Change requests', 'url' => url('/member/change-requests')],
+    'member-support' => ['label' => 'Support / log bug', 'url' => url('/member/support')],
     'member-notifications' => ['label' => 'Notifications', 'url' => url('/member/notifications')],
     'member-profile' => ['label' => 'Profile', 'url' => route('member.profile')],
 ];

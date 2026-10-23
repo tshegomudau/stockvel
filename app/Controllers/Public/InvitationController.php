@@ -61,8 +61,8 @@ final class InvitationController extends Controller
             return $this->redirect('/');
         }
 
-        Session::flash('success', 'Invitation accepted. Welcome to the stokvel.');
-        return $this->redirect('/app');
+        Session::flash('success', 'Invitation accepted. An admin must approve your membership before you can use the stokvel.');
+        return $this->redirect('/member');
     }
 
     public function reject(Request $request, string $token): Response

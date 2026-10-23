@@ -32,10 +32,7 @@ final class Request
 
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
         $path = parse_url($uri, PHP_URL_PATH) ?: '/';
-        $scriptName = dirname($_SERVER['SCRIPT_NAME'] ?? '');
-        if ($scriptName !== '/' && str_starts_with($path, $scriptName)) {
-            $path = substr($path, strlen($scriptName)) ?: '/';
-        }
+        $path = self::stripApplicationBase($path);
 
         return new self($method, $path, $_GET, $body, $_SERVER, $_COOKIE, $_FILES);
     }
@@ -113,5 +110,65 @@ final class Request
     public function rawBody(): string
     {
         return file_get_contents('php://input') ?: '';
+    }
+
+    /**
+     * Strip subdirectory / public front-controller prefixes so routes match "/login"
+     * for installs like http://localhost/projects/stovel/public/login.
+     */
+    private static function stripApplicationBase(string $path): string
+    {
+        $path = '/' . ltrim(str_replace('\\', '/', $path), '/');
+        if ($path !== '/' && str_ends_with($path, '/')) {
+            $path = rtrim($path, '/') ?: '/';
+        }
+
+        // Prefer PATH_INFO when the front controller is invoked as index.php/login.
+        $pathInfo = $_SERVER['PATH_INFO'] ?? null;
+        if (is_string($pathInfo) && $pathInfo !== '' && $pathInfo !== '/') {
+            $path = '/' . ltrim(str_replace('\\', '/', $pathInfo), '/');
+        }
+
+        $candidates = [];
+        if (function_exists('base_path_uri')) {
+            $base = base_path_uri();
+            if ($base !== '') {
+                $candidates[] = $base;
+            }
+        }
+
+        $scriptName = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        $scriptDir = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
+        if ($scriptDir !== '' && $scriptDir !== '/' && $scriptDir !== '.') {
+            $candidates[] = $scriptDir;
+            // Also try parent of /public (some installs rewrite away "public").
+            if (str_ends_with($scriptDir, '/public')) {
+                $candidates[] = substr($scriptDir, 0, -7) ?: '';
+            }
+        }
+
+        $candidates = array_values(array_unique(array_filter($candidates, static fn ($c) => $c !== '')));
+        usort($candidates, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        foreach ($candidates as $base) {
+            if ($path === $base) {
+                $path = '/';
+                break;
+            }
+            if (str_starts_with($path, $base . '/')) {
+                $path = substr($path, strlen($base)) ?: '/';
+                break;
+            }
+        }
+
+        // Direct hits on the front controller file.
+        if ($path === '/index.php' || $path === '/router.php') {
+            $path = '/';
+        }
+        if (str_starts_with($path, '/index.php/')) {
+            $path = substr($path, strlen('/index.php')) ?: '/';
+        }
+
+        return $path === '' ? '/' : $path;
     }
 }

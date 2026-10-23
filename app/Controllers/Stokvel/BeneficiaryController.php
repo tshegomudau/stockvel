@@ -123,63 +123,26 @@ final class BeneficiaryController extends Controller
             return $this->redirect('/app/beneficiaries/create');
         }
 
+        // Committee-added beneficiaries require member approval before they apply.
         try {
-            $this->assertShareTotal($sid, (int) $data['membership_id'], (float) $data['share_percent'], null);
-        } catch (\RuntimeException $e) {
+            $service = app()->container()->get(\App\Services\Membership\MemberChangeRequestService::class);
+            $service->submit($sid, (int) $data['membership_id'], (int) $this->userId(), 'beneficiary_create', [
+                'full_name' => $data['full_name'],
+                'id_number' => $data['id_number'],
+                'relationship' => $data['relationship'],
+                'share_percent' => (float) $data['share_percent'],
+                'phone' => $data['phone'],
+                'email' => $data['email'],
+                'is_primary' => !empty($data['is_primary']) ? 1 : 0,
+            ]);
+            Session::flash('success', 'Beneficiary submitted for member approval. Active shares must total 100%.');
+        } catch (\Throwable $e) {
             $this->flashOld($request);
-            Session::flash('error', $e->getMessage());
+            Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Could not submit beneficiary.');
             return $this->redirect('/app/beneficiaries/create');
         }
 
-        $now = now_utc();
-        $idNumber = $this->maskedIdNumber((string) $data['id_number']);
-        $isPrimary = !empty($data['is_primary']) ? 1 : 0;
-
-        if ($isPrimary === 1) {
-            $this->clearPrimary((int) $data['membership_id'], $sid);
-        }
-
-        $id = (int) $this->db()->insert(
-            'INSERT INTO beneficiaries
-                (stokvel_id, membership_id, full_name, id_number, relationship, share_percent, phone, email, is_primary, status, created_at, updated_at)
-             VALUES
-                (:sid, :mid, :name, :idn, :rel, :share, :phone, :email, :primary, :status, :ca, :ua)',
-            [
-                'sid' => $sid,
-                'mid' => (int) $data['membership_id'],
-                'name' => $data['full_name'],
-                'idn' => $idNumber,
-                'rel' => $data['relationship'],
-                'share' => (float) $data['share_percent'],
-                'phone' => $this->nullable($data['phone']),
-                'email' => $this->nullable($data['email']),
-                'primary' => $isPrimary,
-                'status' => 'active',
-                'ca' => $now,
-                'ua' => $now,
-            ]
-        );
-
-        $this->audit()->log(
-            'beneficiary.created',
-            'beneficiary',
-            $id,
-            null,
-            [
-                'membership_id' => (int) $data['membership_id'],
-                'full_name' => $data['full_name'],
-                'relationship' => $data['relationship'],
-                'share_percent' => (float) $data['share_percent'],
-                'is_primary' => $isPrimary,
-                'status' => 'active',
-            ],
-            ['user_id' => $this->userId()],
-            $sid,
-            $this->userId()
-        );
-
-        Session::flash('success', 'Beneficiary added.');
-        return $this->redirect('/app/beneficiaries/' . $id);
+        return $this->redirect('/app/beneficiaries');
     }
 
     public function show(Request $request, string $id): Response
@@ -255,84 +218,26 @@ final class BeneficiaryController extends Controller
             return $this->redirect('/app/beneficiaries/' . $id . '/edit');
         }
 
-        $status = in_array($data['status'], ['active', 'inactive'], true)
-            ? $data['status']
-            : (string) ($existing['status'] ?? 'active');
-
-        if ($status === 'active') {
-            try {
-                $this->assertShareTotal($sid, (int) $data['membership_id'], (float) $data['share_percent'], (int) $id);
-            } catch (\RuntimeException $e) {
-                $this->flashOld($request);
-                Session::flash('error', $e->getMessage());
-                return $this->redirect('/app/beneficiaries/' . $id . '/edit');
-            }
-        }
-
-        $isPrimary = !empty($data['is_primary']) ? 1 : 0;
-        $idNumberInput = trim((string) $data['id_number']);
-        $idNumber = $idNumberInput !== ''
-            ? $this->maskedIdNumber($idNumberInput)
-            : ($existing['id_number'] ?? null);
-
-        if ($isPrimary === 1) {
-            $this->clearPrimary((int) $data['membership_id'], $sid, (int) $id);
-        }
-
-        $this->db()->exec(
-            'UPDATE beneficiaries SET
-                membership_id = :mid,
-                full_name = :name,
-                id_number = :idn,
-                relationship = :rel,
-                share_percent = :share,
-                phone = :phone,
-                email = :email,
-                is_primary = :primary,
-                status = :status,
-                updated_at = :ua
-             WHERE id = :id AND stokvel_id = :sid',
-            [
-                'mid' => (int) $data['membership_id'],
-                'name' => $data['full_name'],
-                'idn' => $idNumber,
-                'rel' => $data['relationship'],
-                'share' => (float) $data['share_percent'],
-                'phone' => $this->nullable($data['phone']),
-                'email' => $this->nullable($data['email']),
-                'primary' => $isPrimary,
-                'status' => $status,
-                'ua' => now_utc(),
-                'id' => (int) $id,
-                'sid' => $sid,
-            ]
-        );
-
-        $this->audit()->log(
-            'beneficiary.updated',
-            'beneficiary',
-            (int) $id,
-            [
-                'full_name' => $existing['full_name'] ?? null,
-                'relationship' => $existing['relationship'] ?? null,
-                'share_percent' => $existing['share_percent'] ?? null,
-                'status' => $existing['status'] ?? null,
-                'membership_id' => $existing['membership_id'] ?? null,
-            ],
-            [
+        // Admin updates require member approval — members approve, not admins.
+        try {
+            $service = app()->container()->get(\App\Services\Membership\MemberChangeRequestService::class);
+            $service->submit($sid, (int) $data['membership_id'], (int) $this->userId(), 'beneficiary_update', [
+                'beneficiary_id' => (int) $id,
                 'full_name' => $data['full_name'],
+                'id_number' => $data['id_number'],
                 'relationship' => $data['relationship'],
                 'share_percent' => (float) $data['share_percent'],
-                'status' => $status,
-                'membership_id' => (int) $data['membership_id'],
-                'is_primary' => $isPrimary,
-            ],
-            ['user_id' => $this->userId()],
-            $sid,
-            $this->userId()
-        );
+                'phone' => $data['phone'],
+                'email' => $data['email'],
+                'is_primary' => !empty($data['is_primary']) ? 1 : 0,
+            ]);
+            Session::flash('success', 'Beneficiary update submitted for member approval.');
+        } catch (\Throwable $e) {
+            $this->flashOld($request);
+            Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Could not submit beneficiary update.');
+            return $this->redirect('/app/beneficiaries/' . $id . '/edit');
+        }
 
-        Session::flash('success', 'Beneficiary updated.');
         return $this->redirect('/app/beneficiaries/' . $id);
     }
 
@@ -347,24 +252,19 @@ final class BeneficiaryController extends Controller
         }
 
         $status = (string) ($existing['status'] ?? 'active');
-        // Prefer soft deactivate for active records; hard-delete only when inactive / unused.
+        // Active removals require member approval.
         if ($status === 'active') {
-            $this->db()->exec(
-                'UPDATE beneficiaries SET status = :status, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
-                ['status' => 'inactive', 'ua' => now_utc(), 'id' => (int) $id, 'sid' => $sid]
-            );
-            $this->audit()->log(
-                'beneficiary.deactivated',
-                'beneficiary',
-                (int) $id,
-                ['status' => 'active'],
-                ['status' => 'inactive', 'reason' => 'destroy_preferred_soft'],
-                ['user_id' => $this->userId()],
-                $sid,
-                $this->userId()
-            );
-            Session::flash('success', 'Beneficiary is active — deactivated instead of permanently deleted.');
-            return $this->redirect('/app/beneficiaries/' . $id);
+            try {
+                $service = app()->container()->get(\App\Services\Membership\MemberChangeRequestService::class);
+                $service->submit($sid, (int) $existing['membership_id'], (int) $this->userId(), 'beneficiary_delete', [
+                    'beneficiary_id' => (int) $id,
+                    'full_name' => $existing['full_name'] ?? '',
+                ]);
+                Session::flash('success', 'Beneficiary removal submitted for member approval.');
+            } catch (\Throwable $e) {
+                Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Could not submit removal.');
+            }
+            return $this->redirect('/app/beneficiaries');
         }
 
         $this->db()->exec(
@@ -469,6 +369,11 @@ final class BeneficiaryController extends Controller
         if (round($total, 2) > 100.01) {
             throw new \RuntimeException(
                 'Beneficiary shares would total ' . number_format($total, 2) . '% — keep the combined active share at or under 100%.'
+            );
+        }
+        if (round($total, 2) < 99.99) {
+            throw new \RuntimeException(
+                'Active beneficiary shares must total exactly 100% (currently ' . number_format($total, 2) . '%). Adjust other shares or this one.'
             );
         }
     }

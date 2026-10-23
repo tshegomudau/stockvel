@@ -61,22 +61,27 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
         </div>
         <button type="submit" class="btn btn-secondary">Save minimum contribution</button>
     </form>
-    <div class="toolbar mt-4">
-        <?php if (($member['status'] ?? '') === 'active'): ?>
-            <form method="post" action="<?= e(url('/app/members/' . $memberId . '/suspend')) ?>">
+    <div class="page-actions mt-4">
+        <?php if (in_array(($member['status'] ?? ''), ['pending', 'invited'], true)): ?>
+            <form method="post" action="<?= e(url('/app/members/' . $memberId . '/approve')) ?>" class="inline-form">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-primary" data-confirm="Approve this member?">Approve membership</button>
+            </form>
+        <?php elseif (($member['status'] ?? '') === 'active'): ?>
+            <form method="post" action="<?= e(url('/app/members/' . $memberId . '/suspend')) ?>" class="inline-form">
                 <?= csrf_field() ?>
                 <button type="submit" class="btn btn-danger" data-confirm="Suspend this member?">Suspend</button>
             </form>
+            <form method="post" action="<?= e(url('/app/members/' . $memberId . '/resign')) ?>" class="inline-form">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-secondary" data-confirm="Mark member as resigned?">Mark resigned</button>
+            </form>
         <?php else: ?>
-            <form method="post" action="<?= e(url('/app/members/' . $memberId . '/reinstate')) ?>">
+            <form method="post" action="<?= e(url('/app/members/' . $memberId . '/reinstate')) ?>" class="inline-form">
                 <?= csrf_field() ?>
                 <button type="submit" class="btn btn-primary">Reinstate</button>
             </form>
         <?php endif; ?>
-        <form method="post" action="<?= e(url('/app/members/' . $memberId . '/resign')) ?>">
-            <?= csrf_field() ?>
-            <button type="submit" class="btn" data-confirm="Mark member as resigned?">Mark resigned</button>
-        </form>
     </div>
     <?php endif; ?>
 </div>
@@ -150,8 +155,19 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
         <?php endforeach; ?>
     <?php endif; ?>
 
+    <?php
+    $shareUsed = 0.0;
+    foreach ($beneficiaries as $bb) {
+        if (($bb['status'] ?? 'active') === 'active') {
+            $shareUsed += (float) ($bb['share_percent'] ?? 0);
+        }
+    }
+    $shareRemaining = max(0, round(100 - $shareUsed, 2));
+    $defaultNewShare = $shareUsed <= 0 ? 100 : $shareRemaining;
+    ?>
     <?php if ($canManage): ?>
     <h3 class="mt-6">Add beneficiary</h3>
+    <p class="form-help">Submitted for member approval. Active shares must total exactly 100% (remaining: <?= e(number_format($shareRemaining, 2)) ?>%).</p>
     <form method="post" action="<?= e(url('/app/members/' . $memberId . '/beneficiaries')) ?>" class="form-stack">
         <?= csrf_field() ?>
         <div class="form-grid two-col">
@@ -171,7 +187,7 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
             </div>
             <div class="form-group">
                 <label class="form-label" for="new_share">Share %</label>
-                <input id="new_share" name="share_percent" type="number" step="0.01" min="0" max="100" value="100">
+                <input id="new_share" name="share_percent" type="number" step="0.01" min="0" max="100" value="<?= e((string) $defaultNewShare) ?>">
             </div>
         </div>
         <div class="form-grid two-col">
@@ -198,18 +214,35 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
     <p class="form-help mb-4">Grant or revoke app permissions beyond this member&apos;s role. Changes apply immediately.</p>
     <form method="post" action="<?= e(url('/app/members/' . $memberId . '/permissions')) ?>">
         <?= csrf_field() ?>
-        <ul class="checkbox-list">
-            <?php foreach ($permissionOptions as $opt): ?>
-                <?php $code = (string) ($opt['code'] ?? ''); ?>
-                <li>
-                    <label class="checkbox-inline">
-                        <input type="checkbox" name="permissions[]" value="<?= e($code) ?>"
-                            <?= in_array($code, $grantedPermissionCodes ?? [], true) ? 'checked' : '' ?>>
-                        <?= e((string) ($opt['label'] ?? $code)) ?>
-                    </label>
-                </li>
-            <?php endforeach; ?>
-        </ul>
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th scope="col">Granted</th>
+                        <th scope="col">Permission</th>
+                        <th scope="col">Code</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($permissionOptions as $opt): ?>
+                        <?php $code = (string) ($opt['code'] ?? ''); ?>
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="permissions[]" value="<?= e($code) ?>"
+                                    id="perm-<?= e(str_replace('.', '-', $code)) ?>"
+                                    <?= in_array($code, $grantedPermissionCodes ?? [], true) ? 'checked' : '' ?>>
+                            </td>
+                            <td>
+                                <label for="perm-<?= e(str_replace('.', '-', $code)) ?>">
+                                    <?= e((string) ($opt['label'] ?? $code)) ?>
+                                </label>
+                            </td>
+                            <td><code><?= e($code) ?></code></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
         <button type="submit" class="btn btn-primary mt-4">Save permissions</button>
     </form>
 </div>

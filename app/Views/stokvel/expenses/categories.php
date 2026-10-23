@@ -2,6 +2,18 @@
     'title' => 'Expense categories',
     'description' => 'Organise spending for budgets and reports.',
 ], null) ?>
+<form method="get" action="<?= e(url('/app/expenses/categories')) ?>" class="filter-bar" role="search">
+    <div class="form-group">
+        <label for="q">Search</label>
+        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-secondary">Filter</button>
+        <?php if (($filterQ ?? '') !== ''): ?>
+            <a class="btn btn-ghost" href="<?= e(url('/app/expenses/categories')) ?>">Clear</a>
+        <?php endif; ?>
+    </div>
+</form>
 <form method="post" action="<?= e(url('/app/expenses/categories')) ?>" class="form-stack card mb-6">
 <?= csrf_field() ?>
 <div class="form-grid two-col">

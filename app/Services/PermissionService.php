@@ -100,6 +100,7 @@ final class PermissionService
             'grocery.manage',
         ],
         'ordinary_member' => [
+            'members.invite',
             'contributions.view',
             'documents.view',
             'notifications.view',
@@ -125,11 +126,13 @@ final class PermissionService
             'notifications.view',
         ],
         'member' => [
+            'members.invite',
             'contributions.view',
             'documents.view',
             'notifications.view',
         ],
         'ordinary' => [
+            'members.invite',
             'contributions.view',
             'documents.view',
             'notifications.view',

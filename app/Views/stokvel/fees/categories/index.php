@@ -3,6 +3,18 @@
     'description' => 'Classify fee structures (joining, monthly, penalty, special levy).',
 ], null) ?>
 <p class="text-muted"><a href="<?= e(url('/app/settings/categories')) ?>">&larr; Category hub</a> · <a href="<?= e(url('/app/fees')) ?>">Fees</a></p>
+<form method="get" action="<?= e(url('/app/fees/categories')) ?>" class="filter-bar" role="search">
+    <div class="form-group">
+        <label for="q">Search</label>
+        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-secondary">Filter</button>
+        <?php if (($filterQ ?? '') !== ''): ?>
+            <a class="btn btn-ghost" href="<?= e(url('/app/fees/categories')) ?>">Clear</a>
+        <?php endif; ?>
+    </div>
+</form>
 <form method="post" action="<?= e(url('/app/fees/categories')) ?>" class="form-stack card mb-6">
 <?= csrf_field() ?>
 <div class="form-grid two-col">

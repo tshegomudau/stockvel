@@ -103,32 +103,65 @@ function base_path_uri(): string
         $cached = '';
         return $cached;
     }
-    // When using public/index.php, dirname is often /public or a subdirectory.
+
+    // Strip trailing /public only when the browser path does not include it
+    // (rewrite hides public/). Keep it for installs like /projects/stovel/public/.
     if (str_ends_with($dir, '/public')) {
-        $dir = substr($dir, 0, -7) ?: '';
+        $uriPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '');
+        $keepsPublic = str_contains($uriPath, '/public/')
+            || str_ends_with($uriPath, '/public')
+            || str_contains($script, '/public/');
+        if (!$keepsPublic) {
+            $dir = substr($dir, 0, -7) ?: '';
+        }
     }
+
     $cached = $dir === '/' ? '' : $dir;
     return $cached;
 }
 
 /**
- * Absolute application URL (scheme + host + optional base path + path).
+ * Current request origin (scheme://host[:port]), or empty outside HTTP.
+ */
+function request_origin(): string
+{
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    if ($host === '') {
+        return '';
+    }
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443')
+        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+
+    return ($https ? 'https' : 'http') . '://' . $host;
+}
+
+/**
+ * Application URL (scheme + host + optional base path + path).
+ * Prefers the live request origin so assets stay same-origin for CSP when
+ * APP_URL differs (e.g. APP_URL=127.0.0.1:8090 but browsing via localhost).
  */
 function url(string $path = ''): string
 {
-    $appUrl = rtrim((string) env('APP_URL', ''), '/');
     $basePath = base_path_uri();
     $path = '/' . ltrim($path, '/');
     if ($path === '/') {
         $path = '';
     }
+    $suffix = $path === '' ? '/' : $path;
+    $relative = ($basePath === '' ? '' : $basePath) . ($path === '' ? '/' : $path);
 
-    if ($appUrl !== '') {
-        return $appUrl . $basePath . ($path === '' ? '/' : $path);
+    $origin = request_origin();
+    if ($origin !== '') {
+        return $origin . ($basePath === '' ? '' : $basePath) . $suffix;
     }
 
-    // Relative-to-host URL when APP_URL is empty (works for any host/port).
-    return ($basePath === '' ? '' : $basePath) . ($path === '' ? '/' : $path);
+    $appUrl = rtrim((string) env('APP_URL', ''), '/');
+    if ($appUrl !== '') {
+        return $appUrl . ($basePath === '' ? '' : $basePath) . $suffix;
+    }
+
+    return $relative;
 }
 
 /**

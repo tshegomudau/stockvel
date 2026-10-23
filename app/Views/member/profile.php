@@ -2,7 +2,10 @@
     'title' => 'My profile',
     'description' => 'Update your contact details and password. ID numbers are stored encrypted.',
 ], null) ?>
-<p class="mb-4"><a class="btn btn-secondary" href="<?= e(url('/member/security')) ?>">Security &amp; MFA</a></p>
+<p class="mb-4 page-actions">
+    <a class="btn btn-secondary" href="<?= e(url('/member/security')) ?>">Security &amp; MFA</a>
+    <a class="btn btn-secondary" href="<?= e(url('/member/beneficiaries')) ?>">My beneficiaries</a>
+</p>
 <form method="post" action="<?= e(url('/member/profile')) ?>" class="form-stack card mb-6">
 <?= csrf_field() ?>
 <div class="form-grid two-col">
