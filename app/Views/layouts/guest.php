@@ -30,7 +30,7 @@
 </main>
 <footer class="site-footer">
     <div class="container">
-        <p>&copy; <?= date('Y') ?> stockvel. Built for South African stokvels. Operators must obtain professional legal, tax, and regulatory advice for production use.</p>
+        <p>&copy; <?= date('Y') ?> stockvel. Built for South African stokvels.</p>
     </div>
 </footer>
 <div class="toast-stack" data-toast-stack aria-live="polite"></div>

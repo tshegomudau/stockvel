@@ -10,14 +10,18 @@ use App\Services\Auth\AuthService;
 
 final class PlatformAuthMiddleware implements MiddlewareInterface
 {
-    /** @var string[] */
+    /**
+     * Platform operator roles only.
+     * Do not include stokvel membership role codes (e.g. bare "auditor").
+     *
+     * @var string[]
+     */
     private const ALLOWED_ROLES = [
         'platform_super_admin',
         'platform_support',
         'platform_auditor',
         'super_admin',
         'support',
-        'auditor',
     ];
 
     public function __construct(

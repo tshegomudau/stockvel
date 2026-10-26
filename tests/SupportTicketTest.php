@@ -164,6 +164,57 @@ return static function (TestRunner $runner): void {
             ['name' => $originalName, 'ua' => now_utc(), 'id' => (int) $stokvel['id']]
         );
 
+        $page = $client->get('/app/settings');
+        test_assert($page['status'] === 200, 'Settings GET status ' . $page['status']);
+        test_assert(str_contains($page['body'], 'Organisation') || str_contains($page['body'], 'Stokvel settings'), 'Settings page content missing');
+        test_assert(str_contains($page['body'], 'Category catalogues') || str_contains($page['body'], 'categories'), 'Settings shortcuts missing');
+
+        $emptyName = $client->post('/app/settings', [
+            '_method' => 'PUT',
+            'name' => '',
+            'stokvel_type' => 'general_savings',
+            'contribution_frequency' => 'monthly',
+            'payment_due_day' => '1',
+            'grace_period_days' => '7',
+            'arrears_after_days' => '7',
+            'year_end_month' => '12',
+            'branding_primary_colour' => '#14532d',
+        ]);
+        test_assert($emptyName['status'] === 302, 'Empty name should redirect');
+        $afterEmpty = test_db()->fetch('SELECT name FROM stokvels WHERE id = :id LIMIT 1', ['id' => (int) $stokvel['id']]);
+        test_assert((string) ($afterEmpty['name'] ?? '') === $originalName, 'Empty name must not wipe organisation name');
+
+        $badYear = $client->post('/app/settings', [
+            '_method' => 'PUT',
+            'name' => $originalName,
+            'stokvel_type' => 'general_savings',
+            'contribution_frequency' => 'monthly',
+            'payment_due_day' => '1',
+            'grace_period_days' => '7',
+            'arrears_after_days' => '7',
+            'year_end_month' => '99',
+            'branding_primary_colour' => '#14532d',
+        ]);
+        test_assert($badYear['status'] === 302, 'Invalid year-end should redirect');
+
+        $cats = $client->get('/app/settings/categories');
+        test_assert($cats['status'] === 200, 'Category hub status ' . $cats['status']);
+
         $auth->logout();
     }, 'http');
+
+    $runner->add('Ordinary member denied settings manage', function () use ($loginAs): void {
+        $auth = $loginAs('lerato.pillay@example.co.za');
+        $client = new HttpClient();
+        $get = $client->get('/app/settings');
+        test_assert(in_array($get['status'], [302, 403], true), 'Member GET settings should be denied, got ' . $get['status']);
+        $post = $client->post('/app/settings', [
+            '_method' => 'PUT',
+            'name' => 'Hacked',
+            'stokvel_type' => 'general_savings',
+            'year_end_month' => '12',
+        ]);
+        test_assert(in_array($post['status'], [302, 403], true), 'Member POST settings should be denied, got ' . $post['status']);
+        $auth->logout();
+    }, 'security');
 };

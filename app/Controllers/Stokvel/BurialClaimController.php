@@ -107,23 +107,15 @@ final class BurialClaimController extends Controller
             ]
         );
 
-        $this->db()->insert(
-            'INSERT INTO approval_requests
-                (stokvel_id, request_type, reference_type, reference_id, status,
-                 requested_by_user_id, requested_at, created_at, updated_at)
-             VALUES
-                (:sid, :rtype, :reftype, :refid, :status, :by, :ra, :ca, :ua)',
-            [
-                'sid' => $sid,
-                'rtype' => 'burial_claim',
-                'reftype' => 'burial_claim',
-                'refid' => $id,
-                'status' => 'pending',
-                'by' => $this->userId(),
-                'ra' => $now,
-                'ca' => $now,
-                'ua' => $now,
-            ]
+        /** @var \App\Services\Approvals\ApprovalService $approvals */
+        $approvals = app()->container()->get(\App\Services\Approvals\ApprovalService::class);
+        $approvals->createRequest(
+            $sid,
+            'burial_claim',
+            'burial_claim',
+            $id,
+            (int) $this->userId(),
+            (string) ($data['claimed_amount'] ?? null)
         );
 
         Session::flash('success', 'Burial claim submitted for approval.');

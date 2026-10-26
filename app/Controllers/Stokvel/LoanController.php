@@ -101,6 +101,7 @@ final class LoanController extends Controller
             'navContext' => 'app',
             'members' => $members,
             'products' => $products->listActive($sid),
+            'purposes' => $this->activeLoanPurposes($sid),
         ]);
     }
 
@@ -114,6 +115,7 @@ final class LoanController extends Controller
             'loan_product_id' => (int) $request->input('loan_product_id', 0),
             'principal' => (string) $request->input('principal', $request->input('amount', '')),
             'term_months' => (int) $request->input('term_months', 6),
+            'loan_purpose_id' => (int) $request->input('loan_purpose_id', 0),
             'purpose' => trim((string) $request->input('purpose', '')),
         ];
         $validator = Validator::make($data, [
@@ -121,10 +123,11 @@ final class LoanController extends Controller
             'loan_product_id' => 'required|integer',
             'principal' => 'required|numeric',
             'term_months' => 'required|integer',
+            'loan_purpose_id' => 'required|integer',
         ]);
-        if ($validator->fails() || $data['member_id'] < 1 || $data['loan_product_id'] < 1) {
+        if ($validator->fails() || $data['member_id'] < 1 || $data['loan_product_id'] < 1 || $data['loan_purpose_id'] < 1) {
             $this->flashOld($request);
-            Session::flash('error', 'Invalid loan application details.');
+            Session::flash('error', 'Member, product, amount, term, and purpose are required.');
             return $this->redirect('/app/loans/create');
         }
 
@@ -138,7 +141,9 @@ final class LoanController extends Controller
                 $data['principal'],
                 $data['term_months'],
                 $userId,
-                $data['purpose']
+                $data['purpose'],
+                null,
+                $data['loan_purpose_id']
             );
             $loans->createPendingApprovalRequest($sid, $applicationId, $userId);
         } catch (FinanceException $e) {
@@ -302,6 +307,7 @@ final class LoanController extends Controller
             'activeNav' => 'loans',
             'navContext' => 'app',
             'item' => $row,
+            'purposes' => $this->activeLoanPurposes($sid),
         ]);
     }
 
@@ -309,12 +315,30 @@ final class LoanController extends Controller
     {
         $this->requirePermission('loans.manage');
         $sid = $this->requireStokvel();
-        $purpose = trim((string) $request->input('purpose', ''));
+        $purposeId = (int) $request->input('loan_purpose_id', 0);
+        $purposeNote = trim((string) $request->input('purpose', ''));
+        $purposeLabel = $purposeNote;
+        $resolvedPurposeId = null;
+        if ($purposeId > 0) {
+            $row = $this->db()->fetch(
+                'SELECT id, name FROM loan_purposes WHERE id = :id AND stokvel_id = :sid AND is_active = 1 LIMIT 1',
+                ['id' => $purposeId, 'sid' => $sid]
+            );
+            if ($row === null) {
+                Session::flash('error', 'Select an active loan purpose.');
+                return $this->redirect('/app/loans/' . $id . '/edit');
+            }
+            $resolvedPurposeId = (int) $row['id'];
+            if ($purposeLabel === '') {
+                $purposeLabel = (string) $row['name'];
+            }
+        }
         $this->db()->exec(
-            'UPDATE loan_applications SET purpose = :purpose, updated_at = :ua
+            'UPDATE loan_applications SET purpose = :purpose, loan_purpose_id = :pid, updated_at = :ua
              WHERE id = :id AND stokvel_id = :sid AND status = :status',
             [
-                'purpose' => $purpose !== '' ? $purpose : null,
+                'purpose' => $purposeLabel !== '' ? $purposeLabel : null,
+                'pid' => $resolvedPurposeId,
                 'ua' => now_utc(),
                 'id' => (int) $id,
                 'sid' => $sid,
@@ -323,6 +347,17 @@ final class LoanController extends Controller
         );
         Session::flash('success', 'Loan application updated.');
         return $this->redirect('/app/loans/' . $id);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function activeLoanPurposes(int $stokvelId): array
+    {
+        return $this->db()->fetchAll(
+            'SELECT id, code, name FROM loan_purposes
+             WHERE stokvel_id = :sid AND is_active = 1
+             ORDER BY sort_order ASC, name ASC',
+            ['sid' => $stokvelId]
+        );
     }
 
     public function destroy(Request $request, string $id): Response

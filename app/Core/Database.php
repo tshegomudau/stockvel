@@ -81,6 +81,9 @@ final class Database
     {
         if ($this->transactionDepth === 0) {
             $this->pdo()->beginTransaction();
+        } else {
+            // Nested work uses savepoints so an inner failure does not abort the outer unit of work.
+            $this->pdo()->exec('SAVEPOINT nest_' . $this->transactionDepth);
         }
         ++$this->transactionDepth;
     }
@@ -93,6 +96,8 @@ final class Database
         --$this->transactionDepth;
         if ($this->transactionDepth === 0) {
             $this->pdo()->commit();
+        } else {
+            $this->pdo()->exec('RELEASE SAVEPOINT nest_' . $this->transactionDepth);
         }
     }
 
@@ -101,9 +106,13 @@ final class Database
         if ($this->transactionDepth === 0) {
             return;
         }
-        $this->transactionDepth = 0;
-        if ($this->pdo()?->inTransaction()) {
-            $this->pdo()->rollBack();
+        --$this->transactionDepth;
+        if ($this->transactionDepth === 0) {
+            if ($this->pdo()?->inTransaction()) {
+                $this->pdo()->rollBack();
+            }
+        } else {
+            $this->pdo()->exec('ROLLBACK TO SAVEPOINT nest_' . $this->transactionDepth);
         }
     }
 

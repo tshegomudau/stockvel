@@ -68,4 +68,45 @@ return static function (TestRunner $runner): void {
         test_assert(in_array($res['status'], [302, 403], true), 'Member should be denied create, got ' . $res['status']);
         $auth->logout();
     }, 'security');
+
+    $runner->add('Loan purposes catalogue CRUD is tenant-scoped', function () use ($login): void {
+        $auth = $login('thabo.mokoena@example.co.za');
+        $client = new HttpClient();
+        $list = $client->get('/app/loans/purposes');
+        test_assert($list['status'] === 200, 'Loan purposes status ' . $list['status']);
+        test_assert(
+            str_contains($list['body'], 'Emergency') || str_contains($list['body'], 'emergency'),
+            'Expected seeded Emergency purpose'
+        );
+
+        $code = 'qa_' . substr(bin2hex(random_bytes(3)), 0, 6);
+        $create = $client->post('/app/loans/purposes', [
+            'code' => $code,
+            'name' => 'QA Purpose ' . $code,
+            'sort_order' => '55',
+        ]);
+        test_assert($create['status'] === 302, 'Create purpose should redirect');
+
+        $ubuntu = test_db()->fetch("SELECT id FROM stokvels WHERE slug = 'ubuntu-savings' LIMIT 1");
+        $masa = test_db()->fetch("SELECT id FROM stokvels WHERE slug = 'masakhane-burial' LIMIT 1");
+        test_assert($ubuntu !== null && $masa !== null, 'Demo stokvels missing');
+        $row = test_db()->fetch(
+            'SELECT id, stokvel_id FROM loan_purposes WHERE code = :code AND stokvel_id = :sid LIMIT 1',
+            ['code' => $code, 'sid' => (int) $ubuntu['id']]
+        );
+        test_assert($row !== null, 'Purpose not stored for ubuntu');
+
+        $cross = test_db()->fetch(
+            'SELECT id FROM loan_purposes WHERE code = :code AND stokvel_id = :sid LIMIT 1',
+            ['code' => $code, 'sid' => (int) $masa['id']]
+        );
+        test_assert($cross === null, 'Purpose must not leak into other tenant');
+
+        $deactivate = $client->post('/app/loans/purposes/' . (int) $row['id'] . '/deactivate', []);
+        test_assert($deactivate['status'] === 302, 'Deactivate should redirect');
+        $inactive = test_db()->fetch('SELECT is_active FROM loan_purposes WHERE id = :id', ['id' => (int) $row['id']]);
+        test_assert((int) ($inactive['is_active'] ?? 1) === 0, 'Purpose should be inactive');
+
+        $auth->logout();
+    }, 'http');
 };

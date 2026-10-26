@@ -7,6 +7,8 @@ namespace App\Controllers\Stokvel;
 use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Services\Analytics\GroupHealthService;
+use App\Services\Finance\FundService;
 
 final class DashboardController extends Controller
 {
@@ -25,6 +27,7 @@ final class DashboardController extends Controller
         $canReports = $tenant->can('reports.view');
         $canInvite = $tenant->can('members.invite');
         $canCapture = $tenant->can('contributions.capture');
+        $canFees = $tenant->can('fees.manage');
 
         $settings = $db->fetch(
             'SELECT loans_enabled, branding_primary_colour FROM stokvel_settings WHERE stokvel_id = :sid LIMIT 1',
@@ -71,6 +74,37 @@ final class DashboardController extends Controller
                 "SELECT COUNT(*) AS c FROM loans WHERE stokvel_id = :sid AND status IN ('active','disbursed','arrears')",
                 ['sid' => $sid]
             )['c'] ?? 0);
+            $stats['loans_outstanding'] = (float) ($db->fetch(
+                "SELECT COALESCE(SUM(outstanding_balance),0) AS t FROM loans
+                 WHERE stokvel_id = :sid AND status IN ('active','disbursed','arrears')",
+                ['sid' => $sid]
+            )['t'] ?? 0);
+        }
+
+        if ($canFees || $canReports) {
+            try {
+                /** @var FundService $funds */
+                $funds = app()->container()->get(FundService::class);
+                $funds->ensureDefaults($sid);
+                $admin = $funds->findAdminFund($sid);
+                if ($admin) {
+                    $stats['admin_pocket_balance'] = (float) $funds->balance($sid, (int) $admin['id']);
+                }
+            } catch (\Throwable) {
+                // Funds table may not exist on older DBs mid-migrate
+            }
+        }
+
+        $healthScore = null;
+        if ($canReports) {
+            try {
+                /** @var GroupHealthService $health */
+                $health = app()->container()->get(GroupHealthService::class);
+                $healthScore = $health->score($sid);
+                $stats['group_health'] = $healthScore['score'];
+            } catch (\Throwable) {
+                $healthScore = null;
+            }
         }
 
         $chartLabels = [];
@@ -99,6 +133,7 @@ final class DashboardController extends Controller
             'activeNav' => 'dashboard',
             'navContext' => 'app',
             'stats' => $stats,
+            'healthScore' => $healthScore,
             'chartLabels' => $chartLabels,
             'chartValues' => $chartValues,
             'settings' => $settings,
@@ -111,6 +146,7 @@ final class DashboardController extends Controller
                 'reports' => $canReports,
                 'invite' => $canInvite,
                 'capture' => $canCapture,
+                'fees' => $canFees,
             ],
         ]);
     }

@@ -13,6 +13,9 @@ $appLinks = [
     'beneficiaries' => ['label' => 'Beneficiaries', 'url' => route('app.beneficiaries'), 'permission' => 'beneficiaries.view'],
     'contributions' => ['label' => 'Contributions', 'url' => route('app.contributions'), 'permission' => 'contributions.view'],
     'fees' => ['label' => 'Fees & charges', 'url' => route('app.fees'), 'permission' => 'fees.manage'],
+    'funds' => ['label' => 'Funds', 'url' => route('app.funds'), 'permission' => 'funds.manage', 'module' => 'funds'],
+    'fines' => ['label' => 'Fines', 'url' => route('app.fines'), 'permission' => 'fines.manage', 'module' => 'fines'],
+    'fine-types' => ['label' => 'Fine types', 'url' => route('app.fine_types'), 'permission' => 'fines.manage', 'module' => 'fines'],
     'expenses' => ['label' => 'Expenses', 'url' => route('app.expenses'), 'permission' => 'expenses.manage', 'module' => 'expenses'],
     'loans' => ['label' => 'Loans', 'url' => route('app.loans'), 'permission' => 'loans.manage', 'module' => 'loans'],
     'loan-products' => ['label' => 'Loan products', 'url' => route('app.loan_products'), 'permission' => 'loans.manage', 'module' => 'loans'],
@@ -21,19 +24,25 @@ $appLinks = [
     'grocery' => ['label' => 'Grocery cycles', 'url' => url('/app/grocery'), 'permission' => 'grocery.manage', 'module' => 'grocery'],
     'meetings' => ['label' => 'Meetings', 'url' => route('app.meetings'), 'permission' => 'meetings.manage', 'module' => 'meetings'],
     'rules' => ['label' => 'Rules', 'url' => route('app.rules'), 'permission' => 'rules.manage', 'module' => 'rules'],
+    'constitution' => ['label' => 'Constitution', 'url' => route('app.constitution'), 'permission' => 'constitution.manage', 'module' => 'constitution'],
+    'announcements' => ['label' => 'Announcements', 'url' => route('app.announcements'), 'permission' => 'announcements.manage', 'module' => 'announcements'],
     'documents' => ['label' => 'Documents', 'url' => route('app.documents'), 'permission' => 'documents.view', 'module' => 'documents'],
     'reports' => ['label' => 'Reports', 'url' => route('app.reports'), 'permission' => 'reports.view', 'module' => 'reports'],
+    'health' => ['label' => 'Group health', 'url' => route('app.health'), 'permission' => 'health.view', 'module' => 'health'],
+    'goals' => ['label' => 'Saving goals', 'url' => route('app.goals'), 'permission' => 'goals.view', 'module' => 'goals'],
     'approvals' => ['label' => 'Approvals', 'url' => route('app.approvals'), 'permission' => 'approvals.view', 'module' => 'approvals'],
     'notifications' => ['label' => 'Notifications', 'url' => route('app.notifications')],
     'support' => ['label' => 'Support / bugs', 'url' => url('/app/support'), 'module' => 'support'],
     'settings' => ['label' => 'Settings', 'url' => route('app.settings'), 'permission' => 'settings.manage'],
-    'roles' => ['label' => 'Roles & permissions', 'url' => route('app.settings.roles'), 'permission' => 'settings.manage'],
-    'categories' => ['label' => 'Categories', 'url' => route('app.settings.categories'), 'permission' => 'settings.manage'],
+    'roles' => ['label' => 'Roles & permissions', 'url' => route('app.settings.roles'), 'permission' => 'roles.manage'],
+    'categories' => ['label' => 'Categories', 'url' => route('app.settings.categories'), 'permission' => 'categories.manage'],
 ];
 
 $memberLinks = [
     'member-dashboard' => ['label' => 'Dashboard', 'url' => route('member.dashboard')],
     'member-statement' => ['label' => 'Statement', 'url' => route('member.statement')],
+    'member-fines' => ['label' => 'My fines', 'url' => url('/member/fines')],
+    'member-announcements' => ['label' => 'Announcements', 'url' => url('/member/announcements')],
     'member-beneficiaries' => ['label' => 'Beneficiaries', 'url' => url('/member/beneficiaries')],
     'member-invite' => ['label' => 'Invite member', 'url' => url('/member/invite'), 'permission' => 'members.invite'],
     'member-loans' => ['label' => 'Apply for loan', 'url' => url('/member/loans/apply'), 'module' => 'loans', 'show' => $loansEnabled],
@@ -52,7 +61,11 @@ $platformLinks = [
     'platform-roles' => ['label' => 'Roles', 'url' => route('platform.roles')],
     'platform-stokvel-types' => ['label' => 'Stokvel types', 'url' => route('platform.stokvel-types')],
     'platform-support' => ['label' => 'Support tickets', 'url' => route('platform.support')],
-    'platform-audit' => ['label' => 'Audit', 'url' => route('platform.audit')],
+    'platform-audit' => [
+        'label' => 'Audit logs',
+        'url' => route('platform.audit'),
+        'platform_permission' => 'audit_logs.view',
+    ],
     'platform-jobs' => ['label' => 'Failed jobs', 'url' => route('platform.jobs')],
 ];
 
@@ -81,6 +94,9 @@ $links = match ($navContext) {
                 continue;
             }
             if (!empty($link['permission']) && !can((string) $link['permission'])) {
+                continue;
+            }
+            if (!empty($link['platform_permission']) && !platform_can((string) $link['platform_permission'])) {
                 continue;
             }
             ?>

@@ -72,6 +72,7 @@ final class DocumentController extends Controller
     {
         $this->requirePermission('documents.upload');
         $sid = $this->requireStokvel();
+        $this->ensureDocumentCategories($sid);
         return $this->render('stokvel/documents/create', [
             'title' => 'New document',
             'activeNav' => 'documents',
@@ -85,7 +86,13 @@ final class DocumentController extends Controller
     {
         $this->requirePermission('documents.upload');
         $sid = $this->requireStokvel();
+        $this->ensureDocumentCategories($sid);
         $categoryMeta = $this->resolveDocumentCategory($sid, $request);
+        if ($categoryMeta['id'] === null) {
+            $this->flashOld($request);
+            Session::flash('error', 'Select an active document category.');
+            return $this->redirect('/app/documents/create');
+        }
         $meetingId = $this->resolveMeetingId($sid, $request);
         $data = [
             'title' => trim((string) $request->input('title', '')),
@@ -236,13 +243,41 @@ final class DocumentController extends Controller
         );
     }
 
+    /** Seed starter document categories if the stokvel has none (tenant-owned thereafter). */
+    private function ensureDocumentCategories(int $stokvelId): void
+    {
+        $count = (int) ($this->db()->fetch(
+            'SELECT COUNT(*) AS c FROM document_categories WHERE stokvel_id = :sid',
+            ['sid' => $stokvelId]
+        )['c'] ?? 0);
+        if ($count > 0) {
+            return;
+        }
+        $now = now_utc();
+        $starters = [
+            ['general', 'General'],
+            ['constitution', 'Constitution'],
+            ['minutes', 'Meeting minutes'],
+            ['policy', 'Policy'],
+            ['financial', 'Financial report'],
+        ];
+        foreach ($starters as [$code, $name]) {
+            $this->db()->insert(
+                'INSERT INTO document_categories (stokvel_id, code, name, is_active, created_at, updated_at)
+                 VALUES (:sid, :code, :name, 1, :ca, :ua)',
+                ['sid' => $stokvelId, 'code' => $code, 'name' => $name, 'ca' => $now, 'ua' => $now]
+            );
+        }
+    }
+
     /** @return array{id: ?int, legacy: string} */
     private function resolveDocumentCategory(int $stokvelId, Request $request): array
     {
         $categoryId = (int) $request->input('document_category_id', 0);
         if ($categoryId > 0) {
             $row = $this->db()->fetch(
-                'SELECT id, code, name FROM document_categories WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+                'SELECT id, code, name FROM document_categories
+                 WHERE id = :id AND stokvel_id = :sid AND is_active = 1 LIMIT 1',
                 ['id' => $categoryId, 'sid' => $stokvelId]
             );
             if ($row) {
@@ -253,9 +288,7 @@ final class DocumentController extends Controller
             }
         }
 
-        $legacy = trim((string) $request->input('category', 'general')) ?: 'general';
-
-        return ['id' => null, 'legacy' => $legacy];
+        return ['id' => null, 'legacy' => 'general'];
     }
 
     private function sanitizeHtml(string $html): string

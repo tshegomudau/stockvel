@@ -1,7 +1,19 @@
 <?= view('partials/page-header', [
     'title' => 'Contributions',
-    'description' => 'Capture payments, review history, and manage arrears.',
+    'description' => 'Capture payments, review history, and manage arrears. Figures use recorded obligations and payments.',
 ], null) ?>
+<?php if (!empty($metrics)): ?>
+<section class="stat-grid" aria-label="This month contribution metrics" style="margin-bottom:1rem;">
+    <div class="stat-card"><span class="stat-label">Expected this month</span><strong class="money"><?= e(money($metrics['expected'] ?? 0)) ?></strong></div>
+    <div class="stat-card"><span class="stat-label">Collected this month</span><strong class="money"><?= e(money($metrics['collected'] ?? 0)) ?></strong></div>
+    <div class="stat-card"><span class="stat-label">Outstanding this month</span><strong class="money"><?= e(money($metrics['outstanding'] ?? 0)) ?></strong></div>
+    <div class="stat-card"><span class="stat-label">Collection %</span><strong><?= e(number_format((float) ($metrics['collection_pct'] ?? 0), 1)) ?>%</strong></div>
+    <div class="stat-card"><span class="stat-label">Members fully paid</span><strong><?= (int) ($metrics['fully_paid'] ?? 0) ?></strong></div>
+    <div class="stat-card"><span class="stat-label">Members in arrears</span><strong><a href="<?= e(url('/app/contributions/arrears')) ?>"><?= (int) ($metrics['in_arrears'] ?? 0) ?></a></strong></div>
+    <div class="stat-card"><span class="stat-label">Admin fees collected (MTD)</span><strong class="money"><?= e(money($metrics['admin_fees'] ?? 0)) ?></strong></div>
+    <div class="stat-card"><span class="stat-label">Overdue contributions</span><strong class="money"><?= e(money($metrics['overdue'] ?? 0)) ?></strong></div>
+</section>
+<?php endif; ?>
 <div class="page-actions" style="margin:-0.5rem 0 1rem;">
     <a class="btn btn-primary" href="<?= e(url('/app/contributions/create')) ?>">Record payment</a>
     <a class="btn btn-secondary" href="<?= e(url('/app/contributions/bulk')) ?>">Bulk capture</a>

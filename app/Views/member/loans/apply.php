@@ -31,7 +31,23 @@
         </div>
         <div class="form-group"><label for="principal">Amount requested (ZAR)</label><input type="number" id="principal" name="principal" value="<?= e((string) old('principal', '')) ?>" required step="0.01" min="0"></div>
         <div class="form-group"><label for="term_months">Repayment term (months)</label><input type="number" id="term_months" name="term_months" value="<?= e((string) old('term_months', '6')) ?>" required min="1"></div>
-        <div class="form-group"><label for="purpose">Purpose (optional)</label><input type="text" id="purpose" name="purpose" value="<?= e((string) old('purpose', '')) ?>" maxlength="255"></div>
+        <div class="form-group">
+            <label for="loan_purpose_id">Purpose</label>
+            <?php $purposes = $purposes ?? []; ?>
+            <?php if ($purposes === []): ?>
+                <p class="form-help">No purpose catalogue is available yet. Contact your committee.</p>
+            <?php else: ?>
+            <select id="loan_purpose_id" name="loan_purpose_id" required>
+                <option value="">Select purpose</option>
+                <?php foreach ($purposes as $purpose): ?>
+                    <option value="<?= (int) $purpose['id'] ?>"<?= (string) old('loan_purpose_id') === (string) $purpose['id'] ? ' selected' : '' ?>>
+                        <?= e((string) ($purpose['name'] ?? '')) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
+        </div>
+        <div class="form-group"><label for="purpose">Notes (optional)</label><input type="text" id="purpose" name="purpose" value="<?= e((string) old('purpose', '')) ?>" maxlength="255"></div>
 
         <?php if (!empty($guarantors)): ?>
         <fieldset class="form-section">

@@ -21,11 +21,25 @@
         </div>
         <div class="form-group">
             <label for="payment_method">Method</label>
-            <select id="payment_method" name="payment_method">
-                <?php foreach (['cash', 'eft', 'card', 'mobile'] as $pm): ?>
-                    <option value="<?= e($pm) ?>"><?= e(strtoupper($pm)) ?></option>
+            <?php
+            $paymentMethods = $paymentMethods ?? \App\Services\Finance\ContributionService::PAYMENT_METHODS;
+            $methodLabels = [
+                'cash' => 'Cash',
+                'eft' => 'EFT',
+                'bank_deposit' => 'Bank deposit',
+                'debit_order' => 'Debit order (recorded)',
+                'card' => 'Card',
+                'other' => 'Other',
+            ];
+            ?>
+            <select id="payment_method" name="payment_method" required>
+                <?php foreach ($paymentMethods as $pm): ?>
+                    <option value="<?= e($pm) ?>"<?= (string) old('payment_method', 'eft') === $pm ? ' selected' : '' ?>>
+                        <?= e($methodLabels[$pm] ?? ucwords(str_replace('_', ' ', $pm))) ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
+            <p class="form-help">Recorded payment method only — this application does not execute bank payments.</p>
         </div>
         <div class="form-group">
             <label for="reference">Reference</label>

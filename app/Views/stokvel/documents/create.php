@@ -12,18 +12,15 @@
     </div>
     <div class="form-group">
         <label class="form-label" for="document_category_id">Category</label>
-        <?php if ($cats !== []): ?>
-        <select id="document_category_id" name="document_category_id">
+        <?php if ($cats === []): ?>
+            <p class="form-help text-danger">No active document categories. <a href="<?= e(url('/app/documents/categories')) ?>">Add a category</a> first.</p>
+        <?php else: ?>
+        <select id="document_category_id" name="document_category_id" required>
+            <option value="">Select category</option>
             <?php foreach ($cats as $cat): ?>
                 <option value="<?= (int) $cat['id'] ?>"<?= (string) old('document_category_id', (string) ($doc['document_category_id'] ?? '')) === (string) $cat['id'] ? ' selected' : '' ?>>
                     <?= e($cat['name'] ?? '') ?>
                 </option>
-            <?php endforeach; ?>
-        </select>
-        <?php else: ?>
-        <select id="category" name="category">
-            <?php foreach (['general', 'constitution', 'minutes', 'policy', 'notice'] as $cat): ?>
-                <option value="<?= e($cat) ?>"<?= (old('category', $doc['category'] ?? 'general') === $cat) ? ' selected' : '' ?>><?= e(ucfirst($cat)) ?></option>
             <?php endforeach; ?>
         </select>
         <?php endif; ?>

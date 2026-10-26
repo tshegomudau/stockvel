@@ -8,6 +8,8 @@ use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
+use App\Exceptions\TenantException;
+use App\Services\Meetings\MeetingService;
 
 final class MeetingController extends Controller
 {
@@ -68,12 +70,31 @@ final class MeetingController extends Controller
             $documents = [];
         }
 
+        /** @var MeetingService $meetings */
+        $meetings = app()->container()->get(MeetingService::class);
+        $resolutions = $meetings->listResolutions($sid, $meetingId);
+        $actionItems = $meetings->listActionItems($sid, $meetingId);
+
+        $membership = $this->activeMembership($sid);
+        $membershipId = $membership ? (int) $membership['id'] : null;
+        $myVotes = $membershipId
+            ? $meetings->votesForMembership(
+                $sid,
+                $membershipId,
+                array_map(static fn (array $r): int => (int) $r['id'], $resolutions)
+            )
+            : [];
+
         return $this->render('member/meetings/show', [
             'title' => (string) ($meeting['title'] ?? 'Meeting'),
             'activeNav' => 'member-meetings',
             'navContext' => 'member',
             'meeting' => $meeting,
             'documents' => $documents,
+            'resolutions' => $resolutions,
+            'actionItems' => $actionItems,
+            'myVotes' => $myVotes,
+            'currentMembershipId' => $membershipId,
         ]);
     }
 
@@ -81,28 +102,72 @@ final class MeetingController extends Controller
     {
         $this->requireAuth();
         $sid = $this->requireStokvel();
-        $meeting = $this->db()->fetch(
-            'SELECT id FROM meetings WHERE id = :id AND stokvel_id = :sid LIMIT 1',
-            ['id' => (int) $id, 'sid' => $sid]
-        );
-        if (!$meeting) {
+        $membership = $this->activeMembership($sid);
+        if (!$membership) {
+            Session::flash('error', 'Active membership required.');
             return $this->redirect('/member/meetings');
         }
 
-        $this->db()->exec(
-            'INSERT INTO meeting_acknowledgements (stokvel_id, meeting_id, user_id, acknowledged_at, created_at)
-             VALUES (:sid, :mid, :uid, :aa, :ca)
-             ON DUPLICATE KEY UPDATE acknowledged_at = VALUES(acknowledged_at)',
-            [
-                'sid' => $sid,
-                'mid' => (int) $id,
-                'uid' => $this->userId(),
-                'aa' => now_utc(),
-                'ca' => now_utc(),
-            ]
-        );
+        /** @var MeetingService $meetings */
+        $meetings = app()->container()->get(MeetingService::class);
+        try {
+            $meetings->acknowledgeMinutes($sid, (int) $id, (int) $membership['id']);
+            Session::flash('success', 'Minutes acknowledged.');
+        } catch (TenantException $e) {
+            Session::flash('error', $e->getMessage());
+        }
 
-        Session::flash('success', 'Minutes acknowledged.');
         return $this->redirect('/member/meetings/' . (int) $id);
+    }
+
+    public function castVote(Request $request, string $id, string $resolutionId): Response
+    {
+        $this->requireAuth();
+        $sid = $this->requireStokvel();
+        $membership = $this->activeMembership($sid);
+        if (!$membership) {
+            Session::flash('error', 'Active membership required to vote.');
+            return $this->redirect('/member/meetings/' . (int) $id);
+        }
+
+        $resolution = $this->db()->fetch(
+            'SELECT id FROM resolutions WHERE id = :rid AND meeting_id = :mid AND stokvel_id = :sid LIMIT 1',
+            ['rid' => (int) $resolutionId, 'mid' => (int) $id, 'sid' => $sid]
+        );
+        if (!$resolution) {
+            Session::flash('error', 'Resolution not found for this meeting.');
+            return $this->redirect('/member/meetings/' . (int) $id);
+        }
+
+        $vote = strtolower(trim((string) $request->input('vote', '')));
+
+        /** @var MeetingService $meetings */
+        $meetings = app()->container()->get(MeetingService::class);
+        try {
+            $meetings->castVote($sid, (int) $resolutionId, (int) $membership['id'], $vote);
+            Session::flash('success', 'Vote recorded.');
+        } catch (TenantException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+
+        return $this->redirect('/member/meetings/' . (int) $id);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function activeMembership(int $stokvelId): ?array
+    {
+        $membership = $this->tenant()->membership();
+        if ($membership !== null && (int) ($membership['stokvel_id'] ?? 0) === $stokvelId) {
+            if (($membership['status'] ?? '') === 'active' || !isset($membership['status'])) {
+                return $membership;
+            }
+        }
+
+        return $this->db()->fetch(
+            "SELECT * FROM memberships
+             WHERE stokvel_id = :sid AND user_id = :uid AND status = 'active'
+             LIMIT 1",
+            ['sid' => $stokvelId, 'uid' => (int) $this->userId()]
+        );
     }
 }

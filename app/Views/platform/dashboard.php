@@ -27,7 +27,9 @@
 
 <div class="quick-actions mt-6">
     <a class="btn btn-primary" href="<?= e(url('/platform/tenants')) ?>">Manage stokvels</a>
-    <a class="btn btn-secondary" href="<?= e(url('/platform/audit')) ?>">Audit search</a>
+    <?php if (platform_can('audit_logs.view')): ?>
+        <a class="btn btn-secondary" href="<?= e(url('/platform/audit')) ?>">Audit logs</a>
+    <?php endif; ?>
     <a class="btn btn-secondary" href="<?= e(url('/platform/jobs')) ?>">Failed jobs</a>
     <a class="btn btn-secondary" href="<?= e(url('/platform/support')) ?>">Support tickets</a>
 </div>

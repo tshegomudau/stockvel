@@ -208,6 +208,13 @@ function route(string $name, array $parameters = []): string
         'app.members' => '/app/members',
         'app.contributions' => '/app/contributions',
         'app.fees' => '/app/fees',
+        'app.funds' => '/app/funds',
+        'app.fines' => '/app/fines',
+        'app.fine_types' => '/app/fine-types',
+        'app.announcements' => '/app/announcements',
+        'app.constitution' => '/app/constitution',
+        'app.health' => '/app/health',
+        'app.goals' => '/app/goals',
         'app.expenses' => '/app/expenses',
         'app.loans' => '/app/loans',
         'app.payouts' => '/app/payouts',
@@ -216,6 +223,7 @@ function route(string $name, array $parameters = []): string
         'app.documents' => '/app/documents',
         'app.reports' => '/app/reports',
         'app.approvals' => '/app/approvals',
+        'app.approval_policies' => '/app/approvals/policies',
         'app.settings' => '/app/settings',
         'app.settings.roles' => '/app/settings/roles',
         'app.settings.categories' => '/app/settings/categories',
@@ -334,6 +342,15 @@ function initials(?string $name): string
  * Permission check against the active tenant context (false when unauthenticated / no tenant).
  * Also fails closed when the permission's feature module is disabled for the stokvel.
  */
+function platform_can(string $permission): bool
+{
+    try {
+        return app()->container()->get(\App\Services\PermissionService::class)->platformCan($permission);
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
 function can(string $permission): bool
 {
     try {
@@ -373,7 +390,6 @@ function home_path_for_user(?array $user): string
         'platform_auditor',
         'super_admin',
         'support',
-        'auditor',
     ], true)) {
         return '/platform';
     }

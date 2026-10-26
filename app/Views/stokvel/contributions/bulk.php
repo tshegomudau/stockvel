@@ -14,9 +14,11 @@
                     <td><input type="number" step="0.01" name="rows[<?= (int) $i ?>][amount]" placeholder="0.00"></td>
                     <td><input type="date" name="rows[<?= (int) $i ?>][paid_at]" value="<?= e(date('Y-m-d')) ?>"></td>
                     <td>
-                        <select name="rows[<?= (int) $i ?>][payment_method]">
-                            <option value="eft">EFT</option>
-                            <option value="cash">Cash</option>
+                        <?php $paymentMethods = $paymentMethods ?? \App\Services\Finance\ContributionService::PAYMENT_METHODS; ?>
+                        <select name="rows[<?= (int) $i ?>][payment_method]" aria-label="Payment method for member">
+                            <?php foreach ($paymentMethods as $pm): ?>
+                                <option value="<?= e($pm) ?>"<?= $pm === 'eft' ? ' selected' : '' ?>><?= e(ucwords(str_replace('_', ' ', $pm))) ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </td>
                 </tr>

@@ -2,6 +2,7 @@
   .app-topbar .page-title { padding-left: 3.25rem; }
   .topbar-inner { padding-left: 0.85rem; padding-right: 0.85rem; }
   .app-content { padding: 1rem 0.85rem 2rem; }
+  body.app-layout { overflow-x: clip; }
 }
 @media (max-width: 480px) {
   .btn-block-sm { width: 100%; }

@@ -28,8 +28,12 @@
                                     <td rowspan="<?= count($perms) ?>"><strong><?= e(ucfirst((string) $group)) ?></strong></td>
                                 <?php endif; ?>
                                 <td>
+                                    <?php
+                                    $labels = $permissionLabels ?? \App\Services\PermissionService::PERMISSION_LABELS;
+                                    $label = $labels[$perm] ?? ucwords(str_replace(['.', '_'], [' — ', ' '], $perm));
+                                    ?>
                                     <label for="perm_<?= e(str_replace('.', '_', $perm)) ?>">
-                                        <?= e(ucwords(str_replace(['.', '_'], [' — ', ' '], $perm))) ?>
+                                        <?= e($label) ?>
                                     </label>
                                     <div class="text-muted"><code><?= e($perm) ?></code></div>
                                 </td>

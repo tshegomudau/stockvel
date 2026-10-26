@@ -4,6 +4,13 @@
         . (!empty($meeting['venue']) ? ' · ' . $meeting['venue'] : '')
         . (!empty($meeting['status']) ? ' · ' . ucfirst((string) $meeting['status']) : ''),
 ], null) ?>
+<?php
+$resolutions = $resolutions ?? [];
+$actionItems = $actionItems ?? [];
+$myVotes = $myVotes ?? [];
+$currentMembershipId = $currentMembershipId ?? null;
+$meetingId = (int) $meeting['id'];
+?>
 
 <p class="mb-4"><a href="<?= e(url('/member/meetings')) ?>">← All meetings</a></p>
 
@@ -21,7 +28,7 @@
             <dd><?= !empty($meeting['acknowledged_at']) ? e(sa_datetime($meeting['acknowledged_at'])) : 'Not yet' ?></dd>
         </dl>
         <?php if (empty($meeting['acknowledged_at']) && !empty($meeting['minutes_html'])): ?>
-        <form method="post" action="<?= e(url('/member/meetings/' . (int) $meeting['id'] . '/acknowledge')) ?>" class="mt-4">
+        <form method="post" action="<?= e(url('/member/meetings/' . $meetingId . '/acknowledge')) ?>" class="mt-4">
             <?= csrf_field() ?>
             <button type="submit" class="btn btn-primary">Acknowledge minutes</button>
         </form>
@@ -53,6 +60,92 @@
         <div class="prose"><?= safe_html((string) $meeting['minutes_html']) ?></div>
     <?php else: ?>
         <p class="text-muted">Minutes have not been published yet.</p>
+    <?php endif; ?>
+</section>
+
+<section class="card mb-6">
+    <h2 class="card-title">Resolutions</h2>
+    <?php if ($resolutions === []): ?>
+        <p class="text-muted">No resolutions for this meeting.</p>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Yes / No / Abstain</th>
+                        <th>Your vote</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($resolutions as $res): ?>
+                    <?php
+                    $rid = (int) $res['id'];
+                    $status = strtolower((string) ($res['status'] ?? ''));
+                    $isOpen = in_array($status, ['open', 'proposed'], true);
+                    $myVote = $myVotes[$rid] ?? null;
+                    ?>
+                    <tr>
+                        <td>
+                            <strong><?= e($res['title'] ?? '') ?></strong>
+                            <?php if (!empty($res['description'])): ?>
+                                <div class="text-muted"><?= e(mb_strimwidth((string) $res['description'], 0, 160, '…')) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td><span class="badge"><?= e(ucfirst($status)) ?></span></td>
+                        <td>
+                            <?= (int) ($res['votes_for'] ?? 0) ?>
+                            / <?= (int) ($res['votes_against'] ?? 0) ?>
+                            / <?= (int) ($res['votes_abstain'] ?? 0) ?>
+                        </td>
+                        <td>
+                            <?php if ($currentMembershipId && $isOpen): ?>
+                                <form method="post" action="<?= e(url('/member/meetings/' . $meetingId . '/resolutions/' . $rid . '/vote')) ?>" class="inline-form">
+                                    <?= csrf_field() ?>
+                                    <select name="vote" aria-label="Vote on <?= e($res['title'] ?? 'resolution') ?>">
+                                        <option value="yes"<?= $myVote === 'yes' ? ' selected' : '' ?>>Yes</option>
+                                        <option value="no"<?= $myVote === 'no' ? ' selected' : '' ?>>No</option>
+                                        <option value="abstain"<?= $myVote === 'abstain' ? ' selected' : '' ?>>Abstain</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-secondary"><?= $myVote ? 'Update' : 'Vote' ?></button>
+                                </form>
+                            <?php elseif ($myVote): ?>
+                                <?= e(ucfirst($myVote)) ?>
+                            <?php else: ?>
+                                —
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
+
+<section class="card mb-6">
+    <h2 class="card-title">Action items</h2>
+    <?php if ($actionItems === []): ?>
+        <p class="text-muted">No action items published.</p>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr><th>Title</th><th>Assignee</th><th>Due</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                <?php foreach ($actionItems as $ai): ?>
+                    <tr>
+                        <td><?= e($ai['title'] ?? '') ?></td>
+                        <td><?= e(trim((string) ($ai['assignee_name'] ?? '')) !== '' ? $ai['assignee_name'] : '—') ?></td>
+                        <td><?= !empty($ai['due_date']) ? e(sa_date($ai['due_date'])) : '—' ?></td>
+                        <td><span class="badge"><?= e(ucfirst((string) ($ai['status'] ?? ''))) ?></span></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     <?php endif; ?>
 </section>
 

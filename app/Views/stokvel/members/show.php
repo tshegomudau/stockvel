@@ -15,6 +15,8 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
     </div>
 </div>
 
+<?= view('partials/profile-completeness', ['completeness' => $completeness ?? null], null) ?>
+
 <?php if ($pendingChanges !== []): ?>
 <div class="card mb-6">
     <h2>Pending member approval</h2>
@@ -46,6 +48,21 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
                 <span class="text-muted">(stokvel default)</span>
             <?php else: ?>
                 —
+            <?php endif; ?>
+        </dd>
+        <dt>Joining fee</dt>
+        <dd>
+            <?php
+            $jfStatus = (string) ($joiningFeeStatus ?? 'not_applicable');
+            $jf = $joiningFee ?? null;
+            ?>
+            <span class="badge"><?= e(str_replace('_', ' ', $jfStatus)) ?></span>
+            <?php if ($jf): ?>
+                — charged <?= e(money($jf['amount_charged'] ?? 0)) ?>,
+                paid <?= e(money($jf['amount_paid'] ?? 0)) ?>
+                <?php if (!empty($jf['charged_at'])): ?>
+                    <span class="text-muted">(<?= e(sa_date($jf['charged_at'])) ?>)</span>
+                <?php endif; ?>
             <?php endif; ?>
         </dd>
     </dl>

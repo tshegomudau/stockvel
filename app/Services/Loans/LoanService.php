@@ -42,7 +42,8 @@ final class LoanService
         int $termMonths,
         int $appliedBy,
         string $purpose = '',
-        ?array $guarantorMemberIds = null
+        ?array $guarantorMemberIds = null,
+        ?int $loanPurposeId = null
     ): int {
         $product = $this->products->get($stokvelId, $loanProductId);
         if ($product === null || (int) ($product['is_active'] ?? 0) !== 1) {
@@ -76,14 +77,31 @@ final class LoanService
             }
         }
 
+        $resolvedPurposeId = null;
+        $resolvedPurposeLabel = $purpose;
+        if ($loanPurposeId !== null && $loanPurposeId > 0) {
+            $purposeRow = $this->db->fetch(
+                'SELECT id, name FROM loan_purposes
+                 WHERE id = :id AND stokvel_id = :sid AND is_active = 1 LIMIT 1',
+                ['id' => $loanPurposeId, 'sid' => $stokvelId]
+            );
+            if ($purposeRow === null) {
+                throw new FinanceException('Select an active loan purpose.');
+            }
+            $resolvedPurposeId = (int) $purposeRow['id'];
+            if ($resolvedPurposeLabel === '') {
+                $resolvedPurposeLabel = (string) $purposeRow['name'];
+            }
+        }
+
         $now = now_utc();
         $applicationId = (int) $this->db->insert(
             'INSERT INTO loan_applications
                 (stokvel_id, membership_id, loan_product_id, application_ref, requested_amount, term_months,
-                 purpose, status, submitted_at, created_at, updated_at)
+                 purpose, loan_purpose_id, status, submitted_at, created_at, updated_at)
              VALUES
                 (:stokvel_id, :membership_id, :loan_product_id, :application_ref, :requested_amount, :term_months,
-                 :purpose, :status, :submitted_at, :created_at, :updated_at)',
+                 :purpose, :loan_purpose_id, :status, :submitted_at, :created_at, :updated_at)',
             [
                 'stokvel_id' => $stokvelId,
                 'membership_id' => $memberId,
@@ -91,7 +109,8 @@ final class LoanService
                 'application_ref' => $this->nextApplicationRef($stokvelId),
                 'requested_amount' => $amount,
                 'term_months' => $termMonths,
-                'purpose' => $purpose,
+                'purpose' => $resolvedPurposeLabel !== '' ? $resolvedPurposeLabel : null,
+                'loan_purpose_id' => $resolvedPurposeId,
                 'status' => self::STATUS_APPLIED,
                 'submitted_at' => $now,
                 'created_at' => $now,
@@ -126,35 +145,21 @@ final class LoanService
 
     public function createPendingApprovalRequest(int $stokvelId, int $applicationId, int $requestedByUserId): void
     {
-        $existing = $this->db->fetch(
-            "SELECT id FROM approval_requests
-             WHERE stokvel_id = :stokvel_id AND reference_type = 'loan_application' AND reference_id = :reference_id
-               AND status = 'pending' LIMIT 1",
-            ['stokvel_id' => $stokvelId, 'reference_id' => $applicationId]
+        $app = $this->db->fetch(
+            'SELECT requested_amount FROM loan_applications WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            ['id' => $applicationId, 'sid' => $stokvelId]
         );
-        if ($existing !== null) {
-            return;
-        }
+        $amount = $app !== null ? (string) ($app['requested_amount'] ?? '0') : null;
 
-        $now = now_utc();
-        $this->db->insert(
-            'INSERT INTO approval_requests
-                (stokvel_id, request_type, reference_type, reference_id, status,
-                 requested_by_user_id, requested_at, created_at, updated_at)
-             VALUES
-                (:stokvel_id, :request_type, :reference_type, :reference_id, :status,
-                 :requested_by_user_id, :requested_at, :created_at, :updated_at)',
-            [
-                'stokvel_id' => $stokvelId,
-                'request_type' => 'loan_application',
-                'reference_type' => 'loan_application',
-                'reference_id' => $applicationId,
-                'status' => 'pending',
-                'requested_by_user_id' => $requestedByUserId,
-                'requested_at' => $now,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]
+        /** @var \App\Services\Approvals\ApprovalService $approvals */
+        $approvals = app()->container()->get(\App\Services\Approvals\ApprovalService::class);
+        $approvals->createRequest(
+            $stokvelId,
+            'loan_application',
+            'loan_application',
+            $applicationId,
+            $requestedByUserId,
+            $amount
         );
     }
 

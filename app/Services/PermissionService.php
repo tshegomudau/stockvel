@@ -17,6 +17,8 @@ final class PermissionService
         'members.invite',
         'members.manage',
         'fees.manage',
+        'funds.manage',
+        'fines.manage',
         'contributions.view',
         'contributions.capture',
         'contributions.import',
@@ -31,17 +33,71 @@ final class PermissionService
         'meetings.manage_minutes',
         'meetings.manage',
         'rules.manage',
+        'constitution.manage',
+        'announcements.manage',
         'documents.view',
         'documents.upload',
         'reports.view',
         'reports.export',
+        'health.view',
+        'goals.view',
+        'goals.manage',
         'settings.manage',
+        'roles.manage',
+        'categories.manage',
         'notifications.view',
-        'onboarding.manage',
-        'audit.view',
         'support.manage',
         'burial.manage',
         'grocery.manage',
+    ];
+
+    /** Human labels for roles UI (code remains the stored value). */
+    public const PERMISSION_LABELS = [
+        'members.view' => 'Members — view',
+        'members.invite' => 'Members — invite',
+        'members.manage' => 'Members — manage',
+        'fees.manage' => 'Fees & charges — manage',
+        'funds.manage' => 'Funds / pockets — manage',
+        'fines.manage' => 'Fines — manage',
+        'contributions.view' => 'Contributions — view',
+        'contributions.capture' => 'Contributions — capture',
+        'contributions.import' => 'Contributions — import',
+        'expenses.manage' => 'Expenses — manage',
+        'approvals.view' => 'Approvals — view',
+        'approvals.action' => 'Approvals — action',
+        'loans.manage' => 'Loans — manage',
+        'payouts.manage' => 'Payouts — manage',
+        'documents.manage_categories' => 'Documents — manage categories',
+        'beneficiaries.view' => 'Beneficiaries — view',
+        'beneficiaries.manage' => 'Beneficiaries — manage',
+        'meetings.manage_minutes' => 'Meetings — minutes',
+        'meetings.manage' => 'Meetings — manage',
+        'rules.manage' => 'Rules — manage',
+        'constitution.manage' => 'Constitution — manage',
+        'announcements.manage' => 'Announcements — manage',
+        'documents.view' => 'Documents — view',
+        'documents.upload' => 'Documents — upload',
+        'reports.view' => 'Reports — view',
+        'reports.export' => 'Reports — export',
+        'health.view' => 'Group health — view',
+        'goals.view' => 'Saving goals — view',
+        'goals.manage' => 'Saving goals — manage',
+        'settings.manage' => 'Settings — manage',
+        'roles.manage' => 'Roles & permissions — manage',
+        'categories.manage' => 'Categories — manage catalogues',
+        'notifications.view' => 'Notifications — view',
+        'support.manage' => 'Support — manage',
+        'burial.manage' => 'Burial claims — manage',
+        'grocery.manage' => 'Grocery cycles — manage',
+    ];
+
+    /**
+     * Platform-only permissions. Never granted via stokvel membership roles.
+     *
+     * @var list<string>
+     */
+    public const PLATFORM_PERMISSIONS = [
+        'audit_logs.view',
     ];
 
     /** @var array<string, list<string>> */
@@ -50,6 +106,8 @@ final class PermissionService
         'treasurer' => [
             'members.view',
             'fees.manage',
+            'funds.manage',
+            'fines.manage',
             'contributions.view',
             'contributions.capture',
             'contributions.import',
@@ -60,9 +118,12 @@ final class PermissionService
             'payouts.manage',
             'reports.view',
             'reports.export',
+            'health.view',
+            'goals.view',
+            'goals.manage',
+            'categories.manage',
             'documents.view',
             'beneficiaries.view',
-            'audit.view',
             'notifications.view',
         ],
         'secretary' => [
@@ -74,12 +135,17 @@ final class PermissionService
             'meetings.manage',
             'meetings.manage_minutes',
             'rules.manage',
+            'constitution.manage',
+            'announcements.manage',
             'documents.view',
             'documents.upload',
             'documents.manage_categories',
+            'categories.manage',
+            'roles.manage',
             'reports.view',
+            'health.view',
+            'goals.view',
             'notifications.view',
-            'audit.view',
             'support.manage',
             'burial.manage',
             'grocery.manage',
@@ -92,7 +158,10 @@ final class PermissionService
             'meetings.manage_minutes',
             'expenses.manage',
             'loans.manage',
+            'announcements.manage',
             'reports.view',
+            'health.view',
+            'goals.view',
             'documents.view',
             'beneficiaries.view',
             'notifications.view',
@@ -103,6 +172,7 @@ final class PermissionService
             'members.invite',
             'contributions.view',
             'documents.view',
+            'goals.view',
             'notifications.view',
         ],
         'auditor' => [
@@ -110,8 +180,9 @@ final class PermissionService
             'contributions.view',
             'reports.view',
             'reports.export',
+            'health.view',
+            'funds.manage',
             'documents.view',
-            'audit.view',
         ],
         // Aliases for older role codes
         'committee' => [
@@ -121,6 +192,7 @@ final class PermissionService
             'meetings.manage',
             'expenses.manage',
             'loans.manage',
+            'announcements.manage',
             'reports.view',
             'documents.view',
             'notifications.view',
@@ -141,22 +213,21 @@ final class PermissionService
 
     /** @var array<string, list<string>> */
     private const PLATFORM_TENANT_PERMISSIONS = [
-        'platform_super_admin' => ['*'],
-        'super_admin' => ['*'],
+        'platform_super_admin' => ['*', 'audit_logs.view'],
+        'super_admin' => ['*', 'audit_logs.view'],
         'platform_support' => [
             'members.view',
             'contributions.view',
             'reports.view',
             'documents.view',
-            'audit.view',
             'notifications.view',
+            // No audit_logs.view — support may assist tenants without raw audit access
         ],
         'support' => [
             'members.view',
             'contributions.view',
             'reports.view',
             'documents.view',
-            'audit.view',
             'notifications.view',
         ],
         'platform_auditor' => [
@@ -165,15 +236,7 @@ final class PermissionService
             'reports.view',
             'reports.export',
             'documents.view',
-            'audit.view',
-        ],
-        'auditor' => [
-            'members.view',
-            'contributions.view',
-            'reports.view',
-            'reports.export',
-            'documents.view',
-            'audit.view',
+            'audit_logs.view',
         ],
     ];
 
@@ -310,9 +373,29 @@ final class PermissionService
             'upload_documents' => ['documents.view', 'documents.upload'],
             'view_financial_reports' => ['reports.view', 'contributions.view'],
             'export_data' => ['reports.export'],
-            'view_audit' => ['audit.view'],
+            // Platform audit is never granted via stokvel role_permissions rows
+            'view_audit' => [],
+            'audit.view' => [],
+            'audit_logs.view' => [],
             default => str_contains($code, '.') ? [$code] : [],
         };
+    }
+
+    public function platformCan(string $permission): bool
+    {
+        $role = (string) ($this->tenant->platformRole() ?? '');
+        if ($role === '') {
+            return false;
+        }
+        $codes = $this->forPlatformRole($role);
+        return in_array('*', $codes, true) || in_array($permission, $codes, true);
+    }
+
+    public function requirePlatformPermission(string $permission): void
+    {
+        if (!$this->platformCan($permission)) {
+            throw new AuthorizationException('You do not have permission: ' . $permission);
+        }
     }
 
     private function resolveRoleCode(array $membership): string

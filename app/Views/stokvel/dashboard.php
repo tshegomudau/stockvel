@@ -14,6 +14,15 @@ $hasAnyStat = !empty($stats);
         <?php if (!empty($can['invite'])): ?>
             <a class="btn btn-secondary" href="<?= e(url('/app/members/invite')) ?>">Invite member</a>
         <?php endif; ?>
+        <?php if (!empty($can['meetings'])): ?>
+            <a class="btn btn-secondary" href="<?= e(url('/app/meetings/create')) ?>">Create meeting</a>
+        <?php endif; ?>
+        <?php if (!empty($can['approvals'])): ?>
+            <a class="btn btn-secondary" href="<?= e(url('/app/approvals')) ?>">Review approvals</a>
+        <?php endif; ?>
+        <?php if (!empty($can['fees'])): ?>
+            <a class="btn btn-secondary" href="<?= e(url('/app/funds')) ?>">Admin pocket</a>
+        <?php endif; ?>
         <?php if (!empty($can['reports'])): ?>
             <a class="btn btn-secondary" href="<?= e(url('/app/reports')) ?>">Reports</a>
         <?php endif; ?>
@@ -36,14 +45,27 @@ $hasAnyStat = !empty($stats);
     <?php endif; ?>
 </div>
 
-<?php if (array_key_exists('upcoming_meetings', $stats) || array_key_exists('active_loans', $stats)): ?>
-<div class="grid grid-2 mt-6">
+<?php if (array_key_exists('upcoming_meetings', $stats) || array_key_exists('active_loans', $stats) || array_key_exists('admin_pocket_balance', $stats) || array_key_exists('group_health', $stats)): ?>
+<div class="grid grid-4 mt-6">
     <?php if (array_key_exists('upcoming_meetings', $stats)): ?>
         <?= view('partials/stat-card', ['label' => 'Upcoming meetings', 'value' => (string) $stats['upcoming_meetings']], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('active_loans', $stats)): ?>
         <?= view('partials/stat-card', ['label' => 'Active loans', 'value' => (string) $stats['active_loans']], null) ?>
     <?php endif; ?>
+    <?php if (array_key_exists('admin_pocket_balance', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Admin pocket (ledger)', 'value' => money($stats['admin_pocket_balance']), 'isMoney' => true, 'meta' => 'Internal allocation'], null) ?>
+    <?php endif; ?>
+    <?php if (array_key_exists('group_health', $stats)): ?>
+        <a href="<?= e(url('/app/health')) ?>" style="text-decoration:none;color:inherit;">
+            <?= view('partials/stat-card', [
+                'label' => 'Group health',
+                'value' => (string) (int) $stats['group_health'] . ' / 100',
+                'meta' => trim((string) (($healthScore['band'] ?? '') . ' — not a credit rating')),
+            ], null) ?>
+        </a>
+    <?php endif; ?>
+
 </div>
 <?php endif; ?>
 <?php else: ?>

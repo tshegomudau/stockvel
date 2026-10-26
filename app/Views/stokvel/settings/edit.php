@@ -7,9 +7,14 @@
     <h2>Configuration shortcuts</h2>
     <p class="text-muted mb-4">Jump to related setup screens. You need the matching permission to open each link.</p>
     <div class="form-actions">
-        <?php if (can('settings.manage')): ?>
+        <?php if (can('roles.manage') || can('settings.manage')): ?>
             <a class="btn btn-secondary" href="<?= e(route('app.settings.roles')) ?>">Roles &amp; permissions</a>
+        <?php endif; ?>
+        <?php if (can('categories.manage') || can('settings.manage')): ?>
             <a class="btn btn-secondary" href="<?= e(route('app.settings.categories')) ?>">Category catalogues</a>
+        <?php endif; ?>
+        <?php if ((can('settings.manage') || can('approvals.action')) && module_enabled('approvals')): ?>
+            <a class="btn btn-secondary" href="<?= e(route('app.approval_policies')) ?>">Approval thresholds</a>
         <?php endif; ?>
         <?php if (can('loans.manage') && module_enabled('loans')): ?>
             <a class="btn btn-secondary" href="<?= e(route('app.loan_products')) ?>">Loan products</a>
@@ -85,6 +90,24 @@ Activate this stokvel (removes setup wizard; configuration stays in Settings)
 <input id="grace_period_days" name="grace_period_days" type="number" min="0" value="<?= e((string) ($settings['grace_period_days'] ?? '7')) ?>"></div>
 <div class="form-group"><label class="form-label" for="year_end_month">Year-end month</label>
 <input id="year_end_month" name="year_end_month" type="number" min="1" max="12" value="<?= e((string) ($settings['year_end_month'] ?? '12')) ?>"></div>
+</div>
+</div>
+
+<?php $jfs = $joiningFeeSettings ?? []; ?>
+<div class="form-section">
+<h2>Joining fee</h2>
+<p class="text-muted">Charged when a membership is approved. Amount is snapshotted per member.</p>
+<div class="form-grid two-col">
+<div class="form-group"><label class="form-label" for="joining_fee_amount">Joining fee amount (ZAR)</label>
+<input id="joining_fee_amount" name="joining_fee_amount" type="number" step="0.01" min="0"
+       value="<?= e((string) ($settings['joining_fee_amount'] ?? $jfs['amount'] ?? '0')) ?>"></div>
+</div>
+<div class="form-grid two-col">
+<label class="checkbox"><input type="checkbox" name="joining_is_active" value="1"<?= !empty($jfs['is_active']) || !isset($jfs['is_active']) ? ' checked' : '' ?>> Joining fee policy active</label>
+<label class="checkbox"><input type="checkbox" name="joining_is_compulsory" value="1"<?= !empty($jfs['is_compulsory']) || !isset($jfs['is_compulsory']) ? ' checked' : '' ?>> Compulsory</label>
+<label class="checkbox"><input type="checkbox" name="joining_is_once_off" value="1"<?= !empty($jfs['is_once_off']) || !isset($jfs['is_once_off']) ? ' checked' : '' ?>> Once-off</label>
+<label class="checkbox"><input type="checkbox" name="joining_charge_on_approval" value="1"<?= !empty($jfs['charge_on_approval']) || !isset($jfs['charge_on_approval']) ? ' checked' : '' ?>> Charge on approval</label>
+<label class="checkbox"><input type="checkbox" name="joining_charge_on_anniversary" value="1"<?= !empty($jfs['charge_on_anniversary']) ? ' checked' : '' ?>> Charge on anniversary</label>
 </div>
 </div>
 

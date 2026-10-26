@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Controllers\Api\WebhookController;
 use App\Controllers\Auth\AuthController;
 use App\Controllers\Auth\MfaController;
+use App\Controllers\Member\AnnouncementController as MemberAnnouncementController;
 use App\Controllers\Member\DashboardController as MemberDashboardController;
 use App\Controllers\Member\SecurityController as MemberSecurityController;
 use App\Controllers\Member\DocumentController as MemberDocumentController;
+use App\Controllers\Member\FineController as MemberFineController;
 use App\Controllers\Member\LoanController as MemberLoanController;
 use App\Controllers\Member\MeetingController as MemberMeetingController;
 use App\Controllers\Member\NotificationController as MemberNotificationController;
@@ -30,9 +32,12 @@ use App\Controllers\Platform\UserController as PlatformUserController;
 use App\Controllers\Public\HomeController;
 use App\Controllers\Public\InvitationController;
 use App\Controllers\Public\RegisterStokvelController;
+use App\Controllers\Stokvel\AnnouncementController;
 use App\Controllers\Stokvel\ApprovalController;
+use App\Controllers\Stokvel\ApprovalPolicyController;
 use App\Controllers\Stokvel\BeneficiaryController;
 use App\Controllers\Stokvel\BurialClaimController;
+use App\Controllers\Stokvel\ConstitutionController;
 use App\Controllers\Stokvel\ContributionController;
 use App\Controllers\Stokvel\GroceryCycleController;
 use App\Controllers\Stokvel\DashboardController as StokvelDashboardController;
@@ -43,8 +48,14 @@ use App\Controllers\Stokvel\ExpenseCategoryController;
 use App\Controllers\Stokvel\ExpenseController;
 use App\Controllers\Stokvel\FeeCategoryController;
 use App\Controllers\Stokvel\FeeStructureController;
+use App\Controllers\Stokvel\FineController;
+use App\Controllers\Stokvel\FineTypeController;
+use App\Controllers\Stokvel\FundController;
+use App\Controllers\Stokvel\GoalController;
+use App\Controllers\Stokvel\HealthController;
 use App\Controllers\Stokvel\LoanController;
 use App\Controllers\Stokvel\LoanProductController;
+use App\Controllers\Stokvel\LoanPurposeController;
 use App\Controllers\Stokvel\MeetingCategoryController;
 use App\Controllers\Stokvel\MeetingController as StokvelMeetingController;
 use App\Controllers\Stokvel\MemberController;
@@ -228,6 +239,55 @@ $router->get('/app/fees/{id}/edit', [FeeStructureController::class, 'edit'], $ap
 $router->post('/app/fees/{id}', [FeeStructureController::class, 'update'], $appMut);
 $router->delete('/app/fees/{id}', [FeeStructureController::class, 'destroy'], $appMut);
 
+$router->get('/app/funds', [FundController::class, 'index'], $appRead);
+$router->get('/app/funds/create', [FundController::class, 'create'], $appRead);
+$router->post('/app/funds', [FundController::class, 'store'], $appMut);
+$router->get('/app/funds/{id}/credit', [FundController::class, 'creditForm'], $appRead);
+$router->post('/app/funds/{id}/credit', [FundController::class, 'creditStore'], $appMut);
+$router->get('/app/funds/{id}/debit', [FundController::class, 'debitForm'], $appRead);
+$router->post('/app/funds/{id}/debit', [FundController::class, 'debitStore'], $appMut);
+$router->get('/app/funds/{id}', [FundController::class, 'show'], $appRead);
+
+$router->get('/app/fine-types', [FineTypeController::class, 'index'], $appRead);
+$router->post('/app/fine-types', [FineTypeController::class, 'store'], $appMut);
+$router->post('/app/fine-types/{id}', [FineTypeController::class, 'update'], $appMut);
+$router->delete('/app/fine-types/{id}', [FineTypeController::class, 'destroy'], $appMut);
+$router->post('/app/fine-types/{id}/activate', [FineTypeController::class, 'activate'], $appMut);
+$router->post('/app/fine-types/{id}/deactivate', [FineTypeController::class, 'deactivate'], $appMut);
+
+$router->get('/app/fines', [FineController::class, 'index'], $appRead);
+$router->get('/app/fines/create', [FineController::class, 'create'], $appRead);
+$router->post('/app/fines', [FineController::class, 'store'], $appMut);
+$router->get('/app/fines/bulk', [FineController::class, 'bulkForm'], $appRead);
+$router->post('/app/fines/bulk', [FineController::class, 'bulkStore'], $appMut);
+$router->get('/app/fines/auto', [FineController::class, 'autoForm'], $appRead);
+$router->post('/app/fines/auto', [FineController::class, 'autoApply'], $appMut);
+$router->post('/app/fines/{id}/waive', [FineController::class, 'waive'], $appMut);
+$router->get('/app/fines/{id}', [FineController::class, 'show'], $appRead);
+
+$router->get('/app/announcements', [AnnouncementController::class, 'index'], $appRead);
+$router->get('/app/announcements/create', [AnnouncementController::class, 'create'], $appRead);
+$router->post('/app/announcements', [AnnouncementController::class, 'store'], $appMut);
+$router->get('/app/announcements/{id}/edit', [AnnouncementController::class, 'edit'], $appRead);
+$router->post('/app/announcements/{id}', [AnnouncementController::class, 'update'], $appMut);
+$router->post('/app/announcements/{id}/publish', [AnnouncementController::class, 'publish'], $appMut);
+$router->get('/app/announcements/{id}', [AnnouncementController::class, 'show'], $appRead);
+
+$router->get('/app/constitution', [ConstitutionController::class, 'show'], $appRead);
+$router->get('/app/constitution/edit', [ConstitutionController::class, 'edit'], $appRead);
+$router->post('/app/constitution/edit', [ConstitutionController::class, 'update'], $appMut);
+$router->post('/app/constitution/publish', [ConstitutionController::class, 'publish'], $appMut);
+
+$router->get('/app/health', [HealthController::class, 'show'], $appRead);
+$router->get('/app/goals', [GoalController::class, 'index'], $appRead);
+$router->get('/app/goals/create', [GoalController::class, 'create'], $appRead);
+$router->post('/app/goals', [GoalController::class, 'store'], $appMut);
+$router->get('/app/goals/{id}/edit', [GoalController::class, 'edit'], $appRead);
+$router->post('/app/goals/{id}', [GoalController::class, 'update'], $appMut);
+$router->post('/app/goals/{id}/status', [GoalController::class, 'updateStatus'], $appMut);
+$router->post('/app/goals/{id}/cancel', [GoalController::class, 'cancel'], $appMut);
+$router->get('/app/goals/{id}', [GoalController::class, 'show'], $appRead);
+
 $router->get('/app/expenses/categories', [ExpenseCategoryController::class, 'index'], $appRead);
 $router->post('/app/expenses/categories', [ExpenseCategoryController::class, 'store'], $appMut);
 $router->post('/app/expenses/categories/{id}', [ExpenseCategoryController::class, 'update'], $appMut);
@@ -249,6 +309,11 @@ $router->post('/app/loans/products', [LoanProductController::class, 'store'], $a
 $router->get('/app/loans/products/{id}/edit', [LoanProductController::class, 'edit'], $appRead);
 $router->post('/app/loans/products/{id}', [LoanProductController::class, 'update'], $appMut);
 
+$router->get('/app/loans/purposes', [LoanPurposeController::class, 'index'], $appRead);
+$router->post('/app/loans/purposes', [LoanPurposeController::class, 'store'], $appMut);
+$router->post('/app/loans/purposes/{id}', [LoanPurposeController::class, 'update'], $appMut);
+$router->post('/app/loans/purposes/{id}/activate', [LoanPurposeController::class, 'activate'], $appMut);
+$router->post('/app/loans/purposes/{id}/deactivate', [LoanPurposeController::class, 'deactivate'], $appMut);
 $router->get('/app/loans', [LoanController::class, 'index'], $appRead);
 $router->get('/app/loans/create', [LoanController::class, 'create'], $appRead);
 $router->post('/app/loans', [LoanController::class, 'store'], $appMut);
@@ -299,6 +364,9 @@ $router->post('/app/meetings/{id}', [StokvelMeetingController::class, 'update'],
 $router->post('/app/meetings/{id}/attendance', [StokvelMeetingController::class, 'saveAttendance'], $appMut);
 $router->post('/app/meetings/{id}/notes', [StokvelMeetingController::class, 'saveNotes'], $appMut);
 $router->post('/app/meetings/{id}/minutes', [StokvelMeetingController::class, 'saveMinutes'], $appMut);
+$router->post('/app/meetings/{id}/resolutions', [StokvelMeetingController::class, 'storeResolution'], $appMut);
+$router->post('/app/meetings/{id}/resolutions/{resolutionId}/vote', [StokvelMeetingController::class, 'castVote'], $appMut);
+$router->post('/app/meetings/{id}/action-items', [StokvelMeetingController::class, 'storeActionItem'], $appMut);
 $router->delete('/app/meetings/{id}', [StokvelMeetingController::class, 'destroy'], $appMut);
 
 $router->get('/app/rules/categories', [RuleCategoryController::class, 'index'], $appRead);
@@ -331,6 +399,8 @@ $router->post('/app/documents/{id}', [StokvelDocumentController::class, 'updateT
 $router->get('/app/documents/{id}/download', [StokvelDocumentController::class, 'download'], $appRead);
 
 $router->get('/app/reports', [ReportController::class, 'index'], $appRead);
+$router->get('/app/reports/trends', [ReportController::class, 'trends'], $appRead);
+$router->get('/app/reports/annual', [ReportController::class, 'annual'], $appRead);
 $router->get('/app/reports/{type}.csv', [ReportController::class, 'export'], $appRead);
 $router->get('/app/reports/{type}/export', [ReportController::class, 'export'], $appRead);
 $router->get('/app/reports/{type}', [ReportController::class, 'show'], $appRead);
@@ -342,6 +412,14 @@ $router->get('/app/support/{id}', [SupportTicketController::class, 'show'], $app
 $router->post('/app/support/{id}/reply', [SupportTicketController::class, 'reply'], $appMut);
 
 $router->get('/app/approvals', [ApprovalController::class, 'index'], $appRead);
+$router->get('/app/approvals/policies', [ApprovalPolicyController::class, 'index'], $appRead);
+$router->post('/app/approvals/policies', [ApprovalPolicyController::class, 'store'], $appMut);
+$router->get('/app/approvals/policies/{id}/edit', [ApprovalPolicyController::class, 'edit'], $appRead);
+$router->post('/app/approvals/policies/{id}', [ApprovalPolicyController::class, 'update'], $appMut);
+$router->put('/app/approvals/policies/{id}', [ApprovalPolicyController::class, 'update'], $appMut);
+$router->delete('/app/approvals/policies/{id}', [ApprovalPolicyController::class, 'destroy'], $appMut);
+$router->post('/app/approvals/policies/{id}/activate', [ApprovalPolicyController::class, 'activate'], $appMut);
+$router->post('/app/approvals/policies/{id}/deactivate', [ApprovalPolicyController::class, 'deactivate'], $appMut);
 $router->post('/app/approvals/{id}/approve', [ApprovalController::class, 'approve'], $appMut);
 $router->post('/app/approvals/{id}/reject', [ApprovalController::class, 'reject'], $appMut);
 
@@ -368,9 +446,13 @@ $router->get('/member/loans/apply', [MemberLoanController::class, 'applyForm'], 
 $router->post('/member/loans/apply', [MemberLoanController::class, 'applyStore'], $memberMut);
 
 $router->get('/member/statement', [MemberStatementController::class, 'show'], $memberRead);
+$router->get('/member/fines', [MemberFineController::class, 'index'], $memberRead);
+$router->get('/member/announcements', [MemberAnnouncementController::class, 'index'], $memberRead);
+$router->post('/member/announcements/{id}/read', [MemberAnnouncementController::class, 'markRead'], $memberMut);
 $router->get('/member/meetings', [MemberMeetingController::class, 'index'], $memberRead);
 $router->get('/member/meetings/{id}', [MemberMeetingController::class, 'show'], $memberRead);
 $router->post('/member/meetings/{id}/acknowledge', [MemberMeetingController::class, 'acknowledge'], $memberMut);
+$router->post('/member/meetings/{id}/resolutions/{resolutionId}/vote', [MemberMeetingController::class, 'castVote'], $memberMut);
 $router->get('/member/documents', [MemberDocumentController::class, 'index'], $memberRead);
 $router->get('/member/documents/{id}/download', [MemberDocumentController::class, 'download'], $memberRead);
 $router->get('/member/documents/{id}', [MemberDocumentController::class, 'show'], $memberRead);

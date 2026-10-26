@@ -10,6 +10,7 @@ use App\Exceptions\HttpException;
 use App\Repositories\MembershipRepository;
 use App\Repositories\UserRepository;
 use App\Services\AuditService;
+use App\Services\Finance\JoiningFeeService;
 
 final class MembershipService
 {
@@ -22,7 +23,8 @@ final class MembershipService
         private readonly UserRepository $users,
         private readonly InvitationService $invitations,
         private readonly CoreTenantContext $tenant,
-        private readonly AuditService $audit
+        private readonly AuditService $audit,
+        private readonly JoiningFeeService $joiningFees,
     ) {
     }
 
@@ -136,6 +138,10 @@ final class MembershipService
             'approved_at' => now_utc(),
             'joined_at' => $membership['joined_at'] ?? now_utc(),
         ]);
+        $stokvelId = (int) ($membership['stokvel_id'] ?? $this->tenant->stokvelId() ?? 0);
+        if ($stokvelId > 0) {
+            $this->joiningFees->chargeOnApproval($stokvelId, $membershipId, $approvedByUserId);
+        }
         return $this->memberships->findById($membershipId) ?? [];
     }
 

@@ -12,7 +12,9 @@ final class CategorySettingsController extends Controller
 {
     public function index(Request $request): Response
     {
-        $this->requirePermission('settings.manage');
+        if (!$this->tenant()->can('categories.manage') && !$this->tenant()->can('settings.manage')) {
+            $this->requirePermission('categories.manage');
+        }
         $this->requireStokvel();
 
         $hubs = [
@@ -43,6 +45,27 @@ final class CategorySettingsController extends Controller
                 'url' => url('/app/fees/categories'),
                 'permission' => 'fees.manage',
                 'module' => null,
+            ],
+            [
+                'title' => 'Fine types',
+                'description' => 'Late meeting, missed contribution, and other fine catalogues.',
+                'url' => url('/app/fine-types'),
+                'permission' => 'fines.manage',
+                'module' => 'fines',
+            ],
+            [
+                'title' => 'Loan purposes',
+                'description' => 'Catalogue of approved reasons for loan applications.',
+                'url' => url('/app/loans/purposes'),
+                'permission' => 'loans.manage',
+                'module' => 'loans',
+            ],
+            [
+                'title' => 'Funds',
+                'description' => 'Internal accounting pockets (admin, savings, emergency).',
+                'url' => url('/app/funds'),
+                'permission' => 'funds.manage',
+                'module' => 'funds',
             ],
             [
                 'title' => 'Meeting categories',

@@ -28,6 +28,15 @@ use App\Services\Finance\ChargeService;
 use App\Services\Finance\ChartOfAccountsService;
 use App\Services\Finance\ContributionService;
 use App\Services\Finance\FeeStructureService;
+use App\Services\Finance\AutoFineService;
+use App\Services\Finance\FineService;
+use App\Services\Finance\FundService;
+use App\Services\Finance\JoiningFeeService;
+use App\Services\Members\ProfileCompletenessService;
+use App\Services\Analytics\GroupHealthService;
+use App\Services\Analytics\TrendsService;
+use App\Services\Approvals\ApprovalService;
+use App\Services\Finance\SavingGoalService;
 use App\Services\Finance\LedgerService;
 use App\Services\Notifications\Channels\MailChannel;
 use App\Services\Notifications\Channels\SmsChannel;
@@ -93,6 +102,26 @@ return static function (Container $container, string $basePath, array $dbConfig)
     $container->singleton(LedgerService::class, static fn (Container $c) => new LedgerService($c->get(Database::class)));
     $container->singleton(FeeStructureService::class, static fn (Container $c) => new FeeStructureService($c->get(Database::class)));
     $container->singleton(ChargeService::class, static fn (Container $c) => new ChargeService($c->get(Database::class), $c->get(FeeStructureService::class)));
+    $container->singleton(FundService::class, static fn (Container $c) => new FundService($c->get(Database::class)));
+    $container->singleton(FineService::class, static fn (Container $c) => new FineService($c->get(Database::class)));
+    $container->singleton(AutoFineService::class, static fn (Container $c) => new AutoFineService(
+        $c->get(Database::class),
+        $c->get(FineService::class)
+    ));
+    $container->singleton(ProfileCompletenessService::class, static fn (Container $c) => new ProfileCompletenessService($c->get(Database::class)));
+    $container->singleton(GroupHealthService::class, static fn (Container $c) => new GroupHealthService(
+        $c->get(Database::class),
+        $c->get(ProfileCompletenessService::class)
+    ));
+    $container->singleton(TrendsService::class, static fn (Container $c) => new TrendsService($c->get(Database::class)));
+    $container->singleton(SavingGoalService::class, static fn (Container $c) => new SavingGoalService(
+        $c->get(Database::class),
+        $c->get(FundService::class)
+    ));
+    $container->singleton(JoiningFeeService::class, static fn (Container $c) => new JoiningFeeService(
+        $c->get(Database::class),
+        $c->get(ChargeService::class)
+    ));
     $container->singleton(ContributionService::class, static fn (Container $c) => new ContributionService(
         $c->get(Database::class),
         $c->get(ChargeService::class),
@@ -143,6 +172,9 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(LedgerService::class),
         $c->get(ChartOfAccountsService::class)
     ));
+    $container->singleton(ApprovalService::class, static fn (Container $c) => new ApprovalService(
+        $c->get(Database::class)
+    ));
     $container->singleton(PayoutService::class, static fn (Container $c) => new PayoutService(
         $c->get(Database::class),
         $c->get(LedgerService::class),
@@ -169,7 +201,8 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(UserRepository::class),
         $c->get(InvitationService::class),
         $c->get(TenantContext::class),
-        $c->get(AuditService::class)
+        $c->get(AuditService::class),
+        $c->get(JoiningFeeService::class)
     ));
     $container->singleton(MemberChangeRequestService::class, static fn (Container $c) => new MemberChangeRequestService(
         $c->get(Database::class)

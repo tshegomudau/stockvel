@@ -6,6 +6,7 @@ namespace App\Support;
 
 /**
  * Catalogue of optional stokvel feature modules and the permission prefixes they gate.
+ * Platform admins enable/disable these per tenant; inactive modules hide related permissions in Roles UI.
  */
 final class ModuleRegistry
 {
@@ -31,6 +32,14 @@ final class ModuleRegistry
             'label' => 'Rules',
             'permission_prefixes' => ['rules.'],
         ],
+        'constitution' => [
+            'label' => 'Constitution',
+            'permission_prefixes' => ['constitution.'],
+        ],
+        'announcements' => [
+            'label' => 'Announcements',
+            'permission_prefixes' => ['announcements.'],
+        ],
         'documents' => [
             'label' => 'Documents',
             'permission_prefixes' => ['documents.'],
@@ -38,6 +47,14 @@ final class ModuleRegistry
         'expenses' => [
             'label' => 'Expenses',
             'permission_prefixes' => ['expenses.'],
+        ],
+        'funds' => [
+            'label' => 'Funds / pockets',
+            'permission_prefixes' => ['funds.'],
+        ],
+        'fines' => [
+            'label' => 'Fines',
+            'permission_prefixes' => ['fines.'],
         ],
         'payouts' => [
             'label' => 'Payouts',
@@ -50,6 +67,14 @@ final class ModuleRegistry
         'reports' => [
             'label' => 'Reports',
             'permission_prefixes' => ['reports.'],
+        ],
+        'health' => [
+            'label' => 'Group health',
+            'permission_prefixes' => ['health.'],
+        ],
+        'goals' => [
+            'label' => 'Saving goals',
+            'permission_prefixes' => ['goals.'],
         ],
         'support' => [
             'label' => 'Support',
@@ -135,6 +160,24 @@ final class ModuleRegistry
     }
 
     /**
+     * Filter a permission list to those whose module is active (or have no module).
+     *
+     * @param list<string> $permissions
+     * @param array<string, mixed> $enabledModules
+     * @return list<string>
+     */
+    public static function filterPermissions(array $permissions, array $enabledModules): array
+    {
+        $out = [];
+        foreach ($permissions as $permission) {
+            if (self::permissionAllowed($permission, $enabledModules)) {
+                $out[] = $permission;
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Normalise a decoded settings_json enabled_modules value.
      *
      * @param mixed $raw
@@ -174,11 +217,17 @@ final class ModuleRegistry
             'grocery' => 'grocery',
             'meetings' => 'meetings',
             'rules' => 'rules',
+            'constitution' => 'constitution',
+            'announcements' => 'announcements',
             'documents', 'document-categories' => 'documents',
             'expenses', 'expense-categories' => 'expenses',
+            'funds' => 'funds',
+            'fines', 'fine-types' => 'fines',
             'payouts', 'payout-categories' => 'payouts',
             'approvals' => 'approvals',
             'reports' => 'reports',
+            'health' => 'health',
+            'goals' => 'goals',
             'support' => 'support',
             default => null,
         };

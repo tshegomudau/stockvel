@@ -103,7 +103,29 @@ final class TenantContext
             return true;
         }
 
-        return in_array($permission, $this->permissions, true);
+        if (in_array($permission, $this->permissions, true)) {
+            return true;
+        }
+
+        // Backward-compatible aliases while roles are updated to module-specific codes.
+        $legacyAliases = [
+            'funds.manage' => ['fees.manage'],
+            'fines.manage' => ['fees.manage'],
+            'constitution.manage' => ['settings.manage', 'rules.manage'],
+            'announcements.manage' => ['settings.manage'],
+            'health.view' => ['reports.view'],
+            'goals.view' => ['reports.view'],
+            'goals.manage' => ['settings.manage', 'fees.manage', 'reports.view'],
+            'roles.manage' => ['settings.manage'],
+            'categories.manage' => ['settings.manage'],
+        ];
+        foreach ($legacyAliases[$permission] ?? [] as $legacy) {
+            if (in_array($legacy, $this->permissions, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function requirePermission(string $permission): void
@@ -120,13 +142,13 @@ final class TenantContext
 
     public function isPlatformAdmin(): bool
     {
+        // Never treat stokvel membership role codes (e.g. auditor) as platform admin.
         return in_array($this->platformRole, [
             'platform_super_admin',
             'platform_support',
             'platform_auditor',
             'super_admin',
             'support',
-            'auditor',
         ], true);
     }
 

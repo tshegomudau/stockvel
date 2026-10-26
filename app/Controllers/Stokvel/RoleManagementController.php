@@ -9,6 +9,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Services\PermissionService;
+use App\Support\ModuleRegistry;
 
 final class RoleManagementController extends Controller
 {
@@ -34,7 +35,7 @@ final class RoleManagementController extends Controller
 
     public function index(Request $request): Response
     {
-        $this->requirePermission('settings.manage');
+        $this->requireRolesAccess();
         $sid = $this->requireStokvel();
         $this->ensureSystemRoles();
 
@@ -68,7 +69,7 @@ final class RoleManagementController extends Controller
 
     public function show(Request $request, string $roleCode): Response
     {
-        $this->requirePermission('settings.manage');
+        $this->requireRolesAccess();
         $sid = $this->requireStokvel();
         $roleCode = strtolower(trim($roleCode));
         if (!in_array($roleCode, self::STOKVEL_ROLES, true)) {
@@ -89,6 +90,12 @@ final class RoleManagementController extends Controller
         $overrides = $this->rolePermissionOverrides($sid);
         $selected = is_array($overrides[$roleCode] ?? null) ? $overrides[$roleCode] : $defaults;
         $isFullAccess = in_array('*', $selected, true) || in_array('*', $defaults, true);
+
+        $assignablePermissions = $this->assignablePermissions();
+        $selected = array_values(array_filter(
+            $selected,
+            static fn ($code) => $code === '*' || in_array((string) $code, $assignablePermissions, true)
+        ));
 
         $members = $this->db()->fetchAll(
             'SELECT m.id AS membership_id, m.member_number, m.status,
@@ -119,7 +126,7 @@ final class RoleManagementController extends Controller
             ['sid' => $sid, 'rid' => (int) $role['id']]
         );
 
-        $permissionGroups = $this->groupPermissions(PermissionService::APP_PERMISSIONS);
+        $permissionGroups = $this->groupPermissions($assignablePermissions);
 
         return $this->render('stokvel/roles/show', [
             'title' => (self::ROLE_LABELS[$roleCode] ?? $roleCode) . ' permissions',
@@ -133,6 +140,7 @@ final class RoleManagementController extends Controller
                 'is_full_access' => $isFullAccess,
             ],
             'permissionGroups' => $permissionGroups,
+            'permissionLabels' => PermissionService::PERMISSION_LABELS,
             'members' => $members,
             'assignableMembers' => $assignable,
         ]);
@@ -140,7 +148,7 @@ final class RoleManagementController extends Controller
 
     public function update(Request $request, string $roleCode): Response
     {
-        $this->requirePermission('settings.manage');
+        $this->requireRolesAccess();
         $sid = $this->requireStokvel();
         $roleCode = strtolower(trim($roleCode));
         if (!in_array($roleCode, self::STOKVEL_ROLES, true)) {
@@ -153,7 +161,8 @@ final class RoleManagementController extends Controller
             $selected = [];
         }
         $selected = array_values(array_unique(array_map('strval', $selected)));
-        $allowed = PermissionService::APP_PERMISSIONS;
+        $enabled = $this->tenant()->enabledModules();
+        $allowed = ModuleRegistry::filterPermissions(PermissionService::APP_PERMISSIONS, $enabled);
         $selected = array_values(array_intersect($selected, $allowed));
 
         /** @var PermissionService $permissionService */
@@ -173,7 +182,22 @@ final class RoleManagementController extends Controller
         if (!isset($json['role_permissions']) || !is_array($json['role_permissions'])) {
             $json['role_permissions'] = [];
         }
-        $json['role_permissions'][$roleCode] = $selected;
+        // Keep overrides for inactive modules so re-enabling a module restores prior grants.
+        if ($selected !== ['*']) {
+            $previous = is_array($json['role_permissions'][$roleCode] ?? null)
+                ? $json['role_permissions'][$roleCode]
+                : [];
+            foreach ($previous as $code) {
+                $code = (string) $code;
+                if ($code === '*' || $code === '') {
+                    continue;
+                }
+                if (!ModuleRegistry::permissionAllowed($code, $enabled) && !in_array($code, $selected, true)) {
+                    $selected[] = $code;
+                }
+            }
+        }
+        $json['role_permissions'][$roleCode] = array_values(array_unique($selected));
         $encoded = json_encode($json);
         if ($encoded === false) {
             Session::flash('error', 'Could not save permissions.');
@@ -200,7 +224,7 @@ final class RoleManagementController extends Controller
 
     public function assign(Request $request, string $roleCode): Response
     {
-        $this->requirePermission('settings.manage');
+        $this->requireRolesAccess();
         $sid = $this->requireStokvel();
         $roleCode = strtolower(trim($roleCode));
         if (!in_array($roleCode, self::STOKVEL_ROLES, true)) {
@@ -250,7 +274,7 @@ final class RoleManagementController extends Controller
 
     public function remove(Request $request, string $roleCode): Response
     {
-        $this->requirePermission('settings.manage');
+        $this->requireRolesAccess();
         $sid = $this->requireStokvel();
         $roleCode = strtolower(trim($roleCode));
         if (!in_array($roleCode, self::STOKVEL_ROLES, true)) {
@@ -339,5 +363,20 @@ final class RoleManagementController extends Controller
         }
         ksort($groups);
         return $groups;
+    }
+
+    private function requireRolesAccess(): void
+    {
+        if ($this->tenant()->can('roles.manage') || $this->tenant()->can('settings.manage')) {
+            return;
+        }
+        $this->requirePermission('roles.manage');
+    }
+
+    /** @return list<string> */
+    private function assignablePermissions(): array
+    {
+        $enabled = $this->tenant()->enabledModules();
+        return ModuleRegistry::filterPermissions(PermissionService::APP_PERMISSIONS, $enabled);
     }
 }

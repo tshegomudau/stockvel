@@ -5,9 +5,9 @@
             <span>stockvel</span>
         </p>
         <h1>Manage your stokvel with clarity and trust</h1>
-        <p>Secure multi-tenant tooling for contributions, expenses, meetings, payouts, and member statements — built for South African groups.</p>
+        <p>Secure tooling for contributions, expenses, meetings, payouts, and member statements — built for South African groups.</p>
         <ul class="auth-points">
-            <li>Tenant-isolated records and role-based permissions</li>
+            <!--li>Tenant-isolated records and role-based permissions</li-->
             <li>ZAR-friendly financial workflows with audit history</li>
             <li>Member self-service for statements and documents</li>
         </ul>
@@ -39,6 +39,6 @@
             <a href="<?= e(url('/forgot-password')) ?>">Forgot password?</a>
             <a href="<?= e(url('/register')) ?>">Create account</a>
         </div>
-        <p class="auth-security-note">Protected with CSRF tokens, rate limiting, and secure session cookies. Never share your password.</p>
+        <!--p class="auth-security-note">Protected with CSRF tokens, rate limiting, and secure session cookies. Never share your password.</p-->
     </div>
 </div>

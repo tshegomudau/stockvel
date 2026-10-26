@@ -104,6 +104,7 @@ final class ExceptionHandler
         $dashboardUrl = $this->resolveDashboardUrl($user, $platformRole);
         $safeBackUrl = $this->resolveSafeBackUrl($dashboardUrl);
 
+        $layout = ($user !== null && !empty($user['id'])) ? 'layouts/app' : 'layouts/guest';
         try {
             $html = View::render('errors/error', [
                 'status' => $status,
@@ -115,7 +116,9 @@ final class ExceptionHandler
                 'safeBackUrl' => $safeBackUrl,
                 'debug' => null,
                 'title' => self::STATUS_TITLES[$status] ?? ('Error ' . $status),
-            ], 'layouts/guest');
+                'navContext' => str_contains($dashboardUrl, '/platform') ? 'platform' : (str_contains($dashboardUrl, '/member') ? 'member' : 'app'),
+                'activeNav' => '',
+            ], $layout);
         } catch (Throwable) {
             $html = '<h1>' . e((string) $status) . '</h1><p>' . e($message) . '</p>'
                 . '<p><a href="' . e($dashboardUrl) . '">Continue</a></p>';
@@ -142,7 +145,6 @@ final class ExceptionHandler
             'platform_auditor',
             'super_admin',
             'support',
-            'auditor',
         ], true);
 
         // Platform operators always land on the platform dashboard — even when the

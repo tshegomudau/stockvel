@@ -15,7 +15,7 @@
     <div class="card">
         <h2 class="card-title">Built for real committee work</h2>
         <ul class="auth-points">
-            <li>Isolated tenants with audited financial actions</li>
+            <!--li>Isolated tenants with audited financial actions</li-->
             <li>Maker-checker approvals and immutable journal posts</li>
             <li>Member statements, invitations, and document vault</li>
             <li>Works on desktop and mobile without framework lock-in</li>
@@ -25,8 +25,8 @@
 
 <section class="grid grid-3" style="margin:2rem 0 1rem;">
     <article class="card">
-        <h2 class="card-title">Multi-tenant security</h2>
-        <p class="text-muted">Each stokvel is isolated with role-based access, CSRF protection, and an append-only audit trail.</p>
+        <h2 class="card-title">Community-Driven Technology</h2>
+        <p class="text-muted">Your stokvel will not remain dormant until the next meeting, we have other strategic initiatives that can enhance your group value.</p>
     </article>
     <article class="card">
         <h2 class="card-title">Financial clarity</h2>

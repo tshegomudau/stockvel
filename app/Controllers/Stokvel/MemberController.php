@@ -12,6 +12,7 @@ use App\Core\Session;
 use App\Core\Validator;
 use App\Services\Membership\MemberChangeRequestService;
 use App\Services\PermissionService;
+use App\Support\ModuleRegistry;
 use App\Support\SensitiveData;
 
 final class MemberController extends Controller
@@ -135,6 +136,30 @@ final class MemberController extends Controller
             ['sid' => $sid]
         );
 
+        $joiningFee = $this->db()->fetch(
+            'SELECT * FROM member_joining_fees
+             WHERE stokvel_id = :sid AND membership_id = :mid
+             ORDER BY id DESC LIMIT 1',
+            ['sid' => $sid, 'mid' => (int) $member['id']]
+        );
+        $joiningFeeStatus = 'not_charged';
+        try {
+            /** @var \App\Services\Finance\JoiningFeeService $joiningFees */
+            $joiningFees = app()->container()->get(\App\Services\Finance\JoiningFeeService::class);
+            $joiningFeeStatus = $joiningFees->statusForMembership($sid, (int) $member['id']);
+        } catch (\Throwable) {
+            $joiningFeeStatus = $joiningFee['status'] ?? 'not_applicable';
+        }
+
+        $completeness = null;
+        try {
+            /** @var \App\Services\Members\ProfileCompletenessService $profiles */
+            $profiles = app()->container()->get(\App\Services\Members\ProfileCompletenessService::class);
+            $completeness = $profiles->forMembership($sid, (int) $member['id']);
+        } catch (\Throwable) {
+            $completeness = null;
+        }
+
         return $this->render('stokvel/members/show', [
             'title' => trim(($member['first_name'] ?? '') . ' ' . ($member['last_name'] ?? '')),
             'activeNav' => 'members',
@@ -147,6 +172,9 @@ final class MemberController extends Controller
             'permissionOptions' => $permissionOptions,
             'grantedPermissionCodes' => $grantedPermissionCodes,
             'defaultMinimumContribution' => $stokvelMin['minimum_contribution'] ?? null,
+            'joiningFee' => $joiningFee,
+            'joiningFeeStatus' => $joiningFeeStatus,
+            'completeness' => $completeness,
         ]);
     }
 
@@ -471,7 +499,10 @@ final class MemberController extends Controller
             $selected = [];
         }
         $selected = array_values(array_unique(array_map('strval', $selected)));
-        $allowed = PermissionService::APP_PERMISSIONS;
+        $allowed = ModuleRegistry::filterPermissions(
+            PermissionService::APP_PERMISSIONS,
+            $this->tenant()->enabledModules()
+        );
         $selected = array_values(array_intersect($selected, $allowed));
 
         $now = now_utc();
@@ -879,11 +910,16 @@ final class MemberController extends Controller
     /** @return list<array{code: string, label: string}> */
     private function permissionOptionsForMember(): array
     {
+        $codes = ModuleRegistry::filterPermissions(
+            PermissionService::APP_PERMISSIONS,
+            $this->tenant()->enabledModules()
+        );
+        $labels = PermissionService::PERMISSION_LABELS;
         $options = [];
-        foreach (PermissionService::APP_PERMISSIONS as $code) {
+        foreach ($codes as $code) {
             $options[] = [
                 'code' => $code,
-                'label' => ucwords(str_replace(['.', '_'], [' — ', ' '], $code)),
+                'label' => $labels[$code] ?? ucwords(str_replace(['.', '_'], [' — ', ' '], $code)),
             ];
         }
         return $options;

@@ -11,6 +11,7 @@ use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
 use App\Exceptions\HttpException;
+use App\Exceptions\TenantException;
 use App\Services\Meetings\MeetingService;
 use App\Support\HtmlSanitizer;
 
@@ -202,6 +203,40 @@ final class MeetingController extends Controller
             $linkedDocuments = [];
         }
 
+        /** @var MeetingService $meetings */
+        $meetings = app()->container()->get(MeetingService::class);
+        $meetingId = (int) $id;
+        $resolutions = $meetings->listResolutions($sid, $meetingId);
+        $actionItems = $meetings->listActionItems($sid, $meetingId);
+
+        $currentMembership = $this->tenant()->membership();
+        if ($currentMembership === null && $this->userId() !== null) {
+            $currentMembership = $this->db()->fetch(
+                "SELECT * FROM memberships
+                 WHERE stokvel_id = :sid AND user_id = :uid AND status = 'active'
+                 LIMIT 1",
+                ['sid' => $sid, 'uid' => (int) $this->userId()]
+            );
+        }
+        $membershipId = $currentMembership ? (int) $currentMembership['id'] : null;
+        $myVotes = $membershipId
+            ? $meetings->votesForMembership(
+                $sid,
+                $membershipId,
+                array_map(static fn (array $r): int => (int) $r['id'], $resolutions)
+            )
+            : [];
+
+        $attendanceSummary = ['present' => 0, 'absent' => 0, 'apology' => 0, 'late' => 0, 'unmarked' => 0];
+        foreach ($members as $m) {
+            $st = (string) ($m['attendance_status'] ?? '');
+            if ($st !== '' && isset($attendanceSummary[$st])) {
+                $attendanceSummary[$st]++;
+            } else {
+                $attendanceSummary['unmarked']++;
+            }
+        }
+
         return $this->render('stokvel/meetings/show', [
             'title' => (string) ($row['title'] ?? 'Meeting'),
             'activeNav' => 'meetings',
@@ -209,7 +244,13 @@ final class MeetingController extends Controller
             'item' => $row,
             'members' => $members,
             'canManageMinutes' => $canManageMinutes,
+            'canManageMeetings' => true,
             'linkedDocuments' => $linkedDocuments,
+            'resolutions' => $resolutions,
+            'actionItems' => $actionItems,
+            'myVotes' => $myVotes,
+            'currentMembershipId' => $membershipId,
+            'attendanceSummary' => $attendanceSummary,
         ]);
     }
 
@@ -218,9 +259,13 @@ final class MeetingController extends Controller
         $this->requirePermission('meetings.manage');
         $sid = $this->requireStokvel();
         $statuses = $request->input('attendance', []);
+        $notes = $request->input('attendance_notes', []);
         if (!is_array($statuses)) {
             Session::flash('error', 'Invalid attendance payload.');
             return $this->redirect('/app/meetings/' . $id);
+        }
+        if (!is_array($notes)) {
+            $notes = [];
         }
         /** @var MeetingService $meetings */
         $meetings = app()->container()->get(MeetingService::class);
@@ -229,9 +274,100 @@ final class MeetingController extends Controller
             if (!in_array($status, ['present', 'absent', 'apology', 'late'], true)) {
                 continue;
             }
-            $meetings->recordAttendance($sid, (int) $id, (int) $membershipId, $status);
+            $note = trim((string) ($notes[$membershipId] ?? ''));
+            $meetings->recordAttendance(
+                $sid,
+                (int) $id,
+                (int) $membershipId,
+                $status,
+                $note !== '' ? $note : null
+            );
         }
         Session::flash('success', 'Attendance saved.');
+        return $this->redirect('/app/meetings/' . $id);
+    }
+
+    public function storeResolution(Request $request, string $id): Response
+    {
+        $this->requirePermission('meetings.manage');
+        $sid = $this->requireStokvel();
+        $title = trim((string) $request->input('title', ''));
+        $body = trim((string) $request->input('body', $request->input('description', '')));
+
+        /** @var MeetingService $meetings */
+        $meetings = app()->container()->get(MeetingService::class);
+        try {
+            $meetings->addResolution($sid, (int) $id, (int) $this->userId(), $title, $body);
+            Session::flash('success', 'Resolution added.');
+        } catch (TenantException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+
+        return $this->redirect('/app/meetings/' . $id);
+    }
+
+    public function castVote(Request $request, string $id, string $resolutionId): Response
+    {
+        $this->requireAuth();
+        $sid = $this->requireStokvel();
+        $vote = strtolower(trim((string) $request->input('vote', '')));
+
+        $membership = $this->tenant()->membership();
+        if ($membership === null || (int) ($membership['stokvel_id'] ?? 0) !== $sid) {
+            $membership = $this->db()->fetch(
+                "SELECT * FROM memberships
+                 WHERE stokvel_id = :sid AND user_id = :uid AND status = 'active'
+                 LIMIT 1",
+                ['sid' => $sid, 'uid' => (int) $this->userId()]
+            );
+        }
+        if (!$membership) {
+            Session::flash('error', 'Active membership required to vote.');
+            return $this->redirect('/app/meetings/' . $id);
+        }
+
+        $resolution = $this->db()->fetch(
+            'SELECT id FROM resolutions WHERE id = :rid AND meeting_id = :mid AND stokvel_id = :sid LIMIT 1',
+            ['rid' => (int) $resolutionId, 'mid' => (int) $id, 'sid' => $sid]
+        );
+        if (!$resolution) {
+            Session::flash('error', 'Resolution not found for this meeting.');
+            return $this->redirect('/app/meetings/' . $id);
+        }
+
+        /** @var MeetingService $meetings */
+        $meetings = app()->container()->get(MeetingService::class);
+        try {
+            $meetings->castVote($sid, (int) $resolutionId, (int) $membership['id'], $vote);
+            Session::flash('success', 'Vote recorded.');
+        } catch (TenantException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+
+        return $this->redirect('/app/meetings/' . $id);
+    }
+
+    public function storeActionItem(Request $request, string $id): Response
+    {
+        $this->requirePermission('meetings.manage');
+        $sid = $this->requireStokvel();
+        $assigned = $request->input('assigned_membership_id', '');
+        $assignedId = $assigned !== '' && $assigned !== null ? (int) $assigned : null;
+
+        /** @var MeetingService $meetings */
+        $meetings = app()->container()->get(MeetingService::class);
+        try {
+            $meetings->addActionItem($sid, (int) $id, (int) $this->userId(), [
+                'title' => trim((string) $request->input('title', '')),
+                'description' => trim((string) $request->input('description', '')),
+                'assigned_membership_id' => $assignedId,
+                'due_date' => trim((string) $request->input('due_date', '')),
+            ]);
+            Session::flash('success', 'Action item added.');
+        } catch (TenantException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+
         return $this->redirect('/app/meetings/' . $id);
     }
 

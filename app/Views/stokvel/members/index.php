@@ -44,6 +44,7 @@
         <span><?= (int) $paginator->total ?> member<?= (int) $paginator->total === 1 ? '' : 's' ?></span>
         <span class="text-muted">Amber = ≤2 unpaid contributions · Red = more than 2</span>
     </div>
+    <div class="table-responsive-cards">
     <div class="table-wrap">
         <table class="table" id="members-table">
             <thead>
@@ -73,9 +74,10 @@
                 } elseif ($owing >= 1) {
                     $rowClass = 'row-owing-low';
                 }
+                $memberName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
                 ?>
                 <tr class="<?= e($rowClass) ?>">
-                    <td><?= e(trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''))) ?></td>
+                    <td><?= e($memberName) ?></td>
                     <td><?= e($row['email'] ?? '') ?></td>
                     <td><?= e((string) ($row['member_number'] ?? '—')) ?></td>
                     <td><span class="badge <?= e($badge) ?>"><span class="status-dot <?= e($status === 'active' ? 'success' : ($status === 'suspended' ? 'danger' : 'warning')) ?>"></span><?= e(ucfirst($status)) ?></span></td>
@@ -108,6 +110,39 @@
             <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
+    <div class="mobile-cards" aria-label="Members list">
+        <?php foreach ($paginator->items as $row): ?>
+            <?php
+            $mid = (int) ($row['id'] ?? 0);
+            $status = (string) ($row['status'] ?? '');
+            $badge = match ($status) {
+                'active' => 'badge-success',
+                'suspended', 'terminated' => 'badge-danger',
+                'invited', 'pending' => 'badge-warning',
+                default => '',
+            };
+            $owing = (int) (($owingByMember ?? [])[$mid] ?? 0);
+            $cardClass = $owing > 2 ? 'row-owing-high' : ($owing >= 1 ? 'row-owing-low' : '');
+            $memberName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+            ?>
+            <article class="mobile-card <?= e($cardClass) ?>">
+                <div class="mobile-card-row"><span>Name</span><strong><?= e($memberName) ?></strong></div>
+                <div class="mobile-card-row"><span>Email</span><span><?= e($row['email'] ?? '') ?></span></div>
+                <div class="mobile-card-row"><span>Member no.</span><span><?= e((string) ($row['member_number'] ?? '—')) ?></span></div>
+                <div class="mobile-card-row"><span>Status</span><span class="badge <?= e($badge) ?>"><?= e(ucfirst($status)) ?></span></div>
+                <div class="actions mt-3">
+                    <a class="btn btn-sm btn-secondary" href="<?= e(url('/app/members/' . $mid)) ?>">View</a>
+                    <?php if (!empty($canManage) && $status === 'active'): ?>
+                        <form method="post" action="<?= e(url('/app/members/' . $mid . '/suspend')) ?>" class="inline-form">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-sm btn-danger" data-confirm="Suspend this member?">Suspend</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            </article>
+        <?php endforeach; ?>
+    </div>
     </div>
     <?= view('partials/pagination', ['paginator' => $paginator], null) ?>
 <?php endif; ?>

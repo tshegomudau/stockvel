@@ -10,6 +10,7 @@ use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
 use App\Services\Auth\AuthService;
+use App\Services\Members\ProfileCompletenessService;
 use App\Support\SensitiveData;
 
 final class ProfileController extends Controller
@@ -18,6 +19,7 @@ final class ProfileController extends Controller
     {
         $this->requireAuth();
         $userId = (int) $this->userId();
+        $sid = $this->requireStokvel();
         $user = $this->db()->fetch(
             'SELECT u.id, u.email, u.mobile, p.first_name, p.last_name, p.id_number_encrypted
              FROM users u
@@ -27,12 +29,24 @@ final class ProfileController extends Controller
         );
         $idPlain = SensitiveData::decrypt($user['id_number_encrypted'] ?? null);
 
+        $completeness = null;
+        $membership = $this->db()->fetch(
+            'SELECT id FROM memberships WHERE stokvel_id = :sid AND user_id = :uid LIMIT 1',
+            ['sid' => $sid, 'uid' => $userId]
+        );
+        if ($membership) {
+            /** @var ProfileCompletenessService $profiler */
+            $profiler = app()->container()->get(ProfileCompletenessService::class);
+            $completeness = $profiler->forMembership($sid, (int) $membership['id']);
+        }
+
         return $this->render('member/profile', [
             'title' => 'My profile',
             'activeNav' => 'member-profile',
             'navContext' => 'member',
             'profile' => $user,
             'idMasked' => SensitiveData::maskId($idPlain),
+            'completeness' => $completeness,
         ]);
     }
 

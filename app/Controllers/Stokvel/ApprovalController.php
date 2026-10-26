@@ -9,7 +9,8 @@ use App\Core\Paginator;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
-use App\Services\Loans\LoanService;
+use App\Exceptions\FinanceException;
+use App\Services\Approvals\ApprovalService;
 
 final class ApprovalController extends Controller
 {
@@ -38,147 +39,65 @@ final class ApprovalController extends Controller
             ['status' => $status]
         );
 
+        /** @var ApprovalService $approvals */
+        $approvals = app()->container()->get(ApprovalService::class);
+        $decisionMap = [];
+        foreach ($paginator->items as $row) {
+            $decisionMap[(int) $row['id']] = $approvals->decisionsFor($sid, (int) $row['id']);
+        }
+
         return $this->render('stokvel/approvals/index', [
-            'title' => 'Approvals',
+            'title' => 'My Approvals',
             'activeNav' => 'approvals',
             'navContext' => 'app',
             'paginator' => $paginator,
             'statusFilter' => $status,
+            'decisionMap' => $decisionMap,
         ]);
     }
 
     public function approve(Request $request, string $id): Response
     {
         $this->requirePermission('approvals.action');
-        $this->decide((int) $id, 'approved', (string) $request->input('notes', ''));
-        Session::flash('success', 'Approved.');
+        $sid = $this->requireStokvel();
+        $userId = (int) $this->userId();
+        $notes = trim((string) $request->input('notes', ''));
+
+        try {
+            /** @var ApprovalService $approvals */
+            $approvals = app()->container()->get(ApprovalService::class);
+            $result = $approvals->approve($sid, (int) $id, $userId, $notes);
+            if ($result['finalised']) {
+                Session::flash('success', 'Request fully approved (' . $result['approval_count'] . '/' . $result['required_approvals'] . ').');
+            } else {
+                Session::flash(
+                    'success',
+                    'Your approval was recorded (' . $result['approval_count'] . '/' . $result['required_approvals'] . '). Still pending further approval.'
+                );
+            }
+        } catch (FinanceException $e) {
+            Session::flash('error', $e->getMessage());
+        }
+
         return $this->redirectBack($request, '/app/approvals');
     }
 
     public function reject(Request $request, string $id): Response
     {
         $this->requirePermission('approvals.action');
-        $this->decide((int) $id, 'rejected', (string) $request->input('notes', ''));
-        Session::flash('success', 'Rejected.');
-        return $this->redirectBack($request, '/app/approvals');
-    }
-
-    private function decide(int $id, string $status, string $notes): void
-    {
         $sid = $this->requireStokvel();
         $userId = (int) $this->userId();
-        $now = now_utc();
-
-        $row = $this->db()->fetch(
-            'SELECT * FROM approval_requests WHERE id = :id AND stokvel_id = :sid LIMIT 1',
-            ['id' => $id, 'sid' => $sid]
-        );
-        if ($row === null || ($row['status'] ?? '') !== 'pending') {
-            Session::flash('error', 'Approval request not found or already decided.');
-            return;
-        }
-
-        if ($status === 'approved') {
-            $this->db()->exec(
-                'UPDATE approval_requests
-                 SET status = :st, approved_by_user_id = :by, rejected_by_user_id = NULL,
-                     decision_notes = :notes, decided_at = :da, updated_at = :ua
-                 WHERE id = :id AND stokvel_id = :sid AND status = :pending',
-                [
-                    'st' => 'approved',
-                    'by' => $userId,
-                    'notes' => $notes !== '' ? $notes : null,
-                    'da' => $now,
-                    'ua' => $now,
-                    'id' => $id,
-                    'sid' => $sid,
-                    'pending' => 'pending',
-                ]
-            );
-        } else {
-            $this->db()->exec(
-                'UPDATE approval_requests
-                 SET status = :st, rejected_by_user_id = :by, approved_by_user_id = NULL,
-                     decision_notes = :notes, decided_at = :da, updated_at = :ua
-                 WHERE id = :id AND stokvel_id = :sid AND status = :pending',
-                [
-                    'st' => 'rejected',
-                    'by' => $userId,
-                    'notes' => $notes !== '' ? $notes : null,
-                    'da' => $now,
-                    'ua' => $now,
-                    'id' => $id,
-                    'sid' => $sid,
-                    'pending' => 'pending',
-                ]
-            );
-        }
-
-        $this->applySideEffects($row, $status, $notes, $userId);
-    }
-
-    /** @param array<string, mixed> $row */
-    private function applySideEffects(array $row, string $status, string $notes, int $userId): void
-    {
-        $sid = (int) $row['stokvel_id'];
-        $refType = (string) ($row['reference_type'] ?? $row['request_type'] ?? '');
-        $refId = (int) ($row['reference_id'] ?? 0);
-        if ($refId < 1) {
-            return;
-        }
+        $reason = trim((string) $request->input('notes', $request->input('reason', '')));
 
         try {
-            if (in_array($refType, ['loan_application', 'loan'], true)) {
-                /** @var LoanService $loans */
-                $loans = app()->container()->get(LoanService::class);
-                if ($status === 'approved') {
-                    $loans->committeeApprove(
-                        $sid,
-                        $refId,
-                        $userId,
-                        null,
-                        $notes !== '' ? $notes : 'Approved via approvals dashboard'
-                    );
-                } else {
-                    $loans->committeeReject(
-                        $sid,
-                        $refId,
-                        $userId,
-                        $notes !== '' ? $notes : 'Rejected via approvals dashboard'
-                    );
-                }
-                return;
-            }
-
-            if ($refType === 'meeting_notes') {
-                $this->db()->exec(
-                    "UPDATE meetings SET status = :st, updated_at = :ua WHERE id = :id AND stokvel_id = :sid",
-                    [
-                        'st' => $status === 'approved' ? 'completed' : 'scheduled',
-                        'ua' => now_utc(),
-                        'id' => $refId,
-                        'sid' => $sid,
-                    ]
-                );
-            }
-
-            if ($refType === 'burial_claim') {
-                $this->db()->exec(
-                    'UPDATE burial_claims
-                     SET status = :st, decided_by_user_id = :by, decided_at = :da, updated_at = :ua
-                     WHERE id = :id AND stokvel_id = :sid',
-                    [
-                        'st' => $status === 'approved' ? 'approved' : 'rejected',
-                        'by' => $userId,
-                        'da' => now_utc(),
-                        'ua' => now_utc(),
-                        'id' => $refId,
-                        'sid' => $sid,
-                    ]
-                );
-            }
-        } catch (\Throwable $e) {
-            Session::flash('error', 'Decision saved but follow-up action failed: ' . $e->getMessage());
+            /** @var ApprovalService $approvals */
+            $approvals = app()->container()->get(ApprovalService::class);
+            $approvals->reject($sid, (int) $id, $userId, $reason);
+            Session::flash('success', 'Request rejected.');
+        } catch (FinanceException $e) {
+            Session::flash('error', $e->getMessage());
         }
+
+        return $this->redirectBack($request, '/app/approvals');
     }
 }

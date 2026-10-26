@@ -1,7 +1,7 @@
 <div class="auth-shell" style="max-width:28rem;margin:0 auto;">
     <div class="auth-card card">
         <h1>Forgot password</h1>
-        <p class="lead">Enter your account email. If it exists, we will send a one-time reset link (logged to storage in development).</p>
+        <p class="lead">Enter your account email. If it exists, we will send a one-time reset link.</p>
         <form method="post" action="<?= e(url('/forgot-password')) ?>" class="form-stack">
             <?= csrf_field() ?>
             <div class="form-group">

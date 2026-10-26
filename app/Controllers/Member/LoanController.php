@@ -37,6 +37,13 @@ final class LoanController extends Controller
             ['sid' => $sid, 'mid' => (int) $membership['id']]
         );
 
+        $purposes = $this->db()->fetchAll(
+            'SELECT id, code, name FROM loan_purposes
+             WHERE stokvel_id = :sid AND is_active = 1
+             ORDER BY sort_order ASC, name ASC',
+            ['sid' => $sid]
+        );
+
         return $this->render('member/loans/apply', [
             'title' => 'Apply for a loan',
             'activeNav' => 'member-loans',
@@ -44,6 +51,7 @@ final class LoanController extends Controller
             'membership' => $membership,
             'products' => $products->listActive($sid),
             'guarantors' => $guarantors,
+            'purposes' => $purposes,
         ]);
     }
 
@@ -62,16 +70,18 @@ final class LoanController extends Controller
             'loan_product_id' => (int) $request->input('loan_product_id', 0),
             'principal' => (string) $request->input('principal', $request->input('amount', '')),
             'term_months' => (int) $request->input('term_months', 6),
+            'loan_purpose_id' => (int) $request->input('loan_purpose_id', 0),
             'purpose' => trim((string) $request->input('purpose', '')),
         ];
         $validator = Validator::make($data, [
             'loan_product_id' => 'required|integer',
             'principal' => 'required|numeric',
             'term_months' => 'required|integer',
+            'loan_purpose_id' => 'required|integer',
         ]);
-        if ($validator->fails() || $data['loan_product_id'] < 1) {
+        if ($validator->fails() || $data['loan_product_id'] < 1 || $data['loan_purpose_id'] < 1) {
             $this->flashOld($request);
-            Session::flash('error', 'Invalid loan application details.');
+            Session::flash('error', 'Product, amount, term, and purpose are required.');
             return $this->redirect('/member/loans/apply');
         }
 
@@ -96,7 +106,8 @@ final class LoanController extends Controller
                 $data['term_months'],
                 $userId,
                 $data['purpose'],
-                $guarantorIds !== [] ? $guarantorIds : null
+                $guarantorIds !== [] ? $guarantorIds : null,
+                $data['loan_purpose_id']
             );
             $loans->createPendingApprovalRequest($sid, $applicationId, $userId);
         } catch (FinanceException $e) {

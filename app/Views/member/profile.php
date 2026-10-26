@@ -2,6 +2,21 @@
     'title' => 'My profile',
     'description' => 'Update your contact details and password. ID numbers are stored encrypted.',
 ], null) ?>
+<?php if (!empty($completeness)): ?>
+<section class="card mb-4" aria-label="Profile completeness">
+    <h2 class="h3">Profile completion: <?= (int) $completeness['percent'] ?>%</h2>
+    <?php if (!empty($completeness['missing'])): ?>
+        <p>Profile incomplete:</p>
+        <ul>
+            <?php foreach ($completeness['missing'] as $item): ?>
+                <li><?= e($item) ?></li>
+            <?php endforeach; ?>
+        </ul>
+    <?php else: ?>
+        <p>All recommended profile items are complete.</p>
+    <?php endif; ?>
+</section>
+<?php endif; ?>
 <p class="mb-4 page-actions">
     <a class="btn btn-secondary" href="<?= e(url('/member/security')) ?>">Security &amp; MFA</a>
     <a class="btn btn-secondary" href="<?= e(url('/member/beneficiaries')) ?>">My beneficiaries</a>

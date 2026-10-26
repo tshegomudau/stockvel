@@ -8,15 +8,24 @@ use App\Controllers\Controller;
 use App\Core\Paginator;
 use App\Core\Request;
 use App\Core\Response;
+use App\Exceptions\AuthorizationException;
+use App\Services\PermissionService;
 
+/**
+ * Platform-only audit log. Never exposed to stokvel membership roles.
+ */
 final class AuditController extends Controller
 {
     public function index(Request $request): Response
     {
         $this->requireAuth();
         if (!$this->tenant()->isPlatformAdmin()) {
-            return $this->redirect('/app');
+            throw new AuthorizationException('Platform access required to view audit logs.');
         }
+
+        /** @var PermissionService $perms */
+        $perms = app()->container()->get(PermissionService::class);
+        $perms->requirePlatformPermission('audit_logs.view');
 
         $page = $this->page($request);
         $perPage = $this->perPage($request);
