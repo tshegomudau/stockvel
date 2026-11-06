@@ -191,13 +191,26 @@ final class ProfileCompletenessService
         }
 
         $done = (int) ($row['c'] ?? 0) > 0;
+        $note = null;
+        if (!$done) {
+            $uploadsOn = false;
+            try {
+                $uploadsOn = app()->container()
+                    ->get(\App\Services\Storage\StorageManager::class)
+                    ->uploadsEnabled();
+            } catch (\Throwable) {
+                $uploadsOn = false;
+            }
+            $note = $uploadsOn
+                ? 'Upload an ID copy from My profile (ID / identity category).'
+                : 'File uploads are disabled — ask the platform admin to enable Features & storage.';
+        }
+
         return [
             'key' => 'id_document',
             'label' => 'ID document on file',
             'done' => $done,
-            'note' => $done
-                ? null
-                : 'Checked documents uploaded by this member with an ID/identity category or title.',
+            'note' => $note,
         ];
     }
 }

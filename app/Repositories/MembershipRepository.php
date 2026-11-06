@@ -11,14 +11,17 @@ final class MembershipRepository extends BaseRepository
 
     public function findForUser(int $userId, ?int $stokvelId = null): ?array
     {
-        $sql = 'SELECT * FROM memberships WHERE user_id = :user_id';
-        $params = ['user_id' => $userId];
+        // When an explicit stokvel is provided (e.g. invitation accept), do not require
+        // an already-selected tenant — the invitee often has none yet.
         if ($stokvelId !== null) {
-            $sql .= ' AND stokvel_id = :stokvel_id';
-            $params['stokvel_id'] = $stokvelId;
+            return $this->db->fetch(
+                'SELECT * FROM memberships WHERE user_id = :user_id AND stokvel_id = :stokvel_id LIMIT 1',
+                ['user_id' => $userId, 'stokvel_id' => $stokvelId]
+            );
         }
-        $sql .= ' LIMIT 1';
-        return $this->db->fetch($sql, $this->tenantParams($params));
+
+        $sql = 'SELECT * FROM memberships WHERE user_id = :user_id AND ' . $this->applyTenant() . ' LIMIT 1';
+        return $this->db->fetch($sql, $this->tenantParams(['user_id' => $userId]));
     }
 
     public function findById(int $id): ?array

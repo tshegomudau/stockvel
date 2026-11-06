@@ -58,13 +58,17 @@ final class MeetingController extends Controller
 
         $documents = [];
         try {
+            /** @var \App\Services\Documents\DocumentService $documentService */
+            $documentService = app()->container()->get(\App\Services\Documents\DocumentService::class);
+            $visibility = $documentService->memberVisibilitySql('d');
             $documents = $this->db()->fetchAll(
                 "SELECT d.id, d.title, d.category, d.content_type, dc.name AS category_name
                  FROM documents d
                  LEFT JOIN document_categories dc ON dc.id = d.document_category_id AND dc.stokvel_id = d.stokvel_id
                  WHERE d.stokvel_id = :sid AND d.meeting_id = :mid AND d.status = 'active'
+                   AND {$visibility}
                  ORDER BY d.title ASC",
-                ['sid' => $sid, 'mid' => $meetingId]
+                ['sid' => $sid, 'mid' => $meetingId, 'doc_uid' => (int) $this->userId()]
             );
         } catch (\Throwable) {
             $documents = [];

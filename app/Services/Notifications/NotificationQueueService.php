@@ -73,6 +73,18 @@ final class NotificationQueueService
         return $processed;
     }
 
+    public function processJobById(int $jobId): bool
+    {
+        $job = $this->db->fetch(
+            'SELECT * FROM notification_jobs WHERE id = :id LIMIT 1',
+            ['id' => $jobId]
+        );
+        if ($job === null) {
+            return false;
+        }
+        return $this->processJob($job);
+    }
+
     /** @param array<string, mixed> $job */
     private function processJob(array $job): bool
     {

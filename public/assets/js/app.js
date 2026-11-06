@@ -240,7 +240,24 @@
     });
   }
 
+  function platformFeatures() {
+    return window.__platformFeatures || {};
+  }
+
+  function appUrl(path) {
+    var base = String(window.__appBase || '');
+    path = '/' + String(path || '').replace(/^\/+/, '');
+    return (base === '' ? '' : base) + path;
+  }
+
   function initWysiwyg() {
+    var feats = platformFeatures();
+    var full = !!feats.wysiwyg_full_enabled;
+    var imagesOn = !!feats.wysiwyg_images_enabled;
+    var tablesOn = !!feats.wysiwyg_tables_enabled;
+    var colorsOn = !!feats.wysiwyg_colors_enabled;
+    var uploadsOn = !!feats.file_uploads_enabled;
+
     qsa('[data-wysiwyg]').forEach(function (ta) {
       if (ta.getAttribute('data-wysiwyg-ready') === '1') return;
       ta.setAttribute('data-wysiwyg-ready', '1');
@@ -249,6 +266,7 @@
       if (ta.classList.contains('wysiwyg--tall') || ta.getAttribute('data-wysiwyg-size') === 'tall') {
         wrap.classList.add('wysiwyg--tall');
       }
+      if (full) wrap.classList.add('wysiwyg--full');
       var toolbar = doc.createElement('div');
       toolbar.className = 'wysiwyg__toolbar';
       toolbar.setAttribute('role', 'toolbar');
@@ -291,6 +309,61 @@
         cmd('createLink', url);
       }
 
+      function promptImageUrl() {
+        var url = window.prompt('Image URL (https://…)', 'https://');
+        if (!url) return;
+        url = String(url).trim();
+        if (!/^https?:\/\//i.test(url)) {
+          window.alert('Only http(s) image URLs are allowed.');
+          return;
+        }
+        cmd('insertImage', url);
+      }
+
+      function uploadImageFile() {
+        var input = doc.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/jpeg,image/png,image/webp,image/gif';
+        input.addEventListener('change', function () {
+          if (!input.files || !input.files[0]) return;
+          var fd = new FormData();
+          fd.append('file', input.files[0]);
+          fd.append('_token', csrfToken());
+          fetch(appUrl('/app/media'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            body: fd
+          }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+              if (!res.ok || !res.body.url) {
+                window.alert((res.body && res.body.error) || 'Image upload failed.');
+                return;
+              }
+              cmd('insertImage', res.body.url);
+            })
+            .catch(function () { window.alert('Image upload failed.'); });
+        });
+        input.click();
+      }
+
+      function insertTable() {
+        var rows = parseInt(window.prompt('Rows', '3') || '0', 10);
+        var cols = parseInt(window.prompt('Columns', '3') || '0', 10);
+        if (!(rows > 0 && cols > 0) || rows > 20 || cols > 10) return;
+        var html = '<table><tbody>';
+        var r, c;
+        for (r = 0; r < rows; r++) {
+          html += '<tr>';
+          for (c = 0; c < cols; c++) {
+            html += r === 0 ? '<th>Header</th>' : '<td>&nbsp;</td>';
+          }
+          html += '</tr>';
+        }
+        html += '</tbody></table><p></p>';
+        cmd('insertHTML', html);
+      }
+
       function addSep() {
         var sep = doc.createElement('span');
         sep.className = 'wysiwyg__sep';
@@ -312,14 +385,55 @@
         { label: '1.', title: 'Numbered list', action: function () { cmd('insertOrderedList'); } },
         { label: '“', title: 'Quote', action: function () { cmd('formatBlock', 'blockquote'); } },
         null,
-        { label: '🔗', title: 'Insert link', action: promptLink },
-        { label: '⌀', title: 'Remove link', action: function () { cmd('unlink'); } },
+        { label: 'Link', title: 'Insert link', action: promptLink },
+        { label: 'Unlink', title: 'Remove link', action: function () { cmd('unlink'); } },
         { label: '—', title: 'Horizontal rule', action: function () { cmd('insertHorizontalRule'); } },
         null,
         { label: '↺', title: 'Undo', action: function () { cmd('undo'); } },
         { label: '↻', title: 'Redo', action: function () { cmd('redo'); } },
-        { label: '⌫', title: 'Clear formatting', action: function () { cmd('removeFormat'); } }
+        { label: 'Clear', title: 'Clear formatting', action: function () { cmd('removeFormat'); } }
       ];
+
+      if (full) {
+        buttons.splice(8, 0,
+          { label: 'Sub', title: 'Subscript', action: function () { cmd('subscript'); } },
+          { label: 'Sup', title: 'Superscript', action: function () { cmd('superscript'); } }
+        );
+        buttons.push(
+          null,
+          { label: 'Left', title: 'Align left', action: function () { cmd('justifyLeft'); } },
+          { label: 'Center', title: 'Align center', action: function () { cmd('justifyCenter'); } },
+          { label: 'Right', title: 'Align right', action: function () { cmd('justifyRight'); } },
+          { label: 'Justify', title: 'Justify', action: function () { cmd('justifyFull'); } },
+          null,
+          { label: 'Indent', title: 'Increase indent', action: function () { cmd('indent'); } },
+          { label: 'Outdent', title: 'Decrease indent', action: function () { cmd('outdent'); } },
+          null,
+          { label: 'Code', title: 'Code block', action: function () { cmd('formatBlock', 'pre'); } }
+        );
+      }
+      if (colorsOn) {
+        buttons.push(
+          null,
+          { label: 'Colour', title: 'Text colour', action: function () {
+            var c = window.prompt('Text colour (e.g. #1a3d2b or red)', '#1a3d2b');
+            if (c) cmd('foreColor', c);
+          } },
+          { label: 'Highlight', title: 'Highlight colour', action: function () {
+            var c = window.prompt('Highlight colour (e.g. #fff3cd)', '#fff3cd');
+            if (c) cmd('hiliteColor', c);
+          } }
+        );
+      }
+      if (tablesOn) {
+        buttons.push(null, { label: 'Table', title: 'Insert table', action: insertTable });
+      }
+      if (imagesOn) {
+        buttons.push(null, { label: 'Image URL', title: 'Insert image from URL', action: promptImageUrl });
+        if (uploadsOn) {
+          buttons.push({ label: 'Upload img', title: 'Upload image', action: uploadImageFile });
+        }
+      }
 
       buttons.forEach(function (btnDef) {
         if (!btnDef) {
@@ -339,16 +453,32 @@
         toolbar.appendChild(btn);
       });
 
-      // Text-only editor: block image/file drops and paste of binary content.
       editor.addEventListener('dragover', function (e) { e.preventDefault(); });
       editor.addEventListener('drop', function (e) {
         e.preventDefault();
-        var text = e.dataTransfer && e.dataTransfer.getData('text/plain');
-        if (text) {
-          cmd('insertText', text);
+        if (imagesOn && uploadsOn && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          var f = e.dataTransfer.files[0];
+          if (f.type && f.type.indexOf('image') === 0) {
+            var fd = new FormData();
+            fd.append('file', f);
+            fd.append('_token', csrfToken());
+            fetch(appUrl('/app/media'), {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+              body: fd
+            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+              .then(function (res) {
+                if (res.ok && res.body.url) cmd('insertImage', res.body.url);
+              });
+            return;
+          }
         }
+        var text = e.dataTransfer && e.dataTransfer.getData('text/plain');
+        if (text) cmd('insertText', text);
       });
       editor.addEventListener('paste', function (e) {
+        if (imagesOn) return;
         var items = e.clipboardData && e.clipboardData.items;
         if (!items) return;
         var i;
@@ -361,9 +491,7 @@
         if (e.clipboardData.files && e.clipboardData.files.length) {
           e.preventDefault();
           var plain = e.clipboardData.getData('text/plain');
-          if (plain) {
-            cmd('insertText', plain);
-          }
+          if (plain) cmd('insertText', plain);
         }
       });
 

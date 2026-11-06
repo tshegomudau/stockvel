@@ -73,8 +73,9 @@ final class AuthController extends Controller
         if (!empty($user['email_verified_at'])) {
             Session::flash('success', 'Welcome back, ' . ($user['first_name'] ?? 'member') . '.');
         }
-        $intended = Session::getFlash('intended_url');
-        if (is_string($intended) && $intended !== '') {
+        $intended = Session::get('intended_url') ?? Session::getFlash('intended_url');
+        Session::forget('intended_url');
+        if (is_string($intended) && $intended !== '' && str_starts_with($intended, '/')) {
             return $this->redirect($intended);
         }
         return $this->redirect(home_path_for_user($user));
@@ -126,6 +127,11 @@ final class AuthController extends Controller
 
         Session::regenerate(true);
         Session::set('user_id', $userId);
+        $intended = Session::get('intended_url');
+        if (is_string($intended) && str_starts_with($intended, '/invitations/')) {
+            Session::flash('success', 'Account created. Accept your invitation to continue.');
+            return $this->redirect($intended);
+        }
         Session::flash('success', 'Account created. Please verify your email.');
         return $this->redirect('/verify-email/notice');
     }

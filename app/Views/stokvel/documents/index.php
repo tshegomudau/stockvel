@@ -1,6 +1,6 @@
 <?= view('partials/page-header', [
     'title' => 'Documents',
-    'description' => 'Typed constitution, minutes and policies. File uploads arrive in Phase 2 (paid).',
+    'description' => 'Typed documents are shared with members. Uploaded files are private to the uploader and admins with access.',
     'actionUrl' => url('/app/documents/create'),
     'actionLabel' => 'New document',
 ], null) ?>
@@ -53,6 +53,13 @@
 <td><?= e(sa_date($row['updated_at'] ?? $row['created_at'] ?? '')) ?></td>
 <td class="actions">
     <a class="btn btn-sm btn-secondary" href="<?= e(url('/app/documents/' . (int) ($row['id'] ?? 0))) ?>">Open</a>
+    <?php if (can('documents.upload')): ?>
+        <a class="btn btn-sm btn-secondary" href="<?= e(url('/app/documents/' . (int) ($row['id'] ?? 0) . '/edit')) ?>">Edit</a>
+        <form method="post" action="<?= e(url('/app/documents/' . (int) ($row['id'] ?? 0) . '/delete')) ?>" class="inline-form">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn btn-sm btn-danger" data-confirm="Delete this document?">Delete</button>
+        </form>
+    <?php endif; ?>
 </td>
 </tr>
 <?php endforeach; ?>

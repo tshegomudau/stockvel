@@ -21,6 +21,7 @@ use App\Controllers\Member\StatementController as MemberStatementController;
 use App\Controllers\Member\SupportController as MemberSupportController;
 use App\Controllers\Platform\AuditController as PlatformAuditController;
 use App\Controllers\Platform\DashboardController as PlatformDashboardController;
+use App\Controllers\Platform\FeatureSettingsController as PlatformFeatureSettingsController;
 use App\Controllers\Platform\JobController as PlatformJobController;
 use App\Controllers\Platform\ProfileController as PlatformProfileController;
 use App\Controllers\Platform\RoleController as PlatformRoleController;
@@ -43,6 +44,7 @@ use App\Controllers\Stokvel\GroceryCycleController;
 use App\Controllers\Stokvel\DashboardController as StokvelDashboardController;
 use App\Controllers\Stokvel\DocumentCategoryController;
 use App\Controllers\Stokvel\DocumentController as StokvelDocumentController;
+use App\Controllers\Stokvel\MediaController as StokvelMediaController;
 use App\Controllers\Stokvel\CategorySettingsController;
 use App\Controllers\Stokvel\ExpenseCategoryController;
 use App\Controllers\Stokvel\ExpenseController;
@@ -110,7 +112,8 @@ $router->get('/verify-email/notice', [AuthController::class, 'verifyNotice'], ar
 $router->post('/verify-email/resend', [AuthController::class, 'resendVerification'], array_merge($global, $auth, $csrf));
 
 $router->get('/invitations/{token}', [InvitationController::class, 'show'], $global);
-$router->post('/invitations/{token}/accept', [InvitationController::class, 'accept'], array_merge($global, $auth, $csrf));
+// Auth is enforced inside the controller so guests get login+intended_url instead of a bare 401.
+$router->post('/invitations/{token}/accept', [InvitationController::class, 'accept'], array_merge($global, $csrf));
 
 $router->get('/start-stokvel', [RegisterStokvelController::class, 'show'], array_merge($global, $auth));
 $router->post('/start-stokvel', [RegisterStokvelController::class, 'store'], array_merge($global, $auth, $csrf));
@@ -159,6 +162,8 @@ $router->post('/platform/jobs/{id}/retry', [PlatformJobController::class, 'retry
 $router->get('/platform/support', [PlatformSupportTicketController::class, 'index'], $platform);
 $router->get('/platform/support/{id}', [PlatformSupportTicketController::class, 'show'], $platform);
 $router->post('/platform/support/{id}', [PlatformSupportTicketController::class, 'update'], $platformMut);
+$router->get('/platform/features', [PlatformFeatureSettingsController::class, 'edit'], $platform);
+$router->post('/platform/features', [PlatformFeatureSettingsController::class, 'update'], $platformMut);
 
 $router->get('/platform/profile', [PlatformProfileController::class, 'edit'], $platform);
 $router->post('/platform/profile', [PlatformProfileController::class, 'update'], $platformMut);
@@ -171,7 +176,7 @@ $router->get('/platform/security/passkey/options', [PlatformSecurityController::
 $router->post('/platform/security/passkey', [PlatformSecurityController::class, 'passkeyRegister'], $platformMut);
 $router->post('/platform/security/passkey/{id}/delete', [PlatformSecurityController::class, 'passkeyDelete'], $platformMut);
 
-$router->post('/invitations/{token}/reject', [InvitationController::class, 'reject'], array_merge($global, $auth, $csrf));
+$router->post('/invitations/{token}/reject', [InvitationController::class, 'reject'], array_merge($global, $csrf));
 
 $router->post('/webhooks/payments', [WebhookController::class, 'payments'], $global);
 
@@ -392,11 +397,14 @@ $router->post('/app/documents/categories/{id}/deactivate', [DocumentCategoryCont
 
 $router->get('/app/documents', [StokvelDocumentController::class, 'index'], $appRead);
 $router->get('/app/documents/create', [StokvelDocumentController::class, 'create'], $appRead);
-$router->post('/app/documents', [StokvelDocumentController::class, 'storeTyped'], $appMut);
+$router->post('/app/documents', [StokvelDocumentController::class, 'store'], $appMut);
 $router->get('/app/documents/{id}', [StokvelDocumentController::class, 'show'], $appRead);
 $router->get('/app/documents/{id}/edit', [StokvelDocumentController::class, 'edit'], $appRead);
-$router->post('/app/documents/{id}', [StokvelDocumentController::class, 'updateTyped'], $appMut);
+$router->post('/app/documents/{id}', [StokvelDocumentController::class, 'update'], $appMut);
+$router->post('/app/documents/{id}/delete', [StokvelDocumentController::class, 'destroy'], $appMut);
 $router->get('/app/documents/{id}/download', [StokvelDocumentController::class, 'download'], $appRead);
+$router->post('/app/media', [StokvelMediaController::class, 'upload'], $appMut);
+$router->get('/app/media/{id}', [StokvelMediaController::class, 'show'], $appRead);
 
 $router->get('/app/reports', [ReportController::class, 'index'], $appRead);
 $router->get('/app/reports/trends', [ReportController::class, 'trends'], $appRead);
@@ -455,11 +463,15 @@ $router->post('/member/meetings/{id}/acknowledge', [MemberMeetingController::cla
 $router->post('/member/meetings/{id}/resolutions/{resolutionId}/vote', [MemberMeetingController::class, 'castVote'], $memberMut);
 $router->get('/member/documents', [MemberDocumentController::class, 'index'], $memberRead);
 $router->get('/member/documents/{id}/download', [MemberDocumentController::class, 'download'], $memberRead);
+$router->get('/member/documents/{id}/edit', [MemberDocumentController::class, 'edit'], $memberRead);
+$router->post('/member/documents/{id}', [MemberDocumentController::class, 'update'], $memberMut);
+$router->post('/member/documents/{id}/delete', [MemberDocumentController::class, 'destroy'], $memberMut);
 $router->get('/member/documents/{id}', [MemberDocumentController::class, 'show'], $memberRead);
 $router->get('/member/notifications', [MemberNotificationController::class, 'index'], $memberRead);
 $router->post('/member/notifications/{id}/read', [MemberNotificationController::class, 'markRead'], $memberMut);
 $router->get('/member/profile', [MemberProfileController::class, 'edit'], $memberRead);
 $router->post('/member/profile', [MemberProfileController::class, 'update'], $memberMut);
+$router->post('/member/profile/id-document', [MemberProfileController::class, 'uploadIdDocument'], $memberMut);
 $router->post('/member/profile/password', [MemberProfileController::class, 'changePassword'], $memberMut);
 $router->get('/member/beneficiaries', [MemberBeneficiaryController::class, 'index'], $memberRead);
 $router->post('/member/beneficiaries', [MemberBeneficiaryController::class, 'store'], $memberMut);

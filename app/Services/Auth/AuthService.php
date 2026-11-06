@@ -280,7 +280,7 @@ final class AuthService
              FROM memberships m
              INNER JOIN stokvels s ON s.id = m.stokvel_id
              WHERE m.stokvel_id = :sid AND m.user_id = :uid
-             AND m.status IN (\'active\', \'suspended\')
+             AND m.status IN (\'active\', \'suspended\', \'pending\')
              LIMIT 1',
             ['sid' => $stokvelId, 'uid' => $userId]
         );
@@ -335,8 +335,8 @@ final class AuthService
             'SELECT m.*, s.name AS stokvel_name, s.slug AS stokvel_slug
              FROM memberships m
              INNER JOIN stokvels s ON s.id = m.stokvel_id
-             WHERE m.user_id = :uid AND m.status IN (\'active\', \'suspended\')
-             ORDER BY s.name ASC',
+             WHERE m.user_id = :uid AND m.status IN (\'active\', \'suspended\', \'pending\')
+             ORDER BY FIELD(m.status, \'active\', \'suspended\', \'pending\'), s.name ASC',
             ['uid' => $userId]
         );
     }

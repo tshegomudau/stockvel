@@ -2,15 +2,18 @@
 
 Multi-tenant web app for South African **stokvels** (savings groups): memberships, contributions, fees, expenses, loans, rotational payouts, meetings, documents, approvals, and reports.
 
-Vanilla PHP 8.3+, MySQL 8+, no Composer frameworks.
+Vanilla PHP 8.3+, MySQL 8+, no Composer frameworks. Composer is used **only** for documented libraries (currently [PHPMailer](https://github.com/PHPMailer/PHPMailer) for SMTP / SMTP2GO).
 
 ## Requirements
 
 - **PHP** 8.3+ with `pdo_mysql`, `mbstring`, `fileinfo`, `openssl`, `intl`, `bcmath`, `json` (`curl` recommended)
 - **MySQL** 8.0+ (InnoDB, `utf8mb4`)
 - Optional: Apache 2.4+ with `mod_rewrite` (document root = `public/`)
+- **Composer** once, to install PHPMailer (`composer install`)
 
-Composer is **not** required. Autoloading is in `bootstrap/autoload.php`.
+App autoloading remains in `bootstrap/autoload.php` (loads `vendor/autoload.php` when present).
+
+**Temporary shared hosting (no SSH):** pack with `./scripts/pack-shared-hosting.sh`, upload the zip, then run the browser installer — see [`docs/SHARED_HOSTING.md`](docs/SHARED_HOSTING.md).
 
 ## New developer setup (5 minutes)
 
@@ -18,6 +21,7 @@ Composer is **not** required. Autoloading is in `bootstrap/autoload.php`.
 
 ```bash
 cd stockvel
+composer install
 cp .env.example .env
 ```
 
@@ -30,7 +34,7 @@ Edit `.env`:
 | `DB_USERNAME` / `DB_PASSWORD` | your MySQL user |
 | `APP_URL` | Prefer matching the browser host (e.g. `http://localhost`). Assets use the live request origin when available so CSP `self` works even if this differs. For Apache under `/projects/stovel/public/`, leave `APP_BASE_PATH` empty (auto-detected) or set it to `/projects/stovel/public`. Ensure `storage/sessions` is writable by the web user (`chmod 1777 storage/sessions`). |
 | `APP_KEY` | any long random string |
-| `MAIL_DRIVER` | `log` |
+| `MAIL_DRIVER` | `log` locally; `smtp2go` in production (see Mail below) |
 | `PAYMENT_DRIVER` | `mock` |
 
 ### 2. Create databases
@@ -153,6 +157,34 @@ Latest verified suite status: `TEST_RESULTS.md` / `storage/test-artifacts/last-r
 | `tests/` | Lightweight TestRunner suites |
 | `docs/` | E2E test plan |
 
+## Mail (PHPMailer + SMTP2GO)
+
+Outbound notification mail uses `App\Services\Notifications\Channels\MailChannel`.
+
+| `MAIL_DRIVER` | Behaviour |
+|---------------|-----------|
+| `log` | Writes `.eml` files under `storage/mail` (default for local/dev) |
+| `smtp2go` | PHPMailer → `mail.smtp2go.com:2525` (TLS) with your SMTP2GO credentials |
+| `smtp` | PHPMailer with explicit `MAIL_HOST` / `MAIL_PORT` / … |
+
+Example production `.env` for [SMTP2GO](https://www.smtp2go.com/):
+
+```env
+MAIL_DRIVER=smtp2go
+MAIL_FROM_ADDRESS=noreply@your-verified-domain.co.za
+MAIL_FROM_NAME=stockvel
+MAIL_HOST=mail.smtp2go.com
+MAIL_PORT=2525
+MAIL_ENCRYPTION=tls
+MAIL_USERNAME=your-smtp2go-username
+MAIL_PASSWORD=your-smtp2go-smtp-password
+# or:
+# SMTP2GO_USERNAME=...
+# SMTP2GO_API_KEY=...
+```
+
+Verify the From domain in SMTP2GO before going live. Alternate ports: `587` (TLS) or `465` (`MAIL_ENCRYPTION=ssl`).
+
 ## Cron (production)
 
 ```cron
@@ -167,7 +199,7 @@ Latest verified suite status: `TEST_RESULTS.md` / `storage/test-artifacts/last-r
 - [ ] Document root = `public/` only
 - [ ] Writable `storage/*`
 - [ ] Cron configured
-- [ ] Real mail/SMS (not `log` drivers)
+- [ ] `composer install` (PHPMailer) and real mail (`MAIL_DRIVER=smtp2go`)
 - [ ] Rotate `PAYMENT_WEBHOOK_SECRET`
 - [ ] POPIA / consent / retention reviewed
 

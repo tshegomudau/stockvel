@@ -1,6 +1,6 @@
 <?= view('partials/page-header', [
     'title' => 'My profile',
-    'description' => 'Update your contact details and password. ID numbers are stored encrypted.',
+    'description' => 'Update your contact details, address, emergency contact, and password. ID numbers are stored encrypted.',
 ], null) ?>
 <?php if (!empty($completeness)): ?>
 <section class="card mb-4" aria-label="Profile completeness">
@@ -35,8 +35,73 @@
 <input id="id_number" name="id_number" value="" placeholder="<?= e($idMasked ?? '••••') ?>" autocomplete="off">
 <p class="form-help">Leave blank to keep the current encrypted value.</p></div>
 <p class="text-muted">Email: <?= e($profile['email'] ?? '') ?></p>
+
+<h2 class="h3">Residential address</h2>
+<div class="form-group"><label class="form-label" for="address_line1">Street address</label>
+<input id="address_line1" name="address_line1" value="<?= e($profile['address_line1'] ?? '') ?>"></div>
+<div class="form-group"><label class="form-label" for="address_line2">Address line 2</label>
+<input id="address_line2" name="address_line2" value="<?= e($profile['address_line2'] ?? '') ?>"></div>
+<div class="form-grid two-col">
+<div class="form-group"><label class="form-label" for="suburb">Suburb</label>
+<input id="suburb" name="suburb" value="<?= e($profile['suburb'] ?? '') ?>"></div>
+<div class="form-group"><label class="form-label" for="city">City / town</label>
+<input id="city" name="city" value="<?= e($profile['city'] ?? '') ?>"></div>
+</div>
+<div class="form-grid two-col">
+<div class="form-group"><label class="form-label" for="province">Province</label>
+<input id="province" name="province" value="<?= e($profile['province'] ?? '') ?>"></div>
+<div class="form-group"><label class="form-label" for="postal_code">Postal code</label>
+<input id="postal_code" name="postal_code" value="<?= e($profile['postal_code'] ?? '') ?>"></div>
+</div>
+
+<h2 class="h3">Emergency contact</h2>
+<div class="form-grid two-col">
+<div class="form-group"><label class="form-label" for="emergency_contact_name">Full name</label>
+<input id="emergency_contact_name" name="emergency_contact_name" value="<?= e($profile['emergency_contact_name'] ?? '') ?>"></div>
+<div class="form-group"><label class="form-label" for="emergency_contact_phone">Phone</label>
+<input id="emergency_contact_phone" name="emergency_contact_phone" value="<?= e($profile['emergency_contact_phone'] ?? '') ?>"></div>
+</div>
+
 <button class="btn btn-primary" type="submit">Save profile</button>
 </form>
+
+<section class="card mb-6 form-stack" aria-label="ID document">
+    <h2 class="h3">ID document on file</h2>
+    <?php if (!empty($idDocuments)): ?>
+        <ul>
+            <?php foreach ($idDocuments as $doc): ?>
+                <li>
+                    <a href="<?= e(url('/member/documents/' . (int) $doc['id'])) ?>"><?= e($doc['title'] ?? 'Document') ?></a>
+                    <?php if (!empty($doc['category_name'])): ?>
+                        <span class="text-muted"> · <?= e($doc['category_name']) ?></span>
+                    <?php endif; ?>
+                    <?php if (!empty($doc['created_at'])): ?>
+                        <span class="text-muted"> · <?= e(sa_datetime($doc['created_at'])) ?></span>
+                    <?php endif; ?>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    <?php else: ?>
+        <p class="text-muted">No ID / identity document uploaded yet.</p>
+    <?php endif; ?>
+
+    <?php if (!empty($uploadsEnabled)): ?>
+        <form method="post" action="<?= e(url('/member/profile/id-document')) ?>" enctype="multipart/form-data" class="form-stack">
+            <?= csrf_field() ?>
+            <div class="form-group">
+                <label class="form-label" for="title">Title</label>
+                <input id="title" name="title" value="ID document" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="id_document">File (PDF or image)</label>
+                <input type="file" id="id_document" name="id_document" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+            </div>
+            <button type="submit" class="btn btn-secondary">Upload ID document</button>
+        </form>
+    <?php else: ?>
+        <p class="form-help">File uploads are currently disabled by the platform admin. Enable them under Platform → Features &amp; storage.</p>
+    <?php endif; ?>
+</section>
 
 <form method="post" action="<?= e(url('/member/profile/password')) ?>" class="form-stack card">
 <?= csrf_field() ?>

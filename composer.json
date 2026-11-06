@@ -1,0 +1,14 @@
+{
+    "name": "stockvel/stovel",
+    "description": "Multi-tenant stokvel management (vanilla PHP). Composer is used only for documented libraries.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.3",
+        "phpmailer/phpmailer": "^6.9"
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    }
+}

@@ -46,6 +46,8 @@ use App\Services\Notifications\NotificationQueueService;
 use App\Services\Notifications\NotificationService;
 use App\Services\PermissionService;
 use App\Services\Documents\DocumentService;
+use App\Services\Platform\PlatformSettingsService;
+use App\Services\Storage\StorageManager;
 use App\Services\Finance\CsvImportService;
 use App\Services\Finance\ExpenseService;
 use App\Services\Finance\ReconciliationService;
@@ -129,7 +131,7 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(ChartOfAccountsService::class)
     ));
 
-    $container->singleton(MailChannel::class, static fn () => new MailChannel());
+    $container->singleton(MailChannel::class, static fn (Container $c) => new MailChannel($c->get(Logger::class)));
     $container->singleton(SmsChannel::class, static fn (Container $c) => new SmsChannel($c->get(Logger::class)));
     $container->singleton(WhatsAppChannel::class, static fn (Container $c) => new WhatsAppChannel($c->get(Logger::class)));
     $container->singleton(NotificationQueueService::class, static fn (Container $c) => new NotificationQueueService(
@@ -185,10 +187,18 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(Database::class)
     ));
     $container->singleton(ReconciliationService::class, static fn (Container $c) => new ReconciliationService($c->get(Database::class)));
+    $container->singleton(PlatformSettingsService::class, static fn (Container $c) => new PlatformSettingsService(
+        $c->get(Database::class)
+    ));
+    $container->singleton(StorageManager::class, static fn (Container $c) => new StorageManager(
+        $c->get(PlatformSettingsService::class),
+        app()->basePath('storage/documents')
+    ));
     $container->singleton(DocumentService::class, static fn (Container $c) => new DocumentService(
         $c->get(Database::class),
         $c->get(TenantContext::class),
-        $c->get(AuditService::class)
+        $c->get(AuditService::class),
+        $c->get(StorageManager::class)
     ));
     $container->singleton(InvitationService::class, static fn (Container $c) => new InvitationService(
         $c->get(MembershipRepository::class),
@@ -202,7 +212,9 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(InvitationService::class),
         $c->get(TenantContext::class),
         $c->get(AuditService::class),
-        $c->get(JoiningFeeService::class)
+        $c->get(JoiningFeeService::class),
+        $c->get(ApprovalService::class),
+        $c->get(NotificationService::class)
     ));
     $container->singleton(MemberChangeRequestService::class, static fn (Container $c) => new MemberChangeRequestService(
         $c->get(Database::class)

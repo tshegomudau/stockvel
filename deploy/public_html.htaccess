@@ -1,0 +1,13 @@
+# Place this file as public_html/.htaccess when the FULL app lives under public_html/
+# (public_html/app, public_html/public, …). Prefer pointing the domain docroot at
+# public/ instead — this is a fallback for hosts that cannot change the docroot.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Already inside /public — do nothing special here (handled by public/.htaccess).
+    RewriteRule ^public/ - [L]
+
+    # Send everything else into the front controller directory.
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

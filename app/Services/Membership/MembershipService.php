@@ -9,8 +9,10 @@ use App\Core\TenantContext as CoreTenantContext;
 use App\Exceptions\HttpException;
 use App\Repositories\MembershipRepository;
 use App\Repositories\UserRepository;
+use App\Services\Approvals\ApprovalService;
 use App\Services\AuditService;
 use App\Services\Finance\JoiningFeeService;
+use App\Services\Notifications\NotificationService;
 
 final class MembershipService
 {
@@ -25,6 +27,8 @@ final class MembershipService
         private readonly CoreTenantContext $tenant,
         private readonly AuditService $audit,
         private readonly JoiningFeeService $joiningFees,
+        private readonly ApprovalService $approvals,
+        private readonly NotificationService $notifications,
     ) {
     }
 
@@ -43,16 +47,25 @@ final class MembershipService
             throw new HttpException(410, 'Invitation expired.');
         }
 
-        $existing = $this->memberships->findForUser($userId, (int) $invitation['stokvel_id']);
+        $stokvelId = (int) $invitation['stokvel_id'];
+        if ($stokvelId < 1) {
+            throw new HttpException(422, 'Invitation is missing a stokvel.');
+        }
+
+        $existing = $this->memberships->findForUser($userId, $stokvelId);
         if ($existing) {
+            // Already accepted / linked — treat as success path for the caller when still pending.
+            if (($existing['status'] ?? '') === 'pending') {
+                return $existing;
+            }
             throw new HttpException(422, 'You are already linked to this stokvel.');
         }
 
-        $stokvelId = (int) $invitation['stokvel_id'];
         $previousStokvel = $this->tenant->stokvel();
         $previousMembership = $this->tenant->membership();
         $previousPermissions = $this->tenant->permissions();
         $previousModules = $this->tenant->enabledModules();
+        // Bind tenant before any repository call that scopes by stokvel.
         $this->tenant->setTenant(['id' => $stokvelId]);
 
         try {
@@ -77,6 +90,17 @@ final class MembershipService
                     'status' => 'accepted',
                     'accepted_at' => now_utc(),
                 ]);
+
+                // Surface on Approvals inbox for committee / admins.
+                $this->approvals->createRequest(
+                    $stokvelId,
+                    'membership_invite',
+                    'membership',
+                    $membershipId,
+                    $userId
+                );
+
+                $this->notifyAdminsOfPendingInvite($stokvelId, $membershipId, $userId);
 
                 $membership = $this->memberships->findById($membershipId);
                 $this->audit->log('membership.accepted_pending', 'membership', $membershipId, metadata: [
@@ -141,6 +165,7 @@ final class MembershipService
         $stokvelId = (int) ($membership['stokvel_id'] ?? $this->tenant->stokvelId() ?? 0);
         if ($stokvelId > 0) {
             $this->joiningFees->chargeOnApproval($stokvelId, $membershipId, $approvedByUserId);
+            $this->closePendingInviteApproval($stokvelId, $membershipId, $approvedByUserId, 'approved');
         }
         return $this->memberships->findById($membershipId) ?? [];
     }
@@ -233,6 +258,103 @@ final class MembershipService
                 ]
             );
         } catch (\Throwable) {
+        }
+    }
+
+    private function notifyAdminsOfPendingInvite(int $stokvelId, int $membershipId, int $acceptedByUserId): void
+    {
+        $user = $this->users->findById($acceptedByUserId);
+        $label = trim((string) (($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')));
+        if ($label === '') {
+            $label = (string) ($user['email'] ?? ('User #' . $acceptedByUserId));
+        }
+
+        $admins = $this->db->fetchAll(
+            "SELECT DISTINCT m.user_id
+             FROM memberships m
+             INNER JOIN membership_roles mr ON mr.membership_id = m.id AND mr.stokvel_id = m.stokvel_id
+             INNER JOIN roles r ON r.id = mr.role_id
+             WHERE m.stokvel_id = :sid
+               AND m.status IN ('active', 'suspended')
+               AND r.code IN ('chairperson', 'secretary', 'treasurer')",
+            ['sid' => $stokvelId]
+        );
+
+        foreach ($admins as $admin) {
+            $adminId = (int) ($admin['user_id'] ?? 0);
+            if ($adminId < 1 || $adminId === $acceptedByUserId) {
+                continue;
+            }
+            try {
+                $this->notifications->notifyInApp(
+                    $adminId,
+                    'membership_invite_pending',
+                    'Membership invitation awaiting approval',
+                    $label . ' accepted an invitation and is waiting for approval.',
+                    $stokvelId,
+                    ['membership_id' => $membershipId, 'url' => '/app/approvals']
+                );
+            } catch (\Throwable) {
+                // Notification schema variants must not block acceptance.
+            }
+        }
+    }
+
+    /** Called from Approvals when a membership_invite request is rejected. */
+    public function rejectPendingMembership(int $membershipId, int $actorUserId, string $reason): array
+    {
+        $membership = $this->memberships->findOrFail($membershipId);
+        if (($membership['status'] ?? '') !== 'pending') {
+            throw new HttpException(422, 'Only pending memberships can be rejected from an invitation.');
+        }
+        $this->transition($membershipId, (string) $membership['status'], 'rejected', $actorUserId, $reason);
+        $this->memberships->update($membershipId, [
+            'status' => 'rejected',
+            'notes' => $reason !== '' ? $reason : 'Invitation rejected by admin',
+        ]);
+        $stokvelId = (int) ($membership['stokvel_id'] ?? 0);
+        if ($stokvelId > 0) {
+            $this->closePendingInviteApproval($stokvelId, $membershipId, $actorUserId, 'rejected', $reason);
+        }
+        return $this->memberships->findById($membershipId) ?? [];
+    }
+
+    private function closePendingInviteApproval(
+        int $stokvelId,
+        int $membershipId,
+        int $actorUserId,
+        string $status,
+        string $notes = ''
+    ): void {
+        try {
+            $now = now_utc();
+            $this->db->exec(
+                "UPDATE approval_requests
+                 SET status = :st,
+                     approved_by_user_id = CASE WHEN :st2 = 'approved' THEN :by ELSE approved_by_user_id END,
+                     rejected_by_user_id = CASE WHEN :st3 = 'rejected' THEN :by2 ELSE rejected_by_user_id END,
+                     decision_notes = :notes,
+                     decided_at = :da,
+                     updated_at = :ua
+                 WHERE stokvel_id = :sid
+                   AND reference_type = 'membership'
+                   AND reference_id = :mid
+                   AND status = 'pending'",
+                [
+                    'st' => $status,
+                    'st2' => $status,
+                    'st3' => $status,
+                    'by' => $actorUserId,
+                    'by2' => $actorUserId,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'da' => $now,
+                    'ua' => $now,
+                    'sid' => $stokvelId,
+                    'mid' => $membershipId,
+                ]
+            );
+        } catch (\Throwable) {
+            // Older DBs / concurrent approval path — ignore.
         }
     }
 }

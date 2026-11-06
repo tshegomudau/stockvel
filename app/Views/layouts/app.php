@@ -39,9 +39,40 @@ $topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/prof
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title><?= e(($title ?? 'Dashboard') . ' · ' . ($stokvel['name'] ?? ($navCtx === 'platform' ? 'stockvel Platform' : 'stockvel'))) ?></title>
+    <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
     <?= view('partials/styles', [], null) ?>
+    <?php
+    $platformFeatures = $platformFeatures ?? [];
+    try {
+        if ($platformFeatures === []) {
+            $platformFeatures = app()->container()
+                ->get(\App\Services\Platform\PlatformSettingsService::class)
+                ->clientConfig();
+        }
+    } catch (\Throwable) {
+        $platformFeatures = [
+            'file_uploads_enabled' => false,
+            'wysiwyg_full_enabled' => false,
+            'wysiwyg_images_enabled' => false,
+            'wysiwyg_tables_enabled' => false,
+            'wysiwyg_colors_enabled' => false,
+            'storage_driver' => 'local',
+        ];
+    }
+    $bodyFeatureClass = [];
+    if (!empty($platformFeatures['wysiwyg_images_enabled'])) {
+        $bodyFeatureClass[] = 'wysiwyg-images-on';
+    }
+    if (!empty($platformFeatures['wysiwyg_tables_enabled'])) {
+        $bodyFeatureClass[] = 'wysiwyg-tables-on';
+    }
+    ?>
+    <script>
+    window.__platformFeatures = <?= json_encode($platformFeatures, JSON_THROW_ON_ERROR) ?>;
+    window.__appBase = <?= json_encode(base_path_uri(), JSON_THROW_ON_ERROR) ?>;
+    </script>
 </head>
-<body class="app-layout">
+<body class="app-layout<?= $bodyFeatureClass !== [] ? ' ' . e(implode(' ', $bodyFeatureClass)) : '' ?>">
 <a class="skip-link" href="#main-content">Skip to content</a>
 
 <button type="button" class="drawer-toggle no-desktop" aria-controls="app-drawer" aria-expanded="false" data-drawer-toggle>

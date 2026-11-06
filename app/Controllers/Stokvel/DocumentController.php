@@ -11,6 +11,7 @@ use App\Core\Session;
 use App\Core\Validator;
 use App\Exceptions\HttpException;
 use App\Services\Documents\DocumentService;
+use App\Services\Storage\StorageManager;
 use App\Support\HtmlSanitizer;
 
 final class DocumentController extends Controller
@@ -73,13 +74,26 @@ final class DocumentController extends Controller
         $this->requirePermission('documents.upload');
         $sid = $this->requireStokvel();
         $this->ensureDocumentCategories($sid);
+        /** @var StorageManager $storage */
+        $storage = app()->container()->get(StorageManager::class);
         return $this->render('stokvel/documents/create', [
             'title' => 'New document',
             'activeNav' => 'documents',
             'navContext' => 'app',
             'categories' => $this->activeDocumentCategories($sid),
             'meetings' => $this->meetingOptions($sid),
+            'uploadsEnabled' => $storage->uploadsEnabled(),
         ]);
+    }
+
+    public function store(Request $request): Response
+    {
+        $mode = trim((string) $request->input('content_mode', 'typed'));
+        if ($mode === 'file') {
+            return $this->storeFile($request);
+        }
+
+        return $this->storeTyped($request);
     }
 
     public function storeTyped(Request $request): Response
@@ -132,8 +146,67 @@ final class DocumentController extends Controller
         );
 
         $this->notifyMembers($sid, 'document', 'New document published', $data['title']);
-        Session::flash('success', 'Document saved. File uploads are a paid Phase 2 feature.');
+        Session::flash('success', 'Document saved.');
         return $this->redirect('/app/documents/' . $id);
+    }
+
+    public function storeFile(Request $request): Response
+    {
+        $this->requirePermission('documents.upload');
+        $sid = $this->requireStokvel();
+        $this->ensureDocumentCategories($sid);
+
+        /** @var StorageManager $storage */
+        $storage = app()->container()->get(StorageManager::class);
+        if (!$storage->uploadsEnabled()) {
+            Session::flash('error', 'File uploads are disabled. Ask the platform admin to enable Features & storage.');
+            return $this->redirect('/app/documents/create');
+        }
+
+        $categoryMeta = $this->resolveDocumentCategory($sid, $request);
+        if ($categoryMeta['id'] === null) {
+            $this->flashOld($request);
+            Session::flash('error', 'Select an active document category.');
+            return $this->redirect('/app/documents/create');
+        }
+
+        $title = trim((string) $request->input('title', ''));
+        if ($title === '') {
+            Session::flash('error', 'Title is required.');
+            return $this->redirect('/app/documents/create');
+        }
+
+        $file = $request->file('upload_file');
+        if ($file === null) {
+            Session::flash('error', 'Choose a file to upload.');
+            return $this->redirect('/app/documents/create');
+        }
+
+        try {
+            /** @var DocumentService $documents */
+            $documents = app()->container()->get(DocumentService::class);
+            $result = $documents->upload(
+                $file,
+                $title,
+                null,
+                (int) $this->userId(),
+                $categoryMeta['legacy'],
+                $categoryMeta['id']
+            );
+            $meetingId = $this->resolveMeetingId($sid, $request);
+            if ($meetingId !== null) {
+                $this->db()->exec(
+                    'UPDATE documents SET meeting_id = :mid, updated_at = :ua WHERE id = :id AND stokvel_id = :sid',
+                    ['mid' => $meetingId, 'ua' => now_utc(), 'id' => $result['document_id'], 'sid' => $sid]
+                );
+            }
+            // File uploads are private to the uploader + admins with documents.view — do not broadcast.
+            Session::flash('success', 'File uploaded. Only you and admins with document access can view it.');
+            return $this->redirect('/app/documents/' . $result['document_id']);
+        } catch (HttpException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/documents/create');
+        }
     }
 
     public function show(Request $request, string $id): Response
@@ -160,12 +233,14 @@ final class DocumentController extends Controller
         $this->requirePermission('documents.upload');
         $sid = $this->requireStokvel();
         $doc = $this->db()->fetch(
-            "SELECT * FROM documents WHERE id = :id AND stokvel_id = :sid AND content_type = 'typed' LIMIT 1",
+            "SELECT * FROM documents WHERE id = :id AND stokvel_id = :sid AND status <> 'deleted' LIMIT 1",
             ['id' => (int) $id, 'sid' => $sid]
         );
         if (!$doc) {
             return $this->redirect('/app/documents');
         }
+        /** @var StorageManager $storage */
+        $storage = app()->container()->get(StorageManager::class);
         return $this->render('stokvel/documents/create', [
             'title' => 'Edit document',
             'activeNav' => 'documents',
@@ -173,7 +248,28 @@ final class DocumentController extends Controller
             'document' => $doc,
             'categories' => $this->activeDocumentCategories($sid),
             'meetings' => $this->meetingOptions($sid),
+            'uploadsEnabled' => $storage->uploadsEnabled(),
         ]);
+    }
+
+    public function update(Request $request, string $id): Response
+    {
+        $this->requirePermission('documents.upload');
+        $sid = $this->requireStokvel();
+        $doc = $this->db()->fetch(
+            "SELECT * FROM documents WHERE id = :id AND stokvel_id = :sid AND status <> 'deleted' LIMIT 1",
+            ['id' => (int) $id, 'sid' => $sid]
+        );
+        if (!$doc) {
+            Session::flash('error', 'Document not found.');
+            return $this->redirect('/app/documents');
+        }
+
+        if ((string) ($doc['content_type'] ?? '') === 'typed') {
+            return $this->updateTyped($request, $id);
+        }
+
+        return $this->updateFile($request, $id);
     }
 
     public function updateTyped(Request $request, string $id): Response
@@ -188,10 +284,10 @@ final class DocumentController extends Controller
         }
         $categoryMeta = $this->resolveDocumentCategory($sid, $request);
         $meetingId = $this->resolveMeetingId($sid, $request);
-        $this->db()->exec(
+        $affected = $this->db()->exec(
             "UPDATE documents SET title = :title, body_html = :body, category = :cat, document_category_id = :dcat,
                 meeting_id = :mid, updated_at = :ua
-             WHERE id = :id AND stokvel_id = :sid AND content_type = 'typed'",
+             WHERE id = :id AND stokvel_id = :sid AND content_type = 'typed' AND status <> 'deleted'",
             [
                 'title' => $title,
                 'body' => $body,
@@ -203,8 +299,60 @@ final class DocumentController extends Controller
                 'sid' => $sid,
             ]
         );
+        if ($affected < 1) {
+            Session::flash('error', 'Document not found.');
+            return $this->redirect('/app/documents');
+        }
         Session::flash('success', 'Document updated.');
         return $this->redirect('/app/documents/' . $id);
+    }
+
+    public function updateFile(Request $request, string $id): Response
+    {
+        $this->requirePermission('documents.upload');
+        $sid = $this->requireStokvel();
+        $categoryMeta = $this->resolveDocumentCategory($sid, $request);
+        $meetingId = $this->resolveMeetingId($sid, $request);
+        $file = $request->file('upload_file');
+
+        try {
+            /** @var DocumentService $documents */
+            $documents = app()->container()->get(DocumentService::class);
+            $documents->updateFileDocument(
+                (int) $id,
+                $sid,
+                (int) $this->userId(),
+                trim((string) $request->input('title', '')),
+                $categoryMeta['legacy'],
+                $categoryMeta['id'],
+                $meetingId,
+                $file,
+                true
+            );
+            Session::flash('success', 'Document updated.');
+            return $this->redirect('/app/documents/' . $id);
+        } catch (HttpException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/documents/' . $id . '/edit');
+        }
+    }
+
+    public function destroy(Request $request, string $id): Response
+    {
+        $this->requirePermission('documents.upload');
+        $sid = $this->requireStokvel();
+
+        try {
+            /** @var DocumentService $documents */
+            $documents = app()->container()->get(DocumentService::class);
+            $documents->softDelete((int) $id, $sid, (int) $this->userId(), true);
+            Session::flash('success', 'Document deleted.');
+        } catch (HttpException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/documents/' . $id);
+        }
+
+        return $this->redirect('/app/documents');
     }
 
     public function download(Request $request, string $id): Response
@@ -212,10 +360,14 @@ final class DocumentController extends Controller
         $this->requirePermission('documents.view');
         $sid = $this->requireStokvel();
         $doc = $this->db()->fetch(
-            'SELECT * FROM documents WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+            "SELECT * FROM documents WHERE id = :id AND stokvel_id = :sid AND status <> 'deleted' LIMIT 1",
             ['id' => (int) $id, 'sid' => $sid]
         );
-        if ($doc && ($doc['content_type'] ?? '') === 'typed') {
+        if (!$doc) {
+            Session::flash('error', 'Document not found.');
+            return $this->redirect('/app/documents');
+        }
+        if (($doc['content_type'] ?? '') === 'typed') {
             return $this->redirect('/app/documents/' . $id);
         }
 
@@ -228,8 +380,8 @@ final class DocumentController extends Controller
                 (string) ($resolved['document']['title'] ?? $resolved['file_name']),
                 (string) $resolved['mime_type']
             );
-        } catch (HttpException) {
-            Session::flash('error', 'File upload downloads are a Phase 2 paid feature. Use typed documents for now.');
+        } catch (HttpException $e) {
+            Session::flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Download failed.');
             return $this->redirect('/app/documents');
         }
     }
@@ -260,6 +412,7 @@ final class DocumentController extends Controller
             ['minutes', 'Meeting minutes'],
             ['policy', 'Policy'],
             ['financial', 'Financial report'],
+            ['id_document', 'ID / identity'],
         ];
         foreach ($starters as [$code, $name]) {
             $this->db()->insert(

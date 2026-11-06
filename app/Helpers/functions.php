@@ -249,6 +249,7 @@ function route(string $name, array $parameters = []): string
         'platform.roles' => '/platform/roles',
         'platform.stokvel-types' => '/platform/stokvel-types',
         'platform.support' => '/platform/support',
+        'platform.features' => '/platform/features',
         'platform.profile' => '/platform/profile',
         'platform.security' => '/platform/security',
         'app.support' => '/app/support',

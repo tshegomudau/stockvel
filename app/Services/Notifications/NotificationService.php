@@ -48,6 +48,15 @@ final class NotificationService
         return $this->queue->enqueue('mail', $recipient, $body, $subject, $payload);
     }
 
+    /**
+     * Queue a mail job and attempt delivery immediately (so invites/log mail work without waiting for cron).
+     */
+    public function sendMailNow(string $recipient, string $subject, string $body, ?array $payload = null): bool
+    {
+        $jobId = $this->queueMail($recipient, $subject, $body, $payload);
+        return $this->queue->processJobById($jobId);
+    }
+
     public function queueSms(string $recipient, string $body, ?array $payload = null): int
     {
         return $this->queue->enqueue('sms', $recipient, $body, null, $payload);

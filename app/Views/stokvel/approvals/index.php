@@ -40,6 +40,8 @@ $decisionMap = $decisionMap ?? [];
         'loan_application' => 'Loan application',
         'member_change' => 'Member change (awaiting member)',
         'member_change_request' => 'Member change (awaiting member)',
+        'membership_invite' => 'Membership invitation',
+        'membership' => 'Membership invitation',
         'burial_claim' => 'Burial claim',
         'meeting_notes' => 'Meeting notes',
         'expense' => 'Expense',
@@ -57,6 +59,11 @@ $decisionMap = $decisionMap ?? [];
 <td><?= e(($row['reference_type'] ?? '') . ' #' . ($row['reference_id'] ?? '')) ?>
     <?php if (in_array($rtype, ['member_change', 'member_change_request'], true)): ?>
         <div class="text-sm text-muted">Member must approve in their portal</div>
+    <?php endif; ?>
+    <?php if (in_array($rtype, ['membership_invite', 'membership'], true)): ?>
+        <div class="text-sm text-muted">
+            <a href="<?= e(url('/app/members/' . (int) ($row['reference_id'] ?? 0))) ?>">Open member profile</a>
+        </div>
     <?php endif; ?>
 </td>
 <td class="money"><?= isset($row['amount']) && $row['amount'] !== null && $row['amount'] !== '' ? e(money($row['amount'])) : '—' ?></td>

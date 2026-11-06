@@ -22,3 +22,6 @@
 .phpunit.result.cache
 /.idea/
 /.vscode/
+/dist/
+/storage/install.lock
+/storage/install.token

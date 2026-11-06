@@ -131,8 +131,9 @@ final class MfaController extends Controller
             Session::flash('success', 'Welcome back, ' . ($user['first_name'] ?? 'member') . '.');
         }
 
-        $intended = Session::getFlash('intended_url');
-        if (is_string($intended) && $intended !== '') {
+        $intended = Session::get('intended_url') ?? Session::getFlash('intended_url');
+        Session::forget('intended_url');
+        if (is_string($intended) && $intended !== '' && str_starts_with($intended, '/')) {
             return $intended;
         }
         return home_path_for_user($user);

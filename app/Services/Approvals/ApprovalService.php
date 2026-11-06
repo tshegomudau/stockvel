@@ -31,6 +31,7 @@ final class ApprovalService
         'fund_debit' => 'Fund debit',
         'fine_waiver' => 'Fine waiver',
         'member_change' => 'Member change request',
+        'membership_invite' => 'Membership invitation',
     ];
 
     public function __construct(private readonly Database $db)
@@ -622,6 +623,22 @@ final class ApprovalService
                     'sid' => $sid,
                 ]
             );
+            return;
+        }
+
+        if (in_array($refType, ['membership', 'membership_invite'], true)
+            || (string) ($row['request_type'] ?? '') === 'membership_invite') {
+            /** @var \App\Services\Membership\MembershipService $memberships */
+            $memberships = app()->container()->get(\App\Services\Membership\MembershipService::class);
+            if ($status === 'approved') {
+                $memberships->approve($refId, $userId);
+            } else {
+                $memberships->rejectPendingMembership(
+                    $refId,
+                    $userId,
+                    $notes !== '' ? $notes : 'Rejected via approvals dashboard'
+                );
+            }
         }
     }
 }

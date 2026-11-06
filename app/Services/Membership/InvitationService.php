@@ -48,10 +48,22 @@ final class InvitationService
         ]);
 
         if ($email !== '') {
-            $this->notifications->queueMail(
+            $link = url('/invitations/' . $plain);
+            $body = "You have been invited to join a stokvel on stockvel.\n\n"
+                . "Open this link to accept or decline:\n{$link}\n\n"
+                . "This invitation expires on {$expires} (UTC).\n";
+            // Send immediately so log/SMTP works without waiting for cron.
+            $sent = $this->notifications->sendMailNow(
                 $email,
                 'You are invited to join a stokvel',
-                'Use this link to respond: ' . url('/invitations/' . $plain)
+                $body,
+                ['type' => 'membership_invitation', 'invitation_id' => $id]
+            );
+            $this->audit->log(
+                $sent ? 'membership.invitation_email_sent' : 'membership.invitation_email_failed',
+                'invitation',
+                $id,
+                metadata: ['email' => $email, 'sent' => $sent]
             );
         }
 

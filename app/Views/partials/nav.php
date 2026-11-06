@@ -61,6 +61,7 @@ $platformLinks = [
     'platform-roles' => ['label' => 'Roles', 'url' => route('platform.roles')],
     'platform-stokvel-types' => ['label' => 'Stokvel types', 'url' => route('platform.stokvel-types')],
     'platform-support' => ['label' => 'Support tickets', 'url' => route('platform.support')],
+    'platform-features' => ['label' => 'Features & storage', 'url' => route('platform.features')],
     'platform-audit' => [
         'label' => 'Audit logs',
         'url' => route('platform.audit'),
