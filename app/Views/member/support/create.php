@@ -13,7 +13,7 @@ if (!is_array($fieldErrors)) {
 <?= csrf_field() ?>
 <div class="form-group">
     <label class="form-label" for="subject">Subject <span class="required">*</span></label>
-    <input id="subject" name="subject" required minlength="3" value="<?= e((string) old('subject')) ?>">
+    <input class="form-control" type="text" id="subject" name="subject" required minlength="3" value="<?= e((string) old('subject')) ?>">
     <?php if (!empty($fieldErrors['subject'][0])): ?>
         <p class="form-error"><?= e($fieldErrors['subject'][0]) ?></p>
     <?php endif; ?>
@@ -21,7 +21,7 @@ if (!is_array($fieldErrors)) {
 <div class="form-grid two-col">
 <div class="form-group">
     <label class="form-label" for="category">Category <span class="required">*</span></label>
-    <select id="category" name="category" required>
+    <select class="form-control form-select" id="category" name="category" required>
     <?php foreach (['bug' => 'Bug', 'support' => 'Support', 'feature' => 'Feature idea', 'billing' => 'Billing'] as $k => $l): ?>
     <option value="<?= e($k) ?>"<?= old('category', 'bug') === $k ? ' selected' : '' ?>><?= e($l) ?></option>
     <?php endforeach; ?>
@@ -29,7 +29,7 @@ if (!is_array($fieldErrors)) {
 </div>
 <div class="form-group">
     <label class="form-label" for="priority">Priority <span class="required">*</span></label>
-    <select id="priority" name="priority" required>
+    <select class="form-control form-select" id="priority" name="priority" required>
     <?php foreach (['low','normal','high','urgent'] as $p): ?>
     <option value="<?= e($p) ?>"<?= old('priority', 'normal') === $p ? ' selected' : '' ?>><?= e(ucfirst($p)) ?></option>
     <?php endforeach; ?>
@@ -38,7 +38,7 @@ if (!is_array($fieldErrors)) {
 </div>
 <div class="form-group">
     <label class="form-label" for="body">Details <span class="required">*</span></label>
-    <textarea id="body" name="body" rows="8" required minlength="5"><?= e((string) old('body')) ?></textarea>
+    <textarea class="form-control form-textarea" id="body" name="body" rows="8" required minlength="5"><?= e((string) old('body')) ?></textarea>
     <?php if (!empty($fieldErrors['body'][0])): ?>
         <p class="form-error"><?= e($fieldErrors['body'][0]) ?></p>
     <?php endif; ?>

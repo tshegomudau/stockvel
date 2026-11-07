@@ -94,13 +94,13 @@ $decisionMap = $decisionMap ?? [];
 <form method="post" action="<?= e(url('/app/approvals/' . $reqId . '/approve')) ?>" class="form-stack" style="display:inline-block;min-width:12rem;">
     <?= csrf_field() ?>
     <label class="sr-only" for="approve-notes-<?= $reqId ?>">Approval notes</label>
-    <input id="approve-notes-<?= $reqId ?>" name="notes" placeholder="Optional notes">
+    <input class="form-control" type="text" id="approve-notes-<?= $reqId ?>" name="notes" placeholder="Optional notes">
     <button class="btn btn-sm btn-primary" type="submit">Approve</button>
 </form>
 <form method="post" action="<?= e(url('/app/approvals/' . $reqId . '/reject')) ?>" class="form-stack" style="display:inline-block;min-width:12rem;">
     <?= csrf_field() ?>
     <label class="sr-only" for="reject-reason-<?= $reqId ?>">Rejection reason</label>
-    <input id="reject-reason-<?= $reqId ?>" name="reason" required placeholder="Rejection reason (required)">
+    <input class="form-control" type="text" id="reject-reason-<?= $reqId ?>" name="reason" required placeholder="Rejection reason (required)">
     <button class="btn btn-sm btn-secondary" type="submit" data-confirm="Reject this request?">Reject</button>
 </form>
 <?php else: ?>

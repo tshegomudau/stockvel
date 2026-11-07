@@ -45,9 +45,16 @@ $topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/prof
     $platformFeatures = $platformFeatures ?? [];
     try {
         if ($platformFeatures === []) {
-            $platformFeatures = app()->container()
-                ->get(\App\Services\Platform\PlatformSettingsService::class)
-                ->clientConfig();
+            $sid = (int) (($stokvel['id'] ?? 0) ?: 0);
+            if ($sid > 0 && ($navCtx ?? '') !== 'platform') {
+                $platformFeatures = app()->container()
+                    ->get(\App\Services\Stokvel\StokvelEditorSettingsService::class)
+                    ->clientConfig($sid);
+            } else {
+                $platformFeatures = app()->container()
+                    ->get(\App\Services\Platform\PlatformSettingsService::class)
+                    ->clientConfig();
+            }
         }
     } catch (\Throwable) {
         $platformFeatures = [
@@ -104,7 +111,7 @@ $topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/prof
                         <form method="post" action="<?= e(url('/app/switch-stokvel')) ?>" class="stokvel-switcher">
                             <?= csrf_field() ?>
                             <label class="sr-only" for="switch-stokvel">Switch stokvel</label>
-                            <select id="switch-stokvel" name="stokvel_id" onchange="this.form.submit()">
+                            <select class="form-control form-select" id="switch-stokvel" name="stokvel_id" onchange="this.form.submit()">
                                 <?php foreach ($memberships as $m): ?>
                                     <option value="<?= (int) $m['stokvel_id'] ?>" <?= ((int) ($stokvel['id'] ?? 0) === (int) $m['stokvel_id']) ? 'selected' : '' ?>>
                                         <?= e($m['stokvel_name'] ?? ('Stokvel #' . $m['stokvel_id'])) ?>

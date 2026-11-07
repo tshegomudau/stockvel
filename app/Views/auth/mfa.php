@@ -7,7 +7,7 @@
         <?= csrf_field() ?>
         <div class="form-group">
             <label class="form-label" for="code">Authentication code</label>
-            <input id="code" name="code" required autofocus autocomplete="one-time-code" inputmode="numeric" pattern="[0-9A-Za-z\-]{6,16}" placeholder="123456">
+            <input class="form-control" type="text" id="code" name="code" required autofocus autocomplete="one-time-code" inputmode="numeric" pattern="[0-9A-Za-z\-]{6,16}" placeholder="123456">
         </div>
         <button type="submit" class="btn btn-primary btn-block">Continue</button>
     </form>

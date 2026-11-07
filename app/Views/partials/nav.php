@@ -57,13 +57,27 @@ $memberLinks = [
 $platformLinks = [
     'platform-dashboard' => ['label' => 'Overview', 'url' => route('platform.dashboard')],
     'platform-tenants' => ['label' => 'Stokvels', 'url' => route('platform.tenants')],
+    'platform-stokvel-requests' => [
+        'label' => 'Creation requests',
+        'url' => route('platform.stokvel-requests'),
+        'platform_permission' => 'stokvel_requests.view',
+    ],
     'platform-users' => ['label' => 'Chairpersons', 'url' => route('platform.users')],
+    'platform-admins' => [
+        'label' => 'Platform admins',
+        'url' => route('platform.admins'),
+        'platform_permission' => 'platform_users.view',
+    ],
     'platform-roles' => ['label' => 'Roles', 'url' => route('platform.roles')],
     'platform-stokvel-types' => ['label' => 'Stokvel types', 'url' => route('platform.stokvel-types')],
     'platform-support' => ['label' => 'Support tickets', 'url' => route('platform.support')],
-    'platform-features' => ['label' => 'Features & storage', 'url' => route('platform.features')],
+    'platform-features' => [
+        'label' => 'Storage (B2)',
+        'url' => route('platform.features'),
+        'platform_permission' => 'features.manage',
+    ],
     'platform-audit' => [
-        'label' => 'Audit logs',
+        'label' => 'Audit & logs',
         'url' => route('platform.audit'),
         'platform_permission' => 'audit_logs.view',
     ],

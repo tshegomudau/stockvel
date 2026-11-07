@@ -1,6 +1,6 @@
 <?= view('partials/page-header', [
-    'title' => 'Features & storage',
-    'description' => 'Enable file uploads, Backblaze B2, and full WYSIWYG editor features for all stokvels.',
+    'title' => 'Storage & default editor flags',
+    'description' => 'Backblaze/local storage credentials are global. Upload and WYSIWYG checkboxes here are defaults for stokvels that have not set their own values — manage per-stokvel overrides on each stokvel’s platform page.',
 ], null) ?>
 <?php $s = $settings ?? []; ?>
 <form method="post" action="<?= e(url('/platform/features')) ?>" class="form-stack card">
@@ -16,7 +16,7 @@
     </div>
     <div class="form-group">
         <label class="form-label" for="storage_driver">Storage driver</label>
-        <select id="storage_driver" name="storage_driver">
+        <select class="form-control form-select" id="storage_driver" name="storage_driver">
             <option value="local"<?= ($s['storage_driver'] ?? 'local') === 'local' ? ' selected' : '' ?>>Local disk (storage/documents)</option>
             <option value="backblaze"<?= ($s['storage_driver'] ?? '') === 'backblaze' ? ' selected' : '' ?>>Backblaze B2</option>
         </select>
@@ -28,24 +28,24 @@
         <div class="form-grid two-col">
             <div class="form-group">
                 <label class="form-label" for="b2_key_id">Key ID</label>
-                <input id="b2_key_id" name="b2_key_id" value="<?= e((string) ($s['b2_key_id'] ?? '')) ?>" autocomplete="off">
+                <input class="form-control" type="text" id="b2_key_id" name="b2_key_id" value="<?= e((string) ($s['b2_key_id'] ?? '')) ?>" autocomplete="off">
             </div>
             <div class="form-group">
                 <label class="form-label" for="b2_application_key">Application key</label>
-                <input id="b2_application_key" name="b2_application_key" type="password" value="" placeholder="<?= !empty($s['b2_application_key']) ? '•••• saved — leave blank to keep' : '' ?>" autocomplete="new-password">
+                <input class="form-control" id="b2_application_key" name="b2_application_key" type="password" value="" placeholder="<?= !empty($s['b2_application_key']) ? '•••• saved — leave blank to keep' : '' ?>" autocomplete="new-password">
             </div>
             <div class="form-group">
                 <label class="form-label" for="b2_bucket_id">Bucket ID</label>
-                <input id="b2_bucket_id" name="b2_bucket_id" value="<?= e((string) ($s['b2_bucket_id'] ?? '')) ?>" autocomplete="off">
+                <input class="form-control" type="text" id="b2_bucket_id" name="b2_bucket_id" value="<?= e((string) ($s['b2_bucket_id'] ?? '')) ?>" autocomplete="off">
             </div>
             <div class="form-group">
                 <label class="form-label" for="b2_bucket_name">Bucket name</label>
-                <input id="b2_bucket_name" name="b2_bucket_name" value="<?= e((string) ($s['b2_bucket_name'] ?? '')) ?>" autocomplete="off">
+                <input class="form-control" type="text" id="b2_bucket_name" name="b2_bucket_name" value="<?= e((string) ($s['b2_bucket_name'] ?? '')) ?>" autocomplete="off">
             </div>
         </div>
         <div class="form-group">
             <label class="form-label" for="b2_endpoint">Endpoint (optional)</label>
-            <input id="b2_endpoint" name="b2_endpoint" value="<?= e((string) ($s['b2_endpoint'] ?? '')) ?>" placeholder="Leave blank for default B2 API">
+            <input class="form-control" type="text" id="b2_endpoint" name="b2_endpoint" value="<?= e((string) ($s['b2_endpoint'] ?? '')) ?>" placeholder="Leave blank for default B2 API">
         </div>
     </fieldset>
 

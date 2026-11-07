@@ -8,19 +8,19 @@
     <?php if (!$isEdit): ?>
         <div class="form-group">
             <label class="form-label" for="code">Code</label>
-            <input id="code" name="code" required pattern="[a-z0-9_.-]+" placeholder="e.g. burial_officer">
+            <input class="form-control" type="text" id="code" name="code" required pattern="[a-z0-9_.-]+" placeholder="e.g. burial_officer">
         </div>
     <?php else: ?>
         <p class="text-muted">Code: <code><?= e($role['code'] ?? '') ?></code></p>
     <?php endif; ?>
     <div class="form-group">
         <label class="form-label" for="name">Name</label>
-        <input id="name" name="name" required value="<?= e($role['name'] ?? '') ?>">
+        <input class="form-control" type="text" id="name" name="name" required value="<?= e($role['name'] ?? '') ?>">
     </div>
     <div class="form-group">
         <label class="form-label" for="scope">Role category</label>
         <?php $scope = (string) ($role['scope'] ?? old('scope', 'user')); ?>
-        <select id="scope" name="scope" required>
+        <select class="form-control form-select" id="scope" name="scope" required>
             <option value="user"<?= $scope === 'user' ? ' selected' : '' ?>>User (stokvel member roles)</option>
             <option value="platform"<?= $scope === 'platform' ? ' selected' : '' ?>>Platform (staff roles)</option>
         </select>
@@ -28,7 +28,7 @@
     </div>
     <div class="form-group">
         <label class="form-label" for="description">Description</label>
-        <textarea id="description" name="description" rows="2"><?= e($role['description'] ?? '') ?></textarea>
+        <textarea class="form-control form-textarea" id="description" name="description" rows="2"><?= e($role['description'] ?? '') ?></textarea>
     </div>
     <fieldset class="form-section">
         <legend>Permissions</legend>

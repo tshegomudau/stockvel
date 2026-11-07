@@ -6,7 +6,7 @@
 <form method="get" action="<?= e(url('/app/loans/purposes')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-secondary">Filter</button>
@@ -18,9 +18,9 @@
 <form method="post" action="<?= e(url('/app/loans/purposes')) ?>" class="form-stack card mb-6">
 <?= csrf_field() ?>
 <div class="form-grid two-col">
-<div class="form-group"><label class="form-label" for="code">Code</label><input id="code" name="code" required placeholder="emergency"></div>
-<div class="form-group"><label class="form-label" for="name">Name</label><input id="name" name="name" required placeholder="Emergency"></div>
-<div class="form-group"><label class="form-label" for="sort_order">Sort order</label><input id="sort_order" name="sort_order" type="number" value="100"></div>
+<div class="form-group"><label class="form-label" for="code">Code</label><input class="form-control" type="text" id="code" name="code" required placeholder="emergency"></div>
+<div class="form-group"><label class="form-label" for="name">Name</label><input class="form-control" type="text" id="name" name="name" required placeholder="Emergency"></div>
+<div class="form-group"><label class="form-label" for="sort_order">Sort order</label><input class="form-control" id="sort_order" name="sort_order" type="number" value="100"></div>
 </div>
 <button class="btn btn-primary" type="submit">Add purpose</button>
 </form>
@@ -36,8 +36,8 @@
 <td colspan="2">
 <form method="post" action="<?= e(url('/app/loans/purposes/' . (int) $row['id'])) ?>" class="inline-form form-grid two-col">
 <?= csrf_field() ?>
-<input name="name" value="<?= e($row['name'] ?? '') ?>" aria-label="Purpose name">
-<input name="sort_order" type="number" value="<?= (int) ($row['sort_order'] ?? 0) ?>" aria-label="Sort order" style="max-width:6rem">
+<input class="form-control" type="text" name="name" value="<?= e($row['name'] ?? '') ?>" aria-label="Purpose name">
+<input class="form-control" name="sort_order" type="number" value="<?= (int) ($row['sort_order'] ?? 0) ?>" aria-label="Sort order" style="max-width:6rem">
 <button class="btn btn-sm btn-secondary" type="submit">Save</button>
 </form>
 </td>

@@ -43,7 +43,7 @@ foreach ($roleOptions as $role) {
         <div class="form-grid two-col">
             <div class="form-group">
                 <label class="form-label" for="default_min_approvals">Default minimum approvals</label>
-                <input id="default_min_approvals" name="default_min_approvals" type="number" min="1" max="20"
+                <input class="form-control" id="default_min_approvals" name="default_min_approvals" type="number" min="1" max="20"
                        value="<?= e((string) ($settings['default_min_approvals'] ?? (!empty($settings['require_dual_approval']) ? '2' : '1'))) ?>">
             </div>
         </div>
@@ -74,35 +74,35 @@ foreach ($roleOptions as $role) {
                         ? 'Default (any type)'
                         : ($approvalRequestTypes[$editType] ?? $editType);
                     ?>
-                    <input type="text" value="<?= e((string) $typeLabel) ?>" disabled>
+                    <input class="form-control" type="text" value="<?= e((string) $typeLabel) ?>" disabled>
                     <input type="hidden" name="policy_request_type" value="<?= e($editType) ?>">
                 <?php else: ?>
-                    <select id="policy_request_type" name="policy_request_type">
+                    <select class="form-control form-select" id="policy_request_type" name="policy_request_type">
                         <?php foreach ($approvalRequestTypes as $code => $label): ?>
                             <option value="<?= e((string) $code) ?>"><?= e($label) ?></option>
                         <?php endforeach; ?>
                         <option value="__custom__">Custom type…</option>
                     </select>
-                    <input id="policy_request_type_custom" name="policy_request_type_custom" class="mt-2"
+                    <input type="text" id="policy_request_type_custom" name="policy_request_type_custom" class="mt-2 form-control"
                            placeholder="e.g. special_levy" hidden aria-label="Custom request type code">
                     <p class="form-help">Blank default covers any type without a more specific rule.</p>
                 <?php endif; ?>
             </div>
             <div class="form-group">
                 <label class="form-label" for="policy_min_approvals">Minimum approvals</label>
-                <input id="policy_min_approvals" name="policy_min_approvals" type="number" min="1" max="20"
+                <input class="form-control" id="policy_min_approvals" name="policy_min_approvals" type="number" min="1" max="20"
                        value="<?= e($isEdit ? $editMin : (string) old('policy_min_approvals', '2')) ?>" required>
             </div>
             <div class="form-group">
                 <label class="form-label" for="policy_amount_threshold">Amount threshold (ZAR)</label>
-                <input id="policy_amount_threshold" name="policy_amount_threshold" type="number" step="0.01" min="0"
+                <input class="form-control" id="policy_amount_threshold" name="policy_amount_threshold" type="number" step="0.01" min="0"
                        placeholder="Optional — apply when amount ≥ this"
                        value="<?= e($isEdit ? $editThreshold : (string) old('policy_amount_threshold', '')) ?>">
                 <p class="form-help">Leave blank for a type-wide rule. Higher thresholds win when amount matches.</p>
             </div>
             <div class="form-group">
                 <label class="form-label" for="policy_required_roles">Required roles</label>
-                <select id="policy_required_roles" name="policy_required_roles[]" multiple
+                <select class="form-control form-select" id="policy_required_roles" name="policy_required_roles[]" multiple
                         size="<?= max(4, min(8, count($roleOptions) ?: 4)) ?>">
                     <?php foreach ($roleOptions as $role): ?>
                         <?php $code = (string) ($role['code'] ?? ''); ?>

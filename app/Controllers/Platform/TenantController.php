@@ -9,6 +9,9 @@ use App\Core\Paginator;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
+use App\Services\PermissionService;
+use App\Services\Stokvel\StokvelCreationRequestService;
+use App\Services\Stokvel\StokvelEditorSettingsService;
 use App\Support\ModuleRegistry;
 use App\Support\StokvelTypeCatalog;
 
@@ -20,6 +23,7 @@ final class TenantController extends Controller
         if (!$this->tenant()->isPlatformAdmin()) {
             return $this->redirect('/app');
         }
+        app()->container()->get(PermissionService::class)->requirePlatformPermission('tenants.view');
 
         $page = $this->page($request);
         $perPage = $this->perPage($request);
@@ -48,7 +52,38 @@ final class TenantController extends Controller
             'navContext' => 'platform',
             'paginator' => $paginator,
             'search' => $search,
+            'canCreate' => app()->container()->get(PermissionService::class)->platformCan('tenants.create'),
         ]);
+    }
+
+    public function create(Request $request): Response
+    {
+        $this->requireAuth();
+        app()->container()->get(PermissionService::class)->requirePlatformPermission('tenants.create');
+        return $this->render('platform/tenants/create', [
+            'title' => 'Create stokvel',
+            'activeNav' => 'platform-tenants',
+            'navContext' => 'platform',
+            'stokvelTypeOptions' => StokvelTypeCatalog::activeOptions($this->db()),
+        ]);
+    }
+
+    public function store(Request $request): Response
+    {
+        $this->requireAuth();
+        app()->container()->get(PermissionService::class)->requirePlatformPermission('tenants.create');
+        $name = trim((string) $request->input('name', ''));
+        if ($name === '') {
+            Session::flash('error', 'Name is required.');
+            return $this->redirect('/platform/tenants/create');
+        }
+        $id = app()->container()->get(StokvelCreationRequestService::class)->createDirectByAdmin([
+            'name' => $name,
+            'stokvel_type' => trim((string) $request->input('stokvel_type', 'general_savings')),
+            'description' => trim((string) $request->input('description', '')),
+        ], (int) $this->userId());
+        Session::flash('success', 'Stokvel created (approval bypassed under your permission). Appoint a chairperson next.');
+        return $this->redirect('/platform/tenants/' . $id);
     }
 
     public function show(Request $request, string $id): Response
@@ -57,6 +92,7 @@ final class TenantController extends Controller
         if (!$this->tenant()->isPlatformAdmin()) {
             return $this->redirect('/app');
         }
+        app()->container()->get(PermissionService::class)->requirePlatformPermission('tenants.view');
 
         $stokvel = $this->db()->fetch('SELECT * FROM stokvels WHERE id = :id LIMIT 1', ['id' => (int) $id]);
         if (!$stokvel) {
@@ -102,6 +138,10 @@ final class TenantController extends Controller
         }
         $enabledModules = ModuleRegistry::fromSettings($json, !empty($settings['loans_enabled']));
 
+        $editorSettings = app()->container()
+            ->get(StokvelEditorSettingsService::class)
+            ->forStokvel($stokvelId);
+
         return $this->render('platform/tenants/show', [
             'title' => $stokvel['name'] ?? 'Stokvel',
             'activeNav' => 'platform-tenants',
@@ -114,10 +154,41 @@ final class TenantController extends Controller
             'settings' => $settings,
             'enabledModules' => $enabledModules,
             'moduleCatalog' => ModuleRegistry::MODULES,
-            'canManageModules' => $this->tenant()->isSuperAdmin(),
-            'canAppointChairperson' => $this->tenant()->isSuperAdmin() && $chairperson === null,
+            'canManageModules' => $this->tenant()->isSuperAdmin()
+                || app()->container()->get(PermissionService::class)->platformCan('tenants.manage'),
+            'canAppointChairperson' => (
+                $this->tenant()->isSuperAdmin()
+                || app()->container()->get(PermissionService::class)->platformCan('tenants.manage')
+            ) && $chairperson === null,
+            'canManageEditor' => app()->container()->get(PermissionService::class)->platformCan('tenants.manage')
+                || $this->tenant()->isSuperAdmin(),
+            'editorSettings' => $editorSettings,
             'stokvelTypes' => StokvelTypeCatalog::labelMap($this->db()),
         ]);
+    }
+
+    public function updateEditorSettings(Request $request, string $id): Response
+    {
+        $this->requireAuth();
+        $perms = app()->container()->get(PermissionService::class);
+        if (!$this->tenant()->isSuperAdmin() && !$perms->platformCan('tenants.manage')) {
+            Session::flash('error', 'You do not have permission to change editor settings.');
+            return $this->redirect('/platform/tenants/' . $id);
+        }
+        $stokvelId = (int) $id;
+        $stokvel = $this->db()->fetch('SELECT id FROM stokvels WHERE id = :id LIMIT 1', ['id' => $stokvelId]);
+        if (!$stokvel) {
+            return $this->redirect('/platform/tenants');
+        }
+        app()->container()->get(StokvelEditorSettingsService::class)->save($stokvelId, [
+            'file_uploads_enabled' => (bool) $request->input('file_uploads_enabled'),
+            'wysiwyg_full_enabled' => (bool) $request->input('wysiwyg_full_enabled'),
+            'wysiwyg_images_enabled' => (bool) $request->input('wysiwyg_images_enabled'),
+            'wysiwyg_tables_enabled' => (bool) $request->input('wysiwyg_tables_enabled'),
+            'wysiwyg_colors_enabled' => (bool) $request->input('wysiwyg_colors_enabled'),
+        ]);
+        Session::flash('success', 'Editor and upload settings saved for this stokvel.');
+        return $this->redirect('/platform/tenants/' . $stokvelId);
     }
 
     public function updateGovernance(Request $request, string $id): Response

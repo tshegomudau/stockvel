@@ -6,7 +6,7 @@
             <?= csrf_field() ?>
             <div class="form-group">
                 <label class="form-label required" for="email">Email</label>
-                <input type="email" id="email" name="email" required autocomplete="email" value="<?= e((string) old('email')) ?>">
+                <input class="form-control" type="email" id="email" name="email" required autocomplete="email" value="<?= e((string) old('email')) ?>">
             </div>
             <button type="submit" class="btn btn-primary btn-block">Send reset link</button>
         </form>

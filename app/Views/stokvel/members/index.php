@@ -13,11 +13,11 @@
 <form method="get" action="<?= e(url('/app/members')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="member-search">Search</label>
-        <input type="search" id="member-search" name="q" value="<?= e((string) ($q ?? '')) ?>" placeholder="Name or email">
+        <input class="form-control" type="search" id="member-search" name="q" value="<?= e((string) ($q ?? '')) ?>" placeholder="Name or email">
     </div>
     <div class="form-group">
         <label for="status">Status</label>
-        <select id="status" name="status">
+        <select class="form-control form-select" id="status" name="status">
             <option value="">All statuses</option>
             <?php foreach (['active', 'invited', 'pending', 'suspended', 'resigned', 'terminated'] as $st): ?>
                 <option value="<?= e($st) ?>"<?= ($statusFilter ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>

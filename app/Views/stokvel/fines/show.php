@@ -40,11 +40,11 @@ $canWaive = in_array($status, ['outstanding', 'partially_paid'], true);
         <?= csrf_field() ?>
         <div class="form-group">
             <label class="form-label" for="waived_amount">Waive amount (optional — leave blank for full outstanding)</label>
-            <input id="waived_amount" name="waived_amount" type="number" step="0.01" min="0.01">
+            <input class="form-control" id="waived_amount" name="waived_amount" type="number" step="0.01" min="0.01">
         </div>
         <div class="form-group">
             <label class="form-label" for="waived_reason">Reason</label>
-            <textarea id="waived_reason" name="waived_reason" rows="2" required></textarea>
+            <textarea class="form-control form-textarea" id="waived_reason" name="waived_reason" rows="2" required></textarea>
         </div>
         <button type="submit" class="btn btn-danger" data-confirm="Waive this fine?">Waive</button>
     </form>

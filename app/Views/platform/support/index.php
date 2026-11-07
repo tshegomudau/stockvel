@@ -3,7 +3,7 @@
     'description' => 'Review and update tenant bug/support requests.',
 ], null) ?>
 <form method="get" class="filter-bar mb-4">
-<select name="status" onchange="this.form.submit()">
+<select class="form-control form-select" name="status" onchange="this.form.submit()">
 <option value="">All statuses</option>
 <?php foreach (['open','in_progress','waiting','resolved','closed'] as $st): ?>
 <option value="<?= e($st) ?>"<?= ($statusFilter ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst(str_replace('_',' ',$st))) ?></option>

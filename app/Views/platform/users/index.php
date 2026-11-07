@@ -26,7 +26,7 @@
 <?php endif; ?>
 
 <form method="get" class="toolbar">
-    <input type="search" name="q" placeholder="Search chairpersons or stokvel" value="<?= e($search ?? '') ?>">
+    <input class="form-control" type="search" name="q" placeholder="Search chairpersons or stokvel" value="<?= e($search ?? '') ?>">
     <button type="submit" class="btn">Search</button>
 </form>
 <table class="table">

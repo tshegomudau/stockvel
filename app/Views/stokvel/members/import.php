@@ -9,7 +9,7 @@
         <?= csrf_field() ?>
         <div class="form-group">
             <label class="form-label required" for="csv">CSV file</label>
-            <input id="csv" type="file" name="csv" accept=".csv,text/csv" required>
+            <input class="form-control" id="csv" type="file" name="csv" accept=".csv,text/csv" required>
             <p class="form-help">Columns: first_name, last_name, email, mobile, role_code, minimum_contribution, joined_at</p>
         </div>
         <div class="form-actions">

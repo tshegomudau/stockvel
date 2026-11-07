@@ -19,6 +19,8 @@ use App\Controllers\Member\InviteController as MemberInviteController;
 use App\Controllers\Member\ProfileController as MemberProfileController;
 use App\Controllers\Member\StatementController as MemberStatementController;
 use App\Controllers\Member\SupportController as MemberSupportController;
+use App\Controllers\Account\GetStartedController;
+use App\Controllers\Platform\AdminUserController as PlatformAdminUserController;
 use App\Controllers\Platform\AuditController as PlatformAuditController;
 use App\Controllers\Platform\DashboardController as PlatformDashboardController;
 use App\Controllers\Platform\FeatureSettingsController as PlatformFeatureSettingsController;
@@ -26,10 +28,13 @@ use App\Controllers\Platform\JobController as PlatformJobController;
 use App\Controllers\Platform\ProfileController as PlatformProfileController;
 use App\Controllers\Platform\RoleController as PlatformRoleController;
 use App\Controllers\Platform\SecurityController as PlatformSecurityController;
+use App\Controllers\Platform\StokvelRequestController as PlatformStokvelRequestController;
 use App\Controllers\Platform\StokvelTypeController as PlatformStokvelTypeController;
 use App\Controllers\Platform\SupportTicketController as PlatformSupportTicketController;
 use App\Controllers\Platform\TenantController as PlatformTenantController;
 use App\Controllers\Platform\UserController as PlatformUserController;
+use App\Controllers\Public\StokvelClaimController;
+use App\Controllers\Stokvel\EmailTemplateController;
 use App\Controllers\Public\HomeController;
 use App\Controllers\Public\InvitationController;
 use App\Controllers\Public\RegisterStokvelController;
@@ -111,12 +116,18 @@ $router->get('/verify-email/{token}', [AuthController::class, 'verifyEmail'], $g
 $router->get('/verify-email/notice', [AuthController::class, 'verifyNotice'], array_merge($global, $auth));
 $router->post('/verify-email/resend', [AuthController::class, 'resendVerification'], array_merge($global, $auth, $csrf));
 
+$router->get('/account/get-started', [GetStartedController::class, 'index'], array_merge($global, $auth));
+
 $router->get('/invitations/{token}', [InvitationController::class, 'show'], $global);
 // Auth is enforced inside the controller so guests get login+intended_url instead of a bare 401.
 $router->post('/invitations/{token}/accept', [InvitationController::class, 'accept'], array_merge($global, $csrf));
 
-$router->get('/start-stokvel', [RegisterStokvelController::class, 'show'], array_merge($global, $auth));
-$router->post('/start-stokvel', [RegisterStokvelController::class, 'store'], array_merge($global, $auth, $csrf));
+// Guest-friendly stokvel creation request (auth optional).
+$router->get('/start-stokvel', [RegisterStokvelController::class, 'show'], $global);
+$router->post('/start-stokvel', [RegisterStokvelController::class, 'store'], array_merge($global, $csrf));
+$router->get('/stokvel-requests/{token}', [RegisterStokvelController::class, 'status'], $global);
+$router->get('/stokvel-claims/{token}', [StokvelClaimController::class, 'show'], $global);
+$router->post('/stokvel-claims/{token}', [StokvelClaimController::class, 'store'], array_merge($global, $csrf));
 
 $router->get('/dashboard', static function () {
     $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
@@ -134,12 +145,24 @@ $memberMut = array_merge($global, $tenant, $csrf);
 
 $router->get('/platform', [PlatformDashboardController::class, 'index'], $platform);
 $router->get('/platform/tenants', [PlatformTenantController::class, 'index'], $platform);
+$router->get('/platform/tenants/create', [PlatformTenantController::class, 'create'], $platform);
+$router->post('/platform/tenants', [PlatformTenantController::class, 'store'], $platformMut);
 $router->get('/platform/tenants/{id}', [PlatformTenantController::class, 'show'], $platform);
 $router->post('/platform/tenants/{id}/modules', [PlatformTenantController::class, 'updateModules'], $platformMut);
 $router->post('/platform/tenants/{id}/governance', [PlatformTenantController::class, 'updateGovernance'], $platformMut);
+$router->post('/platform/tenants/{id}/editor-settings', [PlatformTenantController::class, 'updateEditorSettings'], $platformMut);
 $router->post('/platform/tenants/{id}/suspend', [PlatformTenantController::class, 'suspend'], $platformMut);
 $router->post('/platform/tenants/{id}/activate', [PlatformTenantController::class, 'activate'], $platformMut);
 $router->post('/platform/tenants/{id}/appoint-chairperson', [PlatformUserController::class, 'appointChairperson'], $platformMut);
+$router->get('/platform/stokvel-requests', [PlatformStokvelRequestController::class, 'index'], $platform);
+$router->get('/platform/stokvel-requests/{id}', [PlatformStokvelRequestController::class, 'show'], $platform);
+$router->post('/platform/stokvel-requests/{id}/approve', [PlatformStokvelRequestController::class, 'approve'], $platformMut);
+$router->post('/platform/stokvel-requests/{id}/reject', [PlatformStokvelRequestController::class, 'reject'], $platformMut);
+$router->get('/platform/admins', [PlatformAdminUserController::class, 'index'], $platform);
+$router->get('/platform/admins/create', [PlatformAdminUserController::class, 'create'], $platform);
+$router->post('/platform/admins', [PlatformAdminUserController::class, 'store'], $platformMut);
+$router->get('/platform/admins/{id}/edit', [PlatformAdminUserController::class, 'edit'], $platform);
+$router->post('/platform/admins/{id}', [PlatformAdminUserController::class, 'update'], $platformMut);
 $router->get('/platform/users', [PlatformUserController::class, 'index'], $platform);
 $router->get('/platform/users/appoint/{stokvelId}', [PlatformUserController::class, 'appointForm'], $platform);
 $router->post('/platform/users/appoint/{stokvelId}', [PlatformUserController::class, 'appoint'], $platformMut);
@@ -437,6 +460,10 @@ $router->post('/app/notifications/{id}/read', [StokvelNotificationController::cl
 
 $router->get('/app/settings', [SettingsController::class, 'edit'], $appRead);
 $router->post('/app/settings', [SettingsController::class, 'update'], $appMut);
+$router->get('/app/settings/email-templates', [EmailTemplateController::class, 'index'], $appRead);
+$router->get('/app/settings/email-templates/{key}/edit', [EmailTemplateController::class, 'edit'], $appRead);
+$router->post('/app/settings/email-templates/{key}', [EmailTemplateController::class, 'update'], $appMut);
+$router->post('/app/settings/email-templates/{key}/reset', [EmailTemplateController::class, 'reset'], $appMut);
 $router->get('/app/settings/categories', [CategorySettingsController::class, 'index'], $appRead);
 $router->get('/app/settings/roles', [RoleManagementController::class, 'index'], $appRead);
 $router->get('/app/settings/roles/{roleCode}', [RoleManagementController::class, 'show'], $appRead);

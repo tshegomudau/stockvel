@@ -4,15 +4,15 @@
         <?= csrf_field() ?>
         <div class="form-group">
             <label for="title">Title</label>
-            <input type="text" id="title" name="title" value="<?= e((string) old('title', '')) ?>" required>
+            <input class="form-control" type="text" id="title" name="title" value="<?= e((string) old('title', '')) ?>" required>
         </div>
         <div class="form-group">
             <label for="scheduled_at">Date & time</label>
-            <input type="datetime-local" id="scheduled_at" name="scheduled_at" value="<?= e((string) old('scheduled_at', '')) ?>" required>
+            <input class="form-control" type="datetime-local" id="scheduled_at" name="scheduled_at" value="<?= e((string) old('scheduled_at', '')) ?>" required>
         </div>
         <div class="form-group">
             <label for="meeting_type">Meeting type</label>
-            <select id="meeting_type" name="meeting_type">
+            <select class="form-control form-select" id="meeting_type" name="meeting_type">
                 <?php if (!empty($meetingCategories)): ?>
                     <?php foreach ($meetingCategories as $cat): ?>
                         <option value="<?= e($cat['code'] ?? '') ?>"<?= old('meeting_type', 'regular') === ($cat['code'] ?? '') ? ' selected' : '' ?>>
@@ -31,15 +31,15 @@
         </div>
         <div class="form-group">
             <label for="venue">Venue</label>
-            <input type="text" id="venue" name="venue" value="<?= e((string) old('venue', '')) ?>">
+            <input class="form-control" type="text" id="venue" name="venue" value="<?= e((string) old('venue', '')) ?>">
         </div>
         <div class="form-group">
             <label for="agenda">Agenda</label>
-            <textarea id="agenda" name="agenda" rows="6" data-wysiwyg class="wysiwyg" aria-label="Agenda"><?= e((string) old('agenda', '')) ?></textarea>
+            <textarea id="agenda" name="agenda" rows="6" data-wysiwyg class="wysiwyg form-control form-textarea" aria-label="Agenda"><?= e((string) old('agenda', '')) ?></textarea>
         </div>
         <div class="form-group">
             <label for="notes">Notes</label>
-            <textarea id="notes" name="notes" rows="6" data-wysiwyg class="wysiwyg" data-wysiwyg-size="tall" aria-label="Notes"><?= e((string) old('notes', '')) ?></textarea>
+            <textarea id="notes" name="notes" rows="6" data-wysiwyg class="wysiwyg form-control form-textarea" data-wysiwyg-size="tall" aria-label="Notes"><?= e((string) old('notes', '')) ?></textarea>
             <p class="help-text">Rich text (no images or file attachments). Unsafe markup is stripped on save.</p>
         </div>
         <button type="submit" class="btn btn-primary">Save</button>

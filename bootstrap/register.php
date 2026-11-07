@@ -46,7 +46,10 @@ use App\Services\Notifications\NotificationQueueService;
 use App\Services\Notifications\NotificationService;
 use App\Services\PermissionService;
 use App\Services\Documents\DocumentService;
+use App\Services\Notifications\EmailTemplateService;
 use App\Services\Platform\PlatformSettingsService;
+use App\Services\Stokvel\StokvelCreationRequestService;
+use App\Services\Stokvel\StokvelEditorSettingsService;
 use App\Services\Storage\StorageManager;
 use App\Services\Finance\CsvImportService;
 use App\Services\Finance\ExpenseService;
@@ -189,6 +192,19 @@ return static function (Container $container, string $basePath, array $dbConfig)
     $container->singleton(ReconciliationService::class, static fn (Container $c) => new ReconciliationService($c->get(Database::class)));
     $container->singleton(PlatformSettingsService::class, static fn (Container $c) => new PlatformSettingsService(
         $c->get(Database::class)
+    ));
+    $container->singleton(StokvelEditorSettingsService::class, static fn (Container $c) => new StokvelEditorSettingsService(
+        $c->get(Database::class),
+        $c->get(PlatformSettingsService::class)
+    ));
+    $container->singleton(EmailTemplateService::class, static fn (Container $c) => new EmailTemplateService(
+        $c->get(Database::class)
+    ));
+    $container->singleton(StokvelCreationRequestService::class, static fn (Container $c) => new StokvelCreationRequestService(
+        $c->get(Database::class),
+        $c->get(StokvelRepository::class),
+        $c->get(NotificationService::class),
+        $c->get(AuditService::class)
     ));
     $container->singleton(StorageManager::class, static fn (Container $c) => new StorageManager(
         $c->get(PlatformSettingsService::class),

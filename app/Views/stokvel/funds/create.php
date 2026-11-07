@@ -7,16 +7,16 @@
     <div class="form-grid two-col">
         <div class="form-group">
             <label class="form-label" for="code">Code</label>
-            <input id="code" name="code" required value="<?= e(old('code', '')) ?>" placeholder="reserve">
+            <input class="form-control" type="text" id="code" name="code" required value="<?= e(old('code', '')) ?>" placeholder="reserve">
         </div>
         <div class="form-group">
             <label class="form-label" for="name">Name</label>
-            <input id="name" name="name" required value="<?= e(old('name', '')) ?>" placeholder="Reserve fund">
+            <input class="form-control" type="text" id="name" name="name" required value="<?= e(old('name', '')) ?>" placeholder="Reserve fund">
         </div>
     </div>
     <div class="form-group">
         <label class="form-label" for="description">Description</label>
-        <textarea id="description" name="description" rows="3"><?= e(old('description', '')) ?></textarea>
+        <textarea class="form-control form-textarea" id="description" name="description" rows="3"><?= e(old('description', '')) ?></textarea>
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">Create fund</button>

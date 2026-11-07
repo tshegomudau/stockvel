@@ -98,6 +98,29 @@ final class PermissionService
      */
     public const PLATFORM_PERMISSIONS = [
         'audit_logs.view',
+        'application_logs.view',
+        'tenants.view',
+        'tenants.manage',
+        'tenants.create',
+        'stokvel_requests.view',
+        'stokvel_requests.approve',
+        'platform_users.view',
+        'platform_users.manage',
+        'features.manage',
+    ];
+
+    /** @var array<string, string> */
+    public const PLATFORM_PERMISSION_LABELS = [
+        'audit_logs.view' => 'Audit log — view',
+        'application_logs.view' => 'Application logs — view',
+        'tenants.view' => 'Stokvels — view',
+        'tenants.manage' => 'Stokvels — manage (suspend/modules)',
+        'tenants.create' => 'Stokvels — create directly',
+        'stokvel_requests.view' => 'Creation requests — view',
+        'stokvel_requests.approve' => 'Creation requests — approve/reject',
+        'platform_users.view' => 'Platform users — view',
+        'platform_users.manage' => 'Platform users — manage',
+        'features.manage' => 'Platform storage features — manage',
     ];
 
     /** @var array<string, list<string>> */
@@ -213,17 +236,25 @@ final class PermissionService
 
     /** @var array<string, list<string>> */
     private const PLATFORM_TENANT_PERMISSIONS = [
-        'platform_super_admin' => ['*', 'audit_logs.view'],
-        'super_admin' => ['*', 'audit_logs.view'],
+        'platform_super_admin' => ['*'],
+        'super_admin' => ['*'],
         'platform_support' => [
+            'tenants.view',
+            'tenants.manage',
+            'stokvel_requests.view',
+            'stokvel_requests.approve',
             'members.view',
             'contributions.view',
             'reports.view',
             'documents.view',
             'notifications.view',
-            // No audit_logs.view — support may assist tenants without raw audit access
+            // No audit/application logs or platform user management by default
         ],
         'support' => [
+            'tenants.view',
+            'tenants.manage',
+            'stokvel_requests.view',
+            'stokvel_requests.approve',
             'members.view',
             'contributions.view',
             'reports.view',
@@ -231,12 +262,15 @@ final class PermissionService
             'notifications.view',
         ],
         'platform_auditor' => [
+            'tenants.view',
+            'stokvel_requests.view',
             'members.view',
             'contributions.view',
             'reports.view',
             'reports.export',
             'documents.view',
             'audit_logs.view',
+            'application_logs.view',
         ],
     ];
 
@@ -388,7 +422,28 @@ final class PermissionService
             return false;
         }
         $codes = $this->forPlatformRole($role);
-        return in_array('*', $codes, true) || in_array($permission, $codes, true);
+        if (in_array('*', $codes, true) || in_array($permission, $codes, true)) {
+            return true;
+        }
+
+        // Individual grants/denies on platform_user_permissions (additive overrides).
+        $userId = $this->tenant->userId();
+        if ($userId === null) {
+            return false;
+        }
+        try {
+            $row = $this->db->fetch(
+                'SELECT granted FROM platform_user_permissions
+                 WHERE user_id = :uid AND permission_code = :code LIMIT 1',
+                ['uid' => $userId, 'code' => $permission]
+            );
+            if ($row !== null) {
+                return (bool) (int) ($row['granted'] ?? 0);
+            }
+        } catch (\Throwable) {
+        }
+
+        return false;
     }
 
     public function requirePlatformPermission(string $permission): void
@@ -396,6 +451,62 @@ final class PermissionService
         if (!$this->platformCan($permission)) {
             throw new AuthorizationException('You do not have permission: ' . $permission);
         }
+    }
+
+    /**
+     * Effective platform permission codes for a user (role defaults + overrides).
+     *
+     * @return list<string>
+     */
+    public function effectivePlatformPermissionsForUser(int $userId, string $platformRole): array
+    {
+        $codes = $this->forPlatformRole($platformRole);
+        if (in_array('*', $codes, true)) {
+            return ['*'];
+        }
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT permission_code, granted FROM platform_user_permissions WHERE user_id = :uid',
+                ['uid' => $userId]
+            );
+            foreach ($rows as $row) {
+                $code = (string) ($row['permission_code'] ?? '');
+                if ($code === '') {
+                    continue;
+                }
+                if ((int) ($row['granted'] ?? 0) === 1) {
+                    $codes[] = $code;
+                } else {
+                    $codes = array_values(array_filter($codes, static fn (string $c): bool => $c !== $code));
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    /**
+     * Count active platform admins who still have a usable admin role.
+     */
+    public function countActivePlatformAdmins(): int
+    {
+        $row = $this->db->fetch(
+            "SELECT COUNT(*) AS c FROM users
+             WHERE status = 'active'
+               AND platform_role IN ('platform_super_admin','super_admin','platform_support','support','platform_auditor')"
+        );
+        return (int) ($row['c'] ?? 0);
+    }
+
+    public function countActiveSuperAdmins(): int
+    {
+        $row = $this->db->fetch(
+            "SELECT COUNT(*) AS c FROM users
+             WHERE status = 'active'
+               AND platform_role IN ('platform_super_admin','super_admin')"
+        );
+        return (int) ($row['c'] ?? 0);
     }
 
     private function resolveRoleCode(array $membership): string

@@ -18,26 +18,26 @@
                 <div class="form-grid two-col">
                     <div class="form-group">
                         <label class="form-label">Full name</label>
-                        <input name="full_name" required value="<?= e((string) ($b['full_name'] ?? '')) ?>">
+                        <input class="form-control" type="text" name="full_name" required value="<?= e((string) ($b['full_name'] ?? '')) ?>">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Relationship</label>
-                        <input name="relationship" required value="<?= e((string) ($b['relationship'] ?? '')) ?>">
+                        <input class="form-control" type="text" name="relationship" required value="<?= e((string) ($b['relationship'] ?? '')) ?>">
                     </div>
                 </div>
                 <div class="form-grid two-col">
                     <div class="form-group">
                         <label class="form-label">Share %</label>
-                        <input name="share_percent" type="number" step="0.01" min="0" max="100" required value="<?= e((string) ($b['share_percent'] ?? '')) ?>">
+                        <input class="form-control" name="share_percent" type="number" step="0.01" min="0" max="100" required value="<?= e((string) ($b['share_percent'] ?? '')) ?>">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Phone</label>
-                        <input name="phone" value="<?= e((string) ($b['phone'] ?? '')) ?>">
+                        <input class="form-control" type="text" name="phone" value="<?= e((string) ($b['phone'] ?? '')) ?>">
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Email</label>
-                    <input name="email" type="email" value="<?= e((string) ($b['email'] ?? '')) ?>">
+                    <input class="form-control" name="email" type="email" value="<?= e((string) ($b['email'] ?? '')) ?>">
                 </div>
                 <label class="checkbox-inline">
                     <input type="checkbox" name="is_primary" value="1"<?= !empty($b['is_primary']) ? ' checked' : '' ?>> Primary beneficiary
@@ -63,11 +63,11 @@
         <div class="form-grid two-col">
             <div class="form-group">
                 <label class="form-label required" for="full_name">Full name</label>
-                <input id="full_name" name="full_name" required>
+                <input class="form-control" type="text" id="full_name" name="full_name" required>
             </div>
             <div class="form-group">
                 <label class="form-label required" for="relationship">Relationship</label>
-                <input id="relationship" name="relationship" required>
+                <input class="form-control" type="text" id="relationship" name="relationship" required>
             </div>
         </div>
         <div class="form-grid two-col">
@@ -77,22 +77,22 @@
                 $remaining = max(0, round(100 - (float) ($shareTotal ?? 0), 2));
                 $defaultShare = ($shareTotal ?? 0) <= 0 ? 100 : $remaining;
                 ?>
-                <input id="share_percent" name="share_percent" type="number" step="0.01" min="0" max="100" required value="<?= e((string) $defaultShare) ?>">
+                <input class="form-control" id="share_percent" name="share_percent" type="number" step="0.01" min="0" max="100" required value="<?= e((string) $defaultShare) ?>">
                 <p class="form-help">Remaining to reach 100%: <?= e(number_format($remaining, 2)) ?>%</p>
             </div>
             <div class="form-group">
                 <label class="form-label" for="id_number">ID number</label>
-                <input id="id_number" name="id_number">
+                <input class="form-control" type="text" id="id_number" name="id_number">
             </div>
         </div>
         <div class="form-grid two-col">
             <div class="form-group">
                 <label class="form-label" for="phone">Phone</label>
-                <input id="phone" name="phone">
+                <input class="form-control" type="text" id="phone" name="phone">
             </div>
             <div class="form-group">
                 <label class="form-label" for="email">Email</label>
-                <input id="email" name="email" type="email">
+                <input class="form-control" id="email" name="email" type="email">
             </div>
         </div>
         <label class="checkbox-inline">

@@ -104,7 +104,7 @@
         <?= csrf_field() ?>
         <div class="form-group">
             <label class="form-label" for="membership_id">Member</label>
-            <select id="membership_id" name="membership_id" required>
+            <select class="form-control form-select" id="membership_id" name="membership_id" required>
                 <option value="">Select member…</option>
                 <?php foreach ($assignableMembers as $m): ?>
                     <?php

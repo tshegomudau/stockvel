@@ -6,11 +6,11 @@
 <form method="get" action="<?= e(url('/app/reports/annual')) ?>" class="filter-bar no-print mb-4">
     <div class="form-group">
         <label for="from">From</label>
-        <input type="date" id="from" name="from" value="<?= e($from ?? '') ?>">
+        <input class="form-control" type="date" id="from" name="from" value="<?= e($from ?? '') ?>">
     </div>
     <div class="form-group">
         <label for="to">To</label>
-        <input type="date" id="to" name="to" value="<?= e($to ?? '') ?>">
+        <input class="form-control" type="date" id="to" name="to" value="<?= e($to ?? '') ?>">
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">Apply</button>

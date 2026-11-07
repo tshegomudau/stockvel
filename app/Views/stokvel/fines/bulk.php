@@ -51,7 +51,7 @@
     <div class="form-grid two-col">
         <div class="form-group">
             <label class="form-label" for="fine_type_id">Fine type</label>
-            <select id="fine_type_id" name="fine_type_id" required>
+            <select class="form-control form-select" id="fine_type_id" name="fine_type_id" required>
                 <option value="">Select type</option>
                 <?php foreach ($types ?? [] as $type): ?>
                     <option value="<?= (int) $type['id'] ?>" data-amount="<?= e((string) ($type['default_amount'] ?? '0')) ?>">
@@ -62,16 +62,16 @@
         </div>
         <div class="form-group">
             <label class="form-label" for="amount">Amount (ZAR)</label>
-            <input id="amount" name="amount" type="number" step="0.01" min="0.01" required>
+            <input class="form-control" id="amount" name="amount" type="number" step="0.01" min="0.01" required>
         </div>
         <div class="form-group">
             <label class="form-label" for="due_date">Due date (optional)</label>
-            <input id="due_date" name="due_date" type="date">
+            <input class="form-control" id="due_date" name="due_date" type="date">
         </div>
     </div>
     <div class="form-group">
         <label class="form-label" for="reason">Reason (optional)</label>
-        <textarea id="reason" name="reason" rows="2"></textarea>
+        <textarea class="form-control form-textarea" id="reason" name="reason" rows="2"></textarea>
     </div>
     <div class="form-group">
         <label class="form-label">Members</label>

@@ -20,7 +20,7 @@ $meetingId = (int) $item['id'];
         <h2 class="card-title">Meeting notes</h2>
         <form method="post" action="<?= e(url('/app/meetings/' . $meetingId . '/notes')) ?>" class="form-stack">
             <?= csrf_field() ?>
-            <textarea name="notes" rows="8" data-wysiwyg class="wysiwyg" data-wysiwyg-size="tall" aria-label="Meeting notes"><?= e($item['notes'] ?? '') ?></textarea>
+            <textarea name="notes" rows="8" data-wysiwyg class="wysiwyg form-control form-textarea" data-wysiwyg-size="tall" aria-label="Meeting notes"><?= e($item['notes'] ?? '') ?></textarea>
             <p class="form-help">Rich text only — no images or file attachments.</p>
             <button type="submit" class="btn btn-primary">Save notes</button>
         </form>
@@ -50,7 +50,7 @@ $meetingId = (int) $item['id'];
     <?php if ($canManageMinutes): ?>
         <form method="post" action="<?= e(url('/app/meetings/' . $meetingId . '/minutes')) ?>" class="form-stack">
             <?= csrf_field() ?>
-            <textarea name="minutes_html" rows="12" data-wysiwyg class="wysiwyg wysiwyg--tall" data-wysiwyg data-wysiwyg-size="tall" aria-label="Meeting minutes"><?= e($item['minutes_html'] ?? '') ?></textarea>
+            <textarea name="minutes_html" rows="12" data-wysiwyg class="wysiwyg wysiwyg--tall form-control form-textarea" data-wysiwyg data-wysiwyg-size="tall" aria-label="Meeting minutes"><?= e($item['minutes_html'] ?? '') ?></textarea>
             <p class="form-help">Full minutes editor (headings, lists, links). No image or file attachments.</p>
             <button type="submit" class="btn btn-primary">Save minutes</button>
         </form>
@@ -110,14 +110,14 @@ $meetingId = (int) ($item['id'] ?? 0);
                             <td><?= e(trim(($m['first_name'] ?? '') . ' ' . ($m['last_name'] ?? ''))) ?></td>
                             <td><?= e($m['member_number'] ?? '') ?></td>
                             <td>
-                                <select name="attendance[<?= $mid ?>]">
+                                <select class="form-control form-select" name="attendance[<?= $mid ?>]">
                                     <?php foreach (['present' => 'Present', 'absent' => 'Absent', 'apology' => 'Apology', 'late' => 'Late'] as $val => $label): ?>
                                         <option value="<?= e($val) ?>"<?= (($m['attendance_status'] ?? '') === $val) ? ' selected' : '' ?>><?= e($label) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </td>
                             <td>
-                                <input type="text" name="attendance_notes[<?= $mid ?>]" value="<?= e($m['attendance_notes'] ?? '') ?>" maxlength="512" placeholder="Optional">
+                                <input class="form-control" type="text" name="attendance_notes[<?= $mid ?>]" value="<?= e($m['attendance_notes'] ?? '') ?>" maxlength="512" placeholder="Optional">
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -173,7 +173,7 @@ $meetingId = (int) ($item['id'] ?? 0);
                             <?php if ($currentMembershipId && $isOpen): ?>
                                 <form method="post" action="<?= e(url('/app/meetings/' . $meetingId . '/resolutions/' . $rid . '/vote')) ?>" class="inline-form">
                                     <?= csrf_field() ?>
-                                    <select name="vote" aria-label="Vote on <?= e($res['title'] ?? 'resolution') ?>">
+                                    <select class="form-control form-select" name="vote" aria-label="Vote on <?= e($res['title'] ?? 'resolution') ?>">
                                         <option value="yes"<?= $myVote === 'yes' ? ' selected' : '' ?>>Yes</option>
                                         <option value="no"<?= $myVote === 'no' ? ' selected' : '' ?>>No</option>
                                         <option value="abstain"<?= $myVote === 'abstain' ? ' selected' : '' ?>>Abstain</option>
@@ -199,11 +199,11 @@ $meetingId = (int) ($item['id'] ?? 0);
             <h3 class="card-title">Add resolution</h3>
             <div class="form-group">
                 <label for="resolution_title">Title</label>
-                <input type="text" id="resolution_title" name="title" required maxlength="255">
+                <input class="form-control" type="text" id="resolution_title" name="title" required maxlength="255">
             </div>
             <div class="form-group">
                 <label for="resolution_body">Description</label>
-                <textarea id="resolution_body" name="body" rows="4" required></textarea>
+                <textarea class="form-control form-textarea" id="resolution_body" name="body" rows="4" required></textarea>
             </div>
             <button type="submit" class="btn btn-primary">Add resolution</button>
         </form>
@@ -245,15 +245,15 @@ $meetingId = (int) ($item['id'] ?? 0);
             <h3 class="card-title">Add action item</h3>
             <div class="form-group">
                 <label for="action_title">Title</label>
-                <input type="text" id="action_title" name="title" required maxlength="255">
+                <input class="form-control" type="text" id="action_title" name="title" required maxlength="255">
             </div>
             <div class="form-group">
                 <label for="action_description">Description</label>
-                <textarea id="action_description" name="description" rows="3"></textarea>
+                <textarea class="form-control form-textarea" id="action_description" name="description" rows="3"></textarea>
             </div>
             <div class="form-group">
                 <label for="action_assignee">Assign to</label>
-                <select id="action_assignee" name="assigned_membership_id">
+                <select class="form-control form-select" id="action_assignee" name="assigned_membership_id">
                     <option value="">Unassigned</option>
                     <?php foreach ($members as $m): ?>
                         <option value="<?= (int) $m['membership_id'] ?>">
@@ -264,7 +264,7 @@ $meetingId = (int) ($item['id'] ?? 0);
             </div>
             <div class="form-group">
                 <label for="action_due">Due date</label>
-                <input type="date" id="action_due" name="due_date">
+                <input class="form-control" type="date" id="action_due" name="due_date">
             </div>
             <button type="submit" class="btn btn-primary">Add action item</button>
         </form>

@@ -8,11 +8,11 @@
 <form method="get" action="<?= e(url('/app/payouts')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name, code, or category">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name, code, or category">
     </div>
     <div class="form-group">
         <label for="status">Status</label>
-        <select id="status" name="status">
+        <select class="form-control form-select" id="status" name="status">
             <option value="">All</option>
             <?php foreach ($statusOptions ?? ['planning', 'approved', 'paid', 'cancelled'] as $st): ?>
                 <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>

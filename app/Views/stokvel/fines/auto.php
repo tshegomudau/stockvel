@@ -10,7 +10,7 @@
 <form method="get" action="<?= e(url('/app/fines/auto')) ?>" class="filter-bar mb-4">
     <div class="form-group">
         <label for="rule">Rule</label>
-        <select id="rule" name="rule" onchange="this.form.submit()">
+        <select class="form-control form-select" id="rule" name="rule" onchange="this.form.submit()">
             <?php foreach ($rules ?? [] as $key => $label): ?>
                 <option value="<?= e($key) ?>"<?= ($rule ?? '') === $key ? ' selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>

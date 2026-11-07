@@ -1,5 +1,11 @@
+<?= view('partials/page-header', [
+    'title' => 'Stokvels',
+    'description' => 'Platform-managed tenants.',
+    'actionUrl' => !empty($canCreate) ? url('/platform/tenants/create') : null,
+    'actionLabel' => 'Create stokvel',
+], null) ?>
 <form method="get" class="toolbar">
-    <input type="search" name="q" placeholder="Search stokvels" value="<?= e($search ?? '') ?>">
+    <input class="form-control" type="search" name="q" placeholder="Search stokvels" value="<?= e($search ?? '') ?>">
     <button type="submit" class="btn">Search</button>
 </form>
 <?php if (empty($paginator->items)): ?>

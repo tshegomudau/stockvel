@@ -8,6 +8,7 @@ use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
+use App\Services\PermissionService;
 use App\Services\Platform\PlatformSettingsService;
 
 final class FeatureSettingsController extends Controller
@@ -18,12 +19,13 @@ final class FeatureSettingsController extends Controller
         if (!$this->tenant()->isPlatformAdmin()) {
             return $this->redirect('/app');
         }
+        app()->container()->get(PermissionService::class)->requirePlatformPermission('features.manage');
 
         /** @var PlatformSettingsService $settings */
         $settings = app()->container()->get(PlatformSettingsService::class);
 
         return $this->render('platform/features', [
-            'title' => 'Features & storage',
+            'title' => 'Storage & default editor flags',
             'activeNav' => 'platform-features',
             'navContext' => 'platform',
             'settings' => $settings->all(),
@@ -36,6 +38,7 @@ final class FeatureSettingsController extends Controller
         if (!$this->tenant()->isPlatformAdmin()) {
             return $this->redirect('/app');
         }
+        app()->container()->get(PermissionService::class)->requirePlatformPermission('features.manage');
 
         $driver = trim((string) $request->input('storage_driver', 'local'));
         if (!in_array($driver, ['local', 'backblaze'], true)) {

@@ -53,7 +53,7 @@ $isPending = ($change['status'] ?? '') === 'pending_member';
         <h2>Approve</h2>
         <div class="form-group">
             <label class="form-label" for="approve_notes">Notes (optional)</label>
-            <textarea id="approve_notes" name="notes" rows="2"></textarea>
+            <textarea class="form-control form-textarea" id="approve_notes" name="notes" rows="2"></textarea>
         </div>
         <button type="submit" class="btn btn-primary">Approve and apply</button>
     </form>
@@ -62,7 +62,7 @@ $isPending = ($change['status'] ?? '') === 'pending_member';
         <h2>Reject</h2>
         <div class="form-group">
             <label class="form-label" for="reject_notes">Reason (optional)</label>
-            <textarea id="reject_notes" name="notes" rows="2"></textarea>
+            <textarea class="form-control form-textarea" id="reject_notes" name="notes" rows="2"></textarea>
         </div>
         <button type="submit" class="btn btn-danger">Reject</button>
     </form>

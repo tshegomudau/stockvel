@@ -26,7 +26,7 @@
             <?= csrf_field() ?>
             <div class="form-group">
                 <label class="form-label" for="membership_id">Appoint chairperson</label>
-                <select id="membership_id" name="membership_id" required>
+                <select class="form-control form-select" id="membership_id" name="membership_id" required>
                     <option value="">Select member…</option>
                     <?php foreach ($activeMembers as $am): ?>
                         <option value="<?= (int) ($am['membership_id'] ?? 0) ?>">
@@ -86,7 +86,7 @@
         </div>
         <div class="form-group">
             <label class="form-label" for="payout_mode">Payout mode</label>
-            <select id="payout_mode" name="payout_mode">
+            <select class="form-control form-select" id="payout_mode" name="payout_mode">
                 <?php foreach (['rotational', 'equal_distribution', 'custom'] as $m): ?>
                     <option value="<?= e($m) ?>"<?= ($settings['payout_mode'] ?? 'rotational') === $m ? ' selected' : '' ?>><?= e(ucfirst(str_replace('_', ' ', $m))) ?></option>
                 <?php endforeach; ?>
@@ -105,6 +105,23 @@
         <p class="text-muted mt-4">Only platform super administrators can change governance.</p>
     <?php endif; ?>
 </section>
+
+<?php if (!empty($canManageEditor)): ?>
+<section class="card mt-6">
+    <h2>Editor &amp; uploads (this stokvel)</h2>
+    <p class="text-muted mb-4">These settings apply to member and admin dashboards for this stokvel only. Storage driver/credentials remain under Platform → Features &amp; storage.</p>
+    <?php $ed = $editorSettings ?? []; ?>
+    <form method="post" action="<?= e(url('/platform/tenants/' . (int) ($stokvel['id'] ?? 0) . '/editor-settings')) ?>" class="form-stack">
+        <?= csrf_field() ?>
+        <label class="form-check"><input type="checkbox" name="file_uploads_enabled" value="1"<?= !empty($ed['file_uploads_enabled']) ? ' checked' : '' ?>> Enable file uploads</label>
+        <label class="form-check"><input type="checkbox" name="wysiwyg_full_enabled" value="1"<?= !empty($ed['wysiwyg_full_enabled']) ? ' checked' : '' ?>> Full WYSIWYG toolbar</label>
+        <label class="form-check"><input type="checkbox" name="wysiwyg_images_enabled" value="1"<?= !empty($ed['wysiwyg_images_enabled']) ? ' checked' : '' ?>> Allow images</label>
+        <label class="form-check"><input type="checkbox" name="wysiwyg_tables_enabled" value="1"<?= !empty($ed['wysiwyg_tables_enabled']) ? ' checked' : '' ?>> Allow tables</label>
+        <label class="form-check"><input type="checkbox" name="wysiwyg_colors_enabled" value="1"<?= !empty($ed['wysiwyg_colors_enabled']) ? ' checked' : '' ?>> Allow colours / highlights</label>
+        <button type="submit" class="btn btn-primary">Save editor settings</button>
+    </form>
+</section>
+<?php endif; ?>
 
 <section class="card mt-6">
     <h2>Enabled modules</h2>

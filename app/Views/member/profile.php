@@ -25,41 +25,41 @@
 <?= csrf_field() ?>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="first_name">First name</label>
-<input id="first_name" name="first_name" required value="<?= e($profile['first_name'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="first_name" name="first_name" required value="<?= e($profile['first_name'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="last_name">Last name</label>
-<input id="last_name" name="last_name" required value="<?= e($profile['last_name'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="last_name" name="last_name" required value="<?= e($profile['last_name'] ?? '') ?>"></div>
 </div>
 <div class="form-group"><label class="form-label" for="mobile">Mobile</label>
-<input id="mobile" name="mobile" value="<?= e($profile['mobile'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="mobile" name="mobile" value="<?= e($profile['mobile'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="id_number">SA ID number</label>
-<input id="id_number" name="id_number" value="" placeholder="<?= e($idMasked ?? '••••') ?>" autocomplete="off">
+<input class="form-control" type="text" id="id_number" name="id_number" value="" placeholder="<?= e($idMasked ?? '••••') ?>" autocomplete="off">
 <p class="form-help">Leave blank to keep the current encrypted value.</p></div>
 <p class="text-muted">Email: <?= e($profile['email'] ?? '') ?></p>
 
 <h2 class="h3">Residential address</h2>
 <div class="form-group"><label class="form-label" for="address_line1">Street address</label>
-<input id="address_line1" name="address_line1" value="<?= e($profile['address_line1'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="address_line1" name="address_line1" value="<?= e($profile['address_line1'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="address_line2">Address line 2</label>
-<input id="address_line2" name="address_line2" value="<?= e($profile['address_line2'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="address_line2" name="address_line2" value="<?= e($profile['address_line2'] ?? '') ?>"></div>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="suburb">Suburb</label>
-<input id="suburb" name="suburb" value="<?= e($profile['suburb'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="suburb" name="suburb" value="<?= e($profile['suburb'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="city">City / town</label>
-<input id="city" name="city" value="<?= e($profile['city'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="city" name="city" value="<?= e($profile['city'] ?? '') ?>"></div>
 </div>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="province">Province</label>
-<input id="province" name="province" value="<?= e($profile['province'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="province" name="province" value="<?= e($profile['province'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="postal_code">Postal code</label>
-<input id="postal_code" name="postal_code" value="<?= e($profile['postal_code'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="postal_code" name="postal_code" value="<?= e($profile['postal_code'] ?? '') ?>"></div>
 </div>
 
 <h2 class="h3">Emergency contact</h2>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="emergency_contact_name">Full name</label>
-<input id="emergency_contact_name" name="emergency_contact_name" value="<?= e($profile['emergency_contact_name'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="emergency_contact_name" name="emergency_contact_name" value="<?= e($profile['emergency_contact_name'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="emergency_contact_phone">Phone</label>
-<input id="emergency_contact_phone" name="emergency_contact_phone" value="<?= e($profile['emergency_contact_phone'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="emergency_contact_phone" name="emergency_contact_phone" value="<?= e($profile['emergency_contact_phone'] ?? '') ?>"></div>
 </div>
 
 <button class="btn btn-primary" type="submit">Save profile</button>
@@ -90,11 +90,11 @@
             <?= csrf_field() ?>
             <div class="form-group">
                 <label class="form-label" for="title">Title</label>
-                <input id="title" name="title" value="ID document" required>
+                <input class="form-control" type="text" id="title" name="title" value="ID document" required>
             </div>
             <div class="form-group">
                 <label class="form-label" for="id_document">File (PDF or image)</label>
-                <input type="file" id="id_document" name="id_document" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                <input class="form-control" type="file" id="id_document" name="id_document" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
             </div>
             <button type="submit" class="btn btn-secondary">Upload ID document</button>
         </form>
@@ -107,10 +107,10 @@
 <?= csrf_field() ?>
 <h2>Change password</h2>
 <div class="form-group"><label class="form-label" for="current_password">Current password</label>
-<input type="password" id="current_password" name="current_password" required autocomplete="current-password"></div>
+<input class="form-control" type="password" id="current_password" name="current_password" required autocomplete="current-password"></div>
 <div class="form-group"><label class="form-label" for="password">New password</label>
-<input type="password" id="password" name="password" required minlength="8" autocomplete="new-password"></div>
+<input class="form-control" type="password" id="password" name="password" required minlength="8" autocomplete="new-password"></div>
 <div class="form-group"><label class="form-label" for="password_confirmation">Confirm new password</label>
-<input type="password" id="password_confirmation" name="password_confirmation" required minlength="8" autocomplete="new-password"></div>
+<input class="form-control" type="password" id="password_confirmation" name="password_confirmation" required minlength="8" autocomplete="new-password"></div>
 <button class="btn btn-primary" type="submit">Update password</button>
 </form>

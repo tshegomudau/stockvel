@@ -7,7 +7,7 @@
 <form method="get" action="<?= e(url('/app/announcements')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="status">Status</label>
-        <select id="status" name="status">
+        <select class="form-control form-select" id="status" name="status">
             <option value="">All</option>
             <?php foreach (['draft', 'scheduled', 'published', 'expired'] as $st): ?>
                 <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>

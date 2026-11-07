@@ -9,7 +9,7 @@
 </div>
 
 <form method="get" class="toolbar mb-4">
-    <input type="search" name="q" placeholder="Search members" value="<?= e($search ?? '') ?>">
+    <input class="form-control" type="search" name="q" placeholder="Search members" value="<?= e($search ?? '') ?>">
     <button type="submit" class="btn">Search</button>
     <a class="btn btn-secondary" href="<?= e(url('/platform/users')) ?>">Cancel</a>
 </form>

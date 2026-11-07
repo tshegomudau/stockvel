@@ -163,6 +163,11 @@ try {
             $ok = (new TestRunner($basePath . '/tests'))->run('e2e');
             exit($ok ? 0 : 1);
 
+        case 'test:ui':
+            ensureTestingEnv();
+            $ok = (new TestRunner($basePath . '/tests'))->run('ui');
+            exit($ok ? 0 : 1);
+
         case 'test:syntax':
             $failed = 0;
             $iterator = new RecursiveIteratorIterator(
@@ -269,6 +274,7 @@ stockvel console
   test:integration            Integration tests
   test:http                   HTTP/route tests
   test:e2e                    End-to-end workflow tests
+  test:ui                     UI layout / form styling regression tests
   test:syntax                 PHP syntax check all application files
   cron:run                    Run all scheduled tasks
   notifications:process       Process notification queue

@@ -8,7 +8,6 @@ use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
 use App\Exceptions\HttpException;
-use App\Services\Platform\PlatformSettingsService;
 use App\Services\Storage\LocalObjectStorage;
 use App\Services\Storage\StorageManager;
 
@@ -21,16 +20,17 @@ final class MediaController extends Controller
         $this->requirePermission('documents.upload');
         $sid = $this->requireStokvel();
 
-        /** @var PlatformSettingsService $platform */
-        $platform = app()->container()->get(PlatformSettingsService::class);
-        if (!$platform->enabled('wysiwyg_full_enabled') || !$platform->enabled('wysiwyg_images_enabled')) {
-            return Response::json(['error' => 'Image inserts are disabled by the platform admin.'], 403);
+        $editor = app()->container()
+            ->get(\App\Services\Stokvel\StokvelEditorSettingsService::class)
+            ->forStokvel($sid);
+        if (empty($editor['wysiwyg_full_enabled']) || empty($editor['wysiwyg_images_enabled'])) {
+            return Response::json(['error' => 'Image inserts are disabled for this stokvel.'], 403);
         }
 
         /** @var StorageManager $storage */
         $storage = app()->container()->get(StorageManager::class);
         try {
-            $storage->assertUploadsEnabled();
+            $storage->assertUploadsEnabled($sid);
         } catch (HttpException $e) {
             return Response::json(['error' => $e->getMessage()], $e->getStatus());
         }

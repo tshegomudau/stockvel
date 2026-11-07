@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\Storage;
 
+use App\Core\TenantContext;
 use App\Exceptions\HttpException;
 use App\Services\Platform\PlatformSettingsService;
+use App\Services\Stokvel\StokvelEditorSettingsService;
 
 final class StorageManager
 {
@@ -15,24 +17,35 @@ final class StorageManager
     ) {
     }
 
-    public function uploadsEnabled(): bool
+    public function uploadsEnabled(?int $stokvelId = null): bool
     {
+        $stokvelId = $stokvelId ?? $this->currentStokvelId();
+        if ($stokvelId !== null && $stokvelId > 0) {
+            try {
+                return app()->container()
+                    ->get(StokvelEditorSettingsService::class)
+                    ->enabled($stokvelId, 'file_uploads_enabled');
+            } catch (\Throwable) {
+                // Fall through to platform default.
+            }
+        }
+
         return $this->settings->enabled('file_uploads_enabled');
     }
 
-    public function assertUploadsEnabled(): void
+    public function assertUploadsEnabled(?int $stokvelId = null): void
     {
-        if (!$this->uploadsEnabled()) {
+        if (!$this->uploadsEnabled($stokvelId)) {
             throw new HttpException(
                 403,
-                'File uploads are disabled. Enable them under Platform → Features & storage.'
+                'File uploads are disabled for this stokvel. Ask a platform admin to enable them for this stokvel.'
             );
         }
     }
 
-    public function driver(): ObjectStorageInterface
+    public function driver(?int $stokvelId = null): ObjectStorageInterface
     {
-        $this->assertUploadsEnabled();
+        $this->assertUploadsEnabled($stokvelId);
         $name = (string) $this->settings->get('storage_driver', 'local');
 
         if ($name === 'backblaze') {
@@ -65,5 +78,15 @@ final class StorageManager
     {
         $local = new LocalObjectStorage($this->localRoot);
         return $local->absolutePath($relativeKey);
+    }
+
+    private function currentStokvelId(): ?int
+    {
+        try {
+            $id = app()->container()->get(TenantContext::class)->stokvelId();
+            return $id !== null && $id > 0 ? $id : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

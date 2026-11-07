@@ -6,7 +6,7 @@
 <form method="get" action="<?= e(url('/app/fine-types')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-secondary">Filter</button>
@@ -18,10 +18,10 @@
 <form method="post" action="<?= e(url('/app/fine-types')) ?>" class="form-stack card mb-6">
 <?= csrf_field() ?>
 <div class="form-grid two-col">
-<div class="form-group"><label class="form-label" for="code">Code</label><input id="code" name="code" required placeholder="late_meeting"></div>
-<div class="form-group"><label class="form-label" for="name">Name</label><input id="name" name="name" required placeholder="Late to meeting"></div>
-<div class="form-group"><label class="form-label" for="default_amount">Default amount (ZAR)</label><input id="default_amount" name="default_amount" type="number" step="0.01" min="0" value="0"></div>
-<div class="form-group"><label class="form-label" for="description">Description</label><input id="description" name="description" placeholder="Optional"></div>
+<div class="form-group"><label class="form-label" for="code">Code</label><input class="form-control" type="text" id="code" name="code" required placeholder="late_meeting"></div>
+<div class="form-group"><label class="form-label" for="name">Name</label><input class="form-control" type="text" id="name" name="name" required placeholder="Late to meeting"></div>
+<div class="form-group"><label class="form-label" for="default_amount">Default amount (ZAR)</label><input class="form-control" id="default_amount" name="default_amount" type="number" step="0.01" min="0" value="0"></div>
+<div class="form-group"><label class="form-label" for="description">Description</label><input class="form-control" type="text" id="description" name="description" placeholder="Optional"></div>
 </div>
 <button class="btn btn-primary" type="submit">Add fine type</button>
 </form>
@@ -37,8 +37,8 @@
 <td>
 <form method="post" action="<?= e(url('/app/fine-types/' . (int) $type['id'])) ?>" class="inline-form">
 <?= csrf_field() ?>
-<input name="name" value="<?= e($type['name'] ?? '') ?>">
-<input name="default_amount" type="number" step="0.01" min="0" value="<?= e((string) ($type['default_amount'] ?? '0')) ?>" style="max-width:7rem">
+<input class="form-control" type="text" name="name" value="<?= e($type['name'] ?? '') ?>">
+<input class="form-control" name="default_amount" type="number" step="0.01" min="0" value="<?= e((string) ($type['default_amount'] ?? '0')) ?>" style="max-width:7rem">
 <button class="btn btn-sm btn-secondary" type="submit">Save</button>
 </form>
 </td>

@@ -54,13 +54,13 @@ $memberName = trim(($item['first_name'] ?? '') . ' ' . ($item['last_name'] ?? ''
     <h2>Committee decision</h2>
     <form method="post" action="<?= e(url('/app/loans/' . ($item['id'] ?? '') . '/approve')) ?>" class="form-stack" style="margin-bottom:1.5rem">
         <?= csrf_field() ?>
-        <div class="form-group"><label for="approved_amount">Approved amount (optional, defaults to requested)</label><input type="number" step="0.01" id="approved_amount" name="approved_amount" value="<?= e((string) ($item['requested_amount'] ?? '')) ?>"></div>
-        <div class="form-group"><label for="approve_notes">Notes</label><input type="text" id="approve_notes" name="notes" maxlength="500"></div>
+        <div class="form-group"><label for="approved_amount">Approved amount (optional, defaults to requested)</label><input class="form-control" type="number" step="0.01" id="approved_amount" name="approved_amount" value="<?= e((string) ($item['requested_amount'] ?? '')) ?>"></div>
+        <div class="form-group"><label for="approve_notes">Notes</label><input class="form-control" type="text" id="approve_notes" name="notes" maxlength="500"></div>
         <button type="submit" class="btn btn-primary">Approve application</button>
     </form>
     <form method="post" action="<?= e(url('/app/loans/' . ($item['id'] ?? '') . '/reject')) ?>" class="form-stack">
         <?= csrf_field() ?>
-        <div class="form-group"><label for="reject_notes">Rejection reason</label><input type="text" id="reject_notes" name="notes" required maxlength="500"></div>
+        <div class="form-group"><label for="reject_notes">Rejection reason</label><input class="form-control" type="text" id="reject_notes" name="notes" required maxlength="500"></div>
         <button type="submit" class="btn btn-secondary" data-confirm="Reject this application?">Reject</button>
     </form>
 </div>

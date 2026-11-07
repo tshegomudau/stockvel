@@ -23,7 +23,7 @@ $canManage = $canManage ?? true;
     <?php if (!$isEdit): ?>
         <div class="form-group">
             <label class="form-label" for="code">Code</label>
-            <input id="code" name="code" required pattern="[a-z0-9_]+" placeholder="e.g. burial_society">
+            <input class="form-control" type="text" id="code" name="code" required pattern="[a-z0-9_]+" placeholder="e.g. burial_society">
             <p class="form-help">Lowercase letters, numbers, underscores. Stored on each stokvel; cannot change later.</p>
         </div>
     <?php else: ?>
@@ -31,16 +31,16 @@ $canManage = $canManage ?? true;
     <?php endif; ?>
     <div class="form-group">
         <label class="form-label" for="name">Name</label>
-        <input id="name" name="name" required value="<?= e($type['name'] ?? '') ?>">
+        <input class="form-control" type="text" id="name" name="name" required value="<?= e($type['name'] ?? '') ?>">
     </div>
     <div class="form-group">
         <label class="form-label" for="description">Description</label>
-        <textarea id="description" name="description" rows="2"><?= e($type['description'] ?? '') ?></textarea>
+        <textarea class="form-control form-textarea" id="description" name="description" rows="2"><?= e($type['description'] ?? '') ?></textarea>
     </div>
     <div class="form-grid two-col">
         <div class="form-group">
             <label class="form-label" for="sort_order">Sort order</label>
-            <input id="sort_order" name="sort_order" type="number" value="<?= e((string) ($type['sort_order'] ?? '0')) ?>">
+            <input class="form-control" id="sort_order" name="sort_order" type="number" value="<?= e((string) ($type['sort_order'] ?? '0')) ?>">
         </div>
         <div class="form-group">
             <label class="checkbox" style="margin-top:1.75rem">

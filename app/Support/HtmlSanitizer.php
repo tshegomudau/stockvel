@@ -4,33 +4,41 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use App\Services\Platform\PlatformSettingsService;
+use App\Core\TenantContext;
+use App\Services\Stokvel\StokvelEditorSettingsService;
 
 /**
  * Restrict rich-text HTML to a safe subset of tags and attributes.
- * Extra tags (img, table, style colours) follow platform feature flags.
+ * Extra tags (img, table, style colours) follow stokvel editor feature flags.
  */
 final class HtmlSanitizer
 {
     private const BASE_TAGS = '<p><br><strong><b><em><i><u><s><ul><ol><li><h2><h3><h4><a><blockquote><hr><div><span><sub><sup><pre><code>';
 
     /** @return array{images:bool,tables:bool,colors:bool,full:bool} */
-    public static function featureOptions(): array
+    public static function featureOptions(?int $stokvelId = null): array
     {
         try {
-            /** @var PlatformSettingsService $settings */
-            $settings = app()->container()->get(PlatformSettingsService::class);
-            $full = $settings->enabled('wysiwyg_full_enabled');
+            if ($stokvelId === null) {
+                $stokvelId = app()->container()->get(TenantContext::class)->stokvelId();
+            }
+            if ($stokvelId !== null && $stokvelId > 0) {
+                $cfg = app()->container()
+                    ->get(StokvelEditorSettingsService::class)
+                    ->forStokvel($stokvelId);
+                $full = (bool) ($cfg['wysiwyg_full_enabled'] ?? false);
 
-            return [
-                'full' => $full,
-                'images' => $full && $settings->enabled('wysiwyg_images_enabled'),
-                'tables' => $full && $settings->enabled('wysiwyg_tables_enabled'),
-                'colors' => $full && $settings->enabled('wysiwyg_colors_enabled'),
-            ];
+                return [
+                    'full' => $full,
+                    'images' => $full && !empty($cfg['wysiwyg_images_enabled']),
+                    'tables' => $full && !empty($cfg['wysiwyg_tables_enabled']),
+                    'colors' => $full && !empty($cfg['wysiwyg_colors_enabled']),
+                ];
+            }
         } catch (\Throwable) {
-            return ['full' => false, 'images' => false, 'tables' => false, 'colors' => false];
         }
+
+        return ['full' => false, 'images' => false, 'tables' => false, 'colors' => false];
     }
 
     public static function clean(?string $html, ?array $options = null): string

@@ -7,11 +7,11 @@
 <form method="get" action="<?= e(url('/app/meetings')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Title, venue, or ref">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Title, venue, or ref">
     </div>
     <div class="form-group">
         <label for="status">Status</label>
-        <select id="status" name="status">
+        <select class="form-control form-select" id="status" name="status">
             <option value="">All</option>
             <?php foreach ($statusOptions ?? ['scheduled', 'completed', 'cancelled'] as $st): ?>
                 <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>

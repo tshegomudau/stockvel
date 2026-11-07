@@ -9,16 +9,16 @@
         <?= csrf_field() ?>
         <div class="form-group">
             <label for="email">Email</label>
-            <input type="email" id="email" name="email" required value="<?= e((string) old('email')) ?>">
+            <input class="form-control" type="email" id="email" name="email" required value="<?= e((string) old('email')) ?>">
         </div>
         <div class="form-group">
             <label for="mobile">Mobile (optional)</label>
-            <input type="tel" id="mobile" name="mobile" value="<?= e((string) old('mobile')) ?>">
+            <input class="form-control" type="tel" id="mobile" name="mobile" value="<?= e((string) old('mobile')) ?>">
         </div>
         <?php if (!empty($canAssignRoles)): ?>
         <div class="form-group">
             <label for="role">Role</label>
-            <select id="role" name="role" required>
+            <select class="form-control form-select" id="role" name="role" required>
                 <?php foreach (['ordinary', 'treasurer', 'secretary', 'committee', 'chairperson', 'auditor'] as $role): ?>
                     <option value="<?= e($role) ?>"<?= old('role', 'ordinary') === $role ? ' selected' : '' ?>><?= e(ucfirst($role)) ?></option>
                 <?php endforeach; ?>

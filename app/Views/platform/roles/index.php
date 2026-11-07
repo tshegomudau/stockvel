@@ -8,7 +8,7 @@
 <form method="get" class="filter-bar" role="search">
     <div class="form-group">
         <label for="scope">Category</label>
-        <select id="scope" name="scope">
+        <select class="form-control form-select" id="scope" name="scope">
             <option value="">All categories</option>
             <option value="platform"<?= ($scopeFilter ?? '') === 'platform' ? ' selected' : '' ?>>Platform</option>
             <option value="user"<?= ($scopeFilter ?? '') === 'user' ? ' selected' : '' ?>>User (stokvel)</option>

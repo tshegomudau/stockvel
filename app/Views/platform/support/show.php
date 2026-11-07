@@ -17,12 +17,12 @@
 <form method="post" action="<?= e(url('/platform/support/' . (int) $ticket['id'])) ?>" class="form-stack">
 <?= csrf_field() ?>
 <div class="form-group"><label class="form-label" for="status">Status</label>
-<select id="status" name="status">
+<select class="form-control form-select" id="status" name="status">
 <?php foreach (['open','in_progress','waiting','resolved','closed'] as $st): ?>
 <option value="<?= e($st) ?>"<?= ($ticket['status'] ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst(str_replace('_',' ',$st))) ?></option>
 <?php endforeach; ?>
 </select></div>
 <div class="form-group"><label class="form-label" for="body">Public update</label>
-<textarea id="body" name="body" rows="4" placeholder="Visible to the reporter"></textarea></div>
+<textarea class="form-control form-textarea" id="body" name="body" rows="4" placeholder="Visible to the reporter"></textarea></div>
 <button class="btn btn-primary" type="submit">Update ticket</button>
 </form>

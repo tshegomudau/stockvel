@@ -91,6 +91,10 @@ final class AuthController extends Controller
 
     public function register(Request $request): Response
     {
+        $intent = trim((string) $request->input('intent', 'create_stokvel'));
+        if (!in_array($intent, ['create_stokvel', 'join_stokvel'], true)) {
+            $intent = 'create_stokvel';
+        }
         $data = [
             'first_name' => trim((string) $request->input('first_name', '')),
             'last_name' => trim((string) $request->input('last_name', '')),
@@ -99,6 +103,7 @@ final class AuthController extends Controller
             'password' => (string) $request->input('password', ''),
             'password_confirmation' => (string) $request->input('password_confirmation', ''),
             'consent' => (bool) $request->input('consent'),
+            'intent' => $intent,
         ];
         $validator = Validator::make($data, [
             'first_name' => 'required|min:2',
@@ -121,19 +126,25 @@ final class AuthController extends Controller
             $userId = (int) $user['id'];
         } catch (\Throwable) {
             $this->flashOld($request);
-            Session::flash('error', 'An account with this email may already exist.');
+            // Do not confirm whether the email already exists.
+            Session::flash('error', 'Could not create your account. If you already registered, try signing in.');
             return $this->redirect('/register');
         }
 
         Session::regenerate(true);
         Session::set('user_id', $userId);
+        Session::set('registration_intent', $intent);
         $intended = Session::get('intended_url');
         if (is_string($intended) && str_starts_with($intended, '/invitations/')) {
             Session::flash('success', 'Account created. Accept your invitation to continue.');
             return $this->redirect($intended);
         }
-        Session::flash('success', 'Account created. Please verify your email.');
-        return $this->redirect('/verify-email/notice');
+        if ($intent === 'create_stokvel') {
+            Session::flash('success', 'Account created. Continue with your stokvel request.');
+            return $this->redirect('/start-stokvel');
+        }
+        Session::flash('success', 'Account created. A committee member must invite this email before you can join a stokvel.');
+        return $this->redirect('/account/get-started');
     }
 
     public function showLogout(Request $request): Response

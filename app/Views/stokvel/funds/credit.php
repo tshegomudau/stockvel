@@ -8,20 +8,20 @@
     <div class="form-grid two-col">
         <div class="form-group">
             <label class="form-label" for="amount">Amount (ZAR)</label>
-            <input id="amount" name="amount" type="number" step="0.01" min="0.01" required value="<?= e(old('amount', '')) ?>">
+            <input class="form-control" id="amount" name="amount" type="number" step="0.01" min="0.01" required value="<?= e(old('amount', '')) ?>">
         </div>
         <div class="form-group">
             <label class="form-label" for="entry_date">Entry date</label>
-            <input id="entry_date" name="entry_date" type="date" required value="<?= e(old('entry_date', date('Y-m-d'))) ?>">
+            <input class="form-control" id="entry_date" name="entry_date" type="date" required value="<?= e(old('entry_date', date('Y-m-d'))) ?>">
         </div>
     </div>
     <div class="form-group">
         <label class="form-label" for="description">Description</label>
-        <input id="description" name="description" required value="<?= e(old('description', '')) ?>" placeholder="Allocation from contributions">
+        <input class="form-control" type="text" id="description" name="description" required value="<?= e(old('description', '')) ?>" placeholder="Allocation from contributions">
     </div>
     <div class="form-group">
         <label class="form-label" for="reference">Reference (optional)</label>
-        <input id="reference" name="reference" value="<?= e(old('reference', '')) ?>">
+        <input class="form-control" type="text" id="reference" name="reference" value="<?= e(old('reference', '')) ?>">
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">Post credit</button>

@@ -122,6 +122,10 @@
   background: var(--color-surface-alt);
   color: var(--color-text);
   margin-bottom: 1rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-sizing: border-box;
 }
 .alert-success { background: #eef6f1; border-color: #b7d4c2; color: #1a3d2b; }
 .alert-danger { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }

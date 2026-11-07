@@ -6,7 +6,7 @@
     <?= csrf_field() ?>
     <div class="form-group">
         <label class="form-label" for="membership_id">Member</label>
-        <select id="membership_id" name="membership_id" required>
+        <select class="form-control form-select" id="membership_id" name="membership_id" required>
             <option value="">Select member</option>
             <?php foreach ($members ?? [] as $m): ?>
                 <?php $mid = (int) ($m['id'] ?? 0); ?>
@@ -19,7 +19,7 @@
     <div class="form-grid two-col">
         <div class="form-group">
             <label class="form-label" for="fine_type_id">Fine type</label>
-            <select id="fine_type_id" name="fine_type_id" required>
+            <select class="form-control form-select" id="fine_type_id" name="fine_type_id" required>
                 <option value="">Select type</option>
                 <?php foreach ($types ?? [] as $type): ?>
                     <option value="<?= (int) $type['id'] ?>"
@@ -35,16 +35,16 @@
         </div>
         <div class="form-group">
             <label class="form-label" for="amount">Amount (ZAR)</label>
-            <input id="amount" name="amount" type="number" step="0.01" min="0.01" required value="<?= e(old('amount', '')) ?>">
+            <input class="form-control" id="amount" name="amount" type="number" step="0.01" min="0.01" required value="<?= e(old('amount', '')) ?>">
         </div>
         <div class="form-group">
             <label class="form-label" for="due_date">Due date (optional)</label>
-            <input id="due_date" name="due_date" type="date" value="<?= e(old('due_date', '')) ?>">
+            <input class="form-control" id="due_date" name="due_date" type="date" value="<?= e(old('due_date', '')) ?>">
         </div>
     </div>
     <div class="form-group">
         <label class="form-label" for="reason">Reason (optional)</label>
-        <textarea id="reason" name="reason" rows="3"><?= e(old('reason', '')) ?></textarea>
+        <textarea class="form-control form-textarea" id="reason" name="reason" rows="3"><?= e(old('reason', '')) ?></textarea>
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">Issue fine</button>

@@ -7,6 +7,9 @@
     <h2>Configuration shortcuts</h2>
     <p class="text-muted mb-4">Jump to related setup screens. You need the matching permission to open each link.</p>
     <div class="form-actions">
+        <?php if (can('settings.manage')): ?>
+            <a class="btn btn-secondary" href="<?= e(url('/app/settings/email-templates')) ?>">Email templates</a>
+        <?php endif; ?>
         <?php if (can('roles.manage') || can('settings.manage')): ?>
             <a class="btn btn-secondary" href="<?= e(route('app.settings.roles')) ?>">Roles &amp; permissions</a>
         <?php endif; ?>
@@ -30,11 +33,11 @@
 <h2>Organisation</h2>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="name">Name</label>
-<input id="name" name="name" value="<?= e($stokvel['name'] ?? '') ?>" required></div>
+<input class="form-control" type="text" id="name" name="name" value="<?= e($stokvel['name'] ?? '') ?>" required></div>
 <div class="form-group"><label class="form-label" for="registration_number">Registration number</label>
-<input id="registration_number" name="registration_number" value="<?= e($stokvel['registration_number'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="registration_number" name="registration_number" value="<?= e($stokvel['registration_number'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="stokvel_type">Stokvel type</label>
-<select id="stokvel_type" name="stokvel_type" required>
+<select class="form-control form-select" id="stokvel_type" name="stokvel_type" required>
 <?php
 $currentType = (string) ($stokvel['stokvel_type'] ?? 'general_savings');
 $typeOptions = $stokvelTypeOptions ?? [];
@@ -53,11 +56,11 @@ if (!$seen && $currentType !== ''): ?>
 </select>
 <p class="form-help">Choose from the platform catalogue. Platform admins manage which types are available.</p></div>
 <div class="form-group"><label class="form-label" for="branding_primary_colour">Brand colour</label>
-<input type="color" id="branding_primary_colour" name="branding_primary_colour" value="<?= e($settings['branding_primary_colour'] ?? '#14532d') ?>">
+<input class="form-control" type="color" id="branding_primary_colour" name="branding_primary_colour" value="<?= e($settings['branding_primary_colour'] ?? '#14532d') ?>">
 <p class="form-help">Applies to buttons, links, and sidebar accents across the app.</p></div>
 </div>
 <div class="form-group"><label class="form-label" for="description">Description</label>
-<textarea id="description" name="description" rows="3"><?= e($stokvel['description'] ?? '') ?></textarea></div>
+<textarea class="form-control form-textarea" id="description" name="description" rows="3"><?= e($stokvel['description'] ?? '') ?></textarea></div>
 <?php if (($stokvel['status'] ?? '') !== 'active'): ?>
 <div class="callout callout-warning">
 <label class="checkbox">
@@ -75,21 +78,21 @@ Activate this stokvel (removes setup wizard; configuration stays in Settings)
 <h2>Contributions &amp; arrears</h2>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="minimum_contribution">Minimum contribution (ZAR)</label>
-<input id="minimum_contribution" name="minimum_contribution" type="number" step="0.01" min="0" value="<?= e((string) ($settings['minimum_contribution'] ?? '')) ?>"></div>
+<input class="form-control" id="minimum_contribution" name="minimum_contribution" type="number" step="0.01" min="0" value="<?= e((string) ($settings['minimum_contribution'] ?? '')) ?>"></div>
 <div class="form-group"><label class="form-label" for="contribution_frequency">Frequency</label>
-<select id="contribution_frequency" name="contribution_frequency">
+<select class="form-control form-select" id="contribution_frequency" name="contribution_frequency">
 <?php foreach (['weekly','monthly','quarterly','annual'] as $f): ?>
 <option value="<?= e($f) ?>"<?= ($settings['contribution_frequency'] ?? 'monthly') === $f ? ' selected' : '' ?>><?= e(ucfirst($f)) ?></option>
 <?php endforeach; ?>
 </select></div>
 <div class="form-group"><label class="form-label" for="payment_due_day">Payment due day of month</label>
-<input id="payment_due_day" name="payment_due_day" type="number" min="1" max="28" value="<?= e((string) ($settings['payment_due_day'] ?? $settings['contribution_day'] ?? '1')) ?>"></div>
+<input class="form-control" id="payment_due_day" name="payment_due_day" type="number" min="1" max="28" value="<?= e((string) ($settings['payment_due_day'] ?? $settings['contribution_day'] ?? '1')) ?>"></div>
 <div class="form-group"><label class="form-label" for="arrears_after_days">Mark in arrears after (days past due)</label>
-<input id="arrears_after_days" name="arrears_after_days" type="number" min="0" value="<?= e((string) ($settings['arrears_after_days'] ?? $settings['grace_period_days'] ?? '7')) ?>"></div>
+<input class="form-control" id="arrears_after_days" name="arrears_after_days" type="number" min="0" value="<?= e((string) ($settings['arrears_after_days'] ?? $settings['grace_period_days'] ?? '7')) ?>"></div>
 <div class="form-group"><label class="form-label" for="grace_period_days">Grace period (days)</label>
-<input id="grace_period_days" name="grace_period_days" type="number" min="0" value="<?= e((string) ($settings['grace_period_days'] ?? '7')) ?>"></div>
+<input class="form-control" id="grace_period_days" name="grace_period_days" type="number" min="0" value="<?= e((string) ($settings['grace_period_days'] ?? '7')) ?>"></div>
 <div class="form-group"><label class="form-label" for="year_end_month">Year-end month</label>
-<input id="year_end_month" name="year_end_month" type="number" min="1" max="12" value="<?= e((string) ($settings['year_end_month'] ?? '12')) ?>"></div>
+<input class="form-control" id="year_end_month" name="year_end_month" type="number" min="1" max="12" value="<?= e((string) ($settings['year_end_month'] ?? '12')) ?>"></div>
 </div>
 </div>
 
@@ -99,7 +102,7 @@ Activate this stokvel (removes setup wizard; configuration stays in Settings)
 <p class="text-muted">Charged when a membership is approved. Amount is snapshotted per member.</p>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="joining_fee_amount">Joining fee amount (ZAR)</label>
-<input id="joining_fee_amount" name="joining_fee_amount" type="number" step="0.01" min="0"
+<input class="form-control" id="joining_fee_amount" name="joining_fee_amount" type="number" step="0.01" min="0"
        value="<?= e((string) ($settings['joining_fee_amount'] ?? $jfs['amount'] ?? '0')) ?>"></div>
 </div>
 <div class="form-grid two-col">
@@ -127,13 +130,13 @@ Activate this stokvel (removes setup wizard; configuration stays in Settings)
 <h2>Banking (display / records)</h2>
 <div class="form-grid two-col">
 <div class="form-group"><label class="form-label" for="bank_name">Bank name</label>
-<input id="bank_name" name="bank_name" value="<?= e($settings['bank_name'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="bank_name" name="bank_name" value="<?= e($settings['bank_name'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="bank_account_name">Account name</label>
-<input id="bank_account_name" name="bank_account_name" value="<?= e($settings['bank_account_name'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="bank_account_name" name="bank_account_name" value="<?= e($settings['bank_account_name'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="bank_account_number_masked">Account number (masked)</label>
-<input id="bank_account_number_masked" name="bank_account_number_masked" value="<?= e($settings['bank_account_number_masked'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="bank_account_number_masked" name="bank_account_number_masked" value="<?= e($settings['bank_account_number_masked'] ?? '') ?>"></div>
 <div class="form-group"><label class="form-label" for="bank_branch_code">Branch code</label>
-<input id="bank_branch_code" name="bank_branch_code" value="<?= e($settings['bank_branch_code'] ?? '') ?>"></div>
+<input class="form-control" type="text" id="bank_branch_code" name="bank_branch_code" value="<?= e($settings['bank_branch_code'] ?? '') ?>"></div>
 </div>
 </div>
 

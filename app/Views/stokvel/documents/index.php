@@ -9,11 +9,11 @@
 <form method="get" action="<?= e(url('/app/documents')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Title, ref, or category">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Title, ref, or category">
     </div>
     <div class="form-group">
         <label for="category_id">Category</label>
-        <select id="category_id" name="category_id">
+        <select class="form-control form-select" id="category_id" name="category_id">
             <option value="">All categories</option>
             <?php foreach ($filterCategories ?? [] as $cat): ?>
                 <option value="<?= (int) $cat['id'] ?>"<?= (int) ($filterCategoryId ?? 0) === (int) $cat['id'] ? ' selected' : '' ?>><?= e($cat['name'] ?? '') ?></option>
@@ -22,7 +22,7 @@
     </div>
     <div class="form-group">
         <label for="status">Status</label>
-        <select id="status" name="status">
+        <select class="form-control form-select" id="status" name="status">
             <option value="">All</option>
             <?php foreach ($statusOptions ?? ['active'] as $st): ?>
                 <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>

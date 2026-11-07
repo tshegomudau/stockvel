@@ -71,7 +71,7 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
         <?= csrf_field() ?>
         <div class="form-group">
             <label class="form-label" for="minimum_contribution">Minimum contribution for this member (ZAR)</label>
-            <input id="minimum_contribution" name="minimum_contribution" type="number" step="0.01" min="0"
+            <input class="form-control" id="minimum_contribution" name="minimum_contribution" type="number" step="0.01" min="0"
                    value="<?= e((string) ($member['minimum_contribution'] ?? '')) ?>"
                    placeholder="<?= e($defaultMinimumContribution !== null && $defaultMinimumContribution !== '' ? (string) $defaultMinimumContribution : 'Stokvel default') ?>">
             <p class="form-help">Leave blank to use the stokvel default<?= $defaultMinimumContribution !== null && $defaultMinimumContribution !== '' ? ' (R ' . e(number_format((float) $defaultMinimumContribution, 2)) . ')' : '' ?>.</p>
@@ -122,31 +122,31 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
                     <div class="form-grid two-col">
                         <div class="form-group">
                             <label class="form-label">Full name</label>
-                            <input name="full_name" required value="<?= e((string) ($b['full_name'] ?? '')) ?>">
+                            <input class="form-control" type="text" name="full_name" required value="<?= e((string) ($b['full_name'] ?? '')) ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Relationship</label>
-                            <input name="relationship" required value="<?= e((string) ($b['relationship'] ?? '')) ?>">
+                            <input class="form-control" type="text" name="relationship" required value="<?= e((string) ($b['relationship'] ?? '')) ?>">
                         </div>
                     </div>
                     <div class="form-grid two-col">
                         <div class="form-group">
                             <label class="form-label">ID number</label>
-                            <input name="id_number" value="<?= e((string) ($b['id_number'] ?? '')) ?>">
+                            <input class="form-control" type="text" name="id_number" value="<?= e((string) ($b['id_number'] ?? '')) ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Share %</label>
-                            <input name="share_percent" type="number" step="0.01" min="0" max="100" value="<?= e((string) ($b['share_percent'] ?? '100')) ?>">
+                            <input class="form-control" name="share_percent" type="number" step="0.01" min="0" max="100" value="<?= e((string) ($b['share_percent'] ?? '100')) ?>">
                         </div>
                     </div>
                     <div class="form-grid two-col">
                         <div class="form-group">
                             <label class="form-label">Phone</label>
-                            <input name="phone" value="<?= e((string) ($b['phone'] ?? '')) ?>">
+                            <input class="form-control" type="text" name="phone" value="<?= e((string) ($b['phone'] ?? '')) ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Email</label>
-                            <input name="email" type="email" value="<?= e((string) ($b['email'] ?? '')) ?>">
+                            <input class="form-control" name="email" type="email" value="<?= e((string) ($b['email'] ?? '')) ?>">
                         </div>
                     </div>
                     <label class="checkbox-inline">
@@ -190,31 +190,31 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
         <div class="form-grid two-col">
             <div class="form-group">
                 <label class="form-label" for="new_full_name">Full name</label>
-                <input id="new_full_name" name="full_name" required>
+                <input class="form-control" type="text" id="new_full_name" name="full_name" required>
             </div>
             <div class="form-group">
                 <label class="form-label" for="new_relationship">Relationship</label>
-                <input id="new_relationship" name="relationship" required>
+                <input class="form-control" type="text" id="new_relationship" name="relationship" required>
             </div>
         </div>
         <div class="form-grid two-col">
             <div class="form-group">
                 <label class="form-label" for="new_id_number">ID number</label>
-                <input id="new_id_number" name="id_number">
+                <input class="form-control" type="text" id="new_id_number" name="id_number">
             </div>
             <div class="form-group">
                 <label class="form-label" for="new_share">Share %</label>
-                <input id="new_share" name="share_percent" type="number" step="0.01" min="0" max="100" value="<?= e((string) $defaultNewShare) ?>">
+                <input class="form-control" id="new_share" name="share_percent" type="number" step="0.01" min="0" max="100" value="<?= e((string) $defaultNewShare) ?>">
             </div>
         </div>
         <div class="form-grid two-col">
             <div class="form-group">
                 <label class="form-label" for="new_phone">Phone</label>
-                <input id="new_phone" name="phone">
+                <input class="form-control" type="text" id="new_phone" name="phone">
             </div>
             <div class="form-group">
                 <label class="form-label" for="new_email">Email</label>
-                <input id="new_email" name="email" type="email">
+                <input class="form-control" id="new_email" name="email" type="email">
             </div>
         </div>
         <label class="checkbox-inline">

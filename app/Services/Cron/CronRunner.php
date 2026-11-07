@@ -72,7 +72,7 @@ final class CronRunner
             return false;
         }
         ftruncate($handle, 0);
-        fwrite($handle, (gethostname() ?: 'cli') . ':' . getmypid() . '@' . now_utc());
+        fwrite($handle, $this->lockIdentity() . '@' . now_utc());
         fflush($handle);
         $this->lockHandles[$name] = $handle;
         return true;
@@ -87,6 +87,39 @@ final class CronRunner
         flock($handle, LOCK_UN);
         fclose($handle);
         unset($this->lockHandles[$name]);
+    }
+
+    /**
+     * Host:pid (or safe fallbacks) for lock diagnostics.
+     * getmypid/gethostname are often disabled on shared hosting.
+     */
+    private function lockIdentity(): string
+    {
+        $host = 'cli';
+        if (\function_exists('gethostname')) {
+            $resolved = @\gethostname();
+            if (is_string($resolved) && $resolved !== '') {
+                $host = $resolved;
+            }
+        } elseif (isset($_SERVER['SERVER_NAME']) && is_string($_SERVER['SERVER_NAME']) && $_SERVER['SERVER_NAME'] !== '') {
+            $host = $_SERVER['SERVER_NAME'];
+        }
+
+        $pid = '0';
+        if (\function_exists('getmypid')) {
+            $resolvedPid = @\getmypid();
+            if (is_int($resolvedPid) && $resolvedPid > 0) {
+                $pid = (string) $resolvedPid;
+            }
+        } else {
+            try {
+                $pid = bin2hex(random_bytes(4));
+            } catch (\Throwable) {
+                $pid = str_replace('.', '', uniqid('', true));
+            }
+        }
+
+        return $host . ':' . $pid;
     }
 
     private function generateCharges(): int

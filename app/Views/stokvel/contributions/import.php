@@ -15,7 +15,7 @@
         <?= csrf_field() ?>
         <div class="form-group">
             <label class="form-label" for="csv">CSV file</label>
-            <input type="file" id="csv" name="csv" accept=".csv,text/csv" required>
+            <input class="form-control" type="file" id="csv" name="csv" accept=".csv,text/csv" required>
         </div>
         <button type="submit" class="btn btn-primary">Import contributions</button>
     </form>

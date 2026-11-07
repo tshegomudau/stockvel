@@ -20,12 +20,12 @@
             <?= csrf_field() ?>
             <div class="form-group">
                 <label class="form-label required" for="email">Email</label>
-                <input type="email" id="email" name="email" required autocomplete="username" value="<?= e((string) old('email')) ?>">
+                <input class="form-control" type="email" id="email" name="email" required autocomplete="username" value="<?= e((string) old('email')) ?>">
             </div>
             <div class="form-group">
                 <label class="form-label required" for="password">Password</label>
                 <div class="password-field">
-                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                    <input class="form-control" type="password" id="password" name="password" required autocomplete="current-password">
                     <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password">Show</button>
                 </div>
             </div>

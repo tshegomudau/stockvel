@@ -29,7 +29,7 @@ $profileBackUrl = $profileBackUrl ?? '/member/profile';
             <?= csrf_field() ?>
             <div class="form-group">
                 <label class="form-label" for="disable_code">Current code or recovery code</label>
-                <input id="disable_code" name="code" required autocomplete="one-time-code" inputmode="numeric" pattern="[0-9A-Za-z\-]{6,16}">
+                <input class="form-control" type="text" id="disable_code" name="code" required autocomplete="one-time-code" inputmode="numeric" pattern="[0-9A-Za-z\-]{6,16}">
             </div>
             <button type="submit" class="btn btn-secondary">Disable authenticator</button>
         </form>
@@ -49,7 +49,7 @@ $profileBackUrl = $profileBackUrl ?? '/member/profile';
             <?= csrf_field() ?>
             <div class="form-group">
                 <label class="form-label required" for="totp_code">Confirmation code</label>
-                <input id="totp_code" name="code" required autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6">
+                <input class="form-control" type="text" id="totp_code" name="code" required autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6">
             </div>
             <button type="submit" class="btn btn-primary">Enable authenticator</button>
         </form>
@@ -90,7 +90,7 @@ $profileBackUrl = $profileBackUrl ?? '/member/profile';
 
     <div class="form-group">
         <label class="form-label" for="passkey_label">Label (optional)</label>
-        <input id="passkey_label" type="text" maxlength="128" placeholder="Laptop / Phone">
+        <input class="form-control" id="passkey_label" type="text" maxlength="128" placeholder="Laptop / Phone">
     </div>
     <button type="button" class="btn btn-primary" id="register-passkey-btn">Register passkey</button>
     <p id="passkey-status" class="form-help" role="status"></p>

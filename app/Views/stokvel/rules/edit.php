@@ -26,14 +26,14 @@ $categories = $categories ?? [
         <?= method_field('PUT') ?>
         <div class="form-group">
             <label for="title">Title <span class="required">*</span></label>
-            <input type="text" id="title" name="title" value="<?= e((string) old('title', (string) ($item['title'] ?? ''))) ?>" required maxlength="255">
+            <input class="form-control" type="text" id="title" name="title" value="<?= e((string) old('title', (string) ($item['title'] ?? ''))) ?>" required maxlength="255">
             <?php if (!empty($fieldErrors['title'][0])): ?>
                 <p class="form-error"><?= e($fieldErrors['title'][0]) ?></p>
             <?php endif; ?>
         </div>
         <div class="form-group">
             <label for="category">Category</label>
-            <select id="category" name="category">
+            <select class="form-control form-select" id="category" name="category">
                 <?php
                 $cat = (string) old('category', (string) ($item['category'] ?? 'general'));
                 foreach ($categories as $val => $label):
@@ -47,7 +47,7 @@ $categories = $categories ?? [
         </div>
         <div class="form-group">
             <label for="body">Rule text <span class="required">*</span></label>
-            <textarea id="body" name="body" rows="8" required><?= e((string) old('body', (string) ($item['body'] ?? ''))) ?></textarea>
+            <textarea class="form-control form-textarea" id="body" name="body" rows="8" required><?= e((string) old('body', (string) ($item['body'] ?? ''))) ?></textarea>
             <?php if (!empty($fieldErrors['body'][0])): ?>
                 <p class="form-error"><?= e($fieldErrors['body'][0]) ?></p>
             <?php endif; ?>

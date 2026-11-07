@@ -49,13 +49,31 @@ final class InvitationService
 
         if ($email !== '') {
             $link = url('/invitations/' . $plain);
+            $subject = 'You are invited to join a stokvel';
             $body = "You have been invited to join a stokvel on stockvel.\n\n"
                 . "Open this link to accept or decline:\n{$link}\n\n"
                 . "This invitation expires on {$expires} (UTC).\n";
+            try {
+                $stokvelId = (int) (app()->container()->get(\App\Core\TenantContext::class)->stokvelId() ?? 0);
+                if ($stokvelId > 0) {
+                    $rendered = app()->container()
+                        ->get(\App\Services\Notifications\EmailTemplateService::class)
+                        ->render($stokvelId, 'invitation', [
+                            'stokvel_name' => (string) (app()->container()->get(\App\Core\TenantContext::class)->stokvel()['name'] ?? 'your stokvel'),
+                            'member_name' => $email,
+                            'invite_url' => $link,
+                            'inviter_name' => '',
+                        ]);
+                    $subject = $rendered['subject'];
+                    $body = $rendered['body'];
+                }
+            } catch (\Throwable) {
+                // Keep plaintext fallback.
+            }
             // Send immediately so log/SMTP works without waiting for cron.
             $sent = $this->notifications->sendMailNow(
                 $email,
-                'You are invited to join a stokvel',
+                $subject,
                 $body,
                 ['type' => 'membership_invitation', 'invitation_id' => $id]
             );

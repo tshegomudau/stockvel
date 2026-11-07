@@ -7,7 +7,7 @@
             <button type="submit" class="btn btn-primary btn-block">Resend verification email</button>
         </form>
         <div class="auth-links">
-            <a href="<?= e(url('/app')) ?>">Continue to app</a>
+            <a href="<?= e(url('/account/get-started')) ?>">Continue</a>
         </div>
     </div>
 </div>

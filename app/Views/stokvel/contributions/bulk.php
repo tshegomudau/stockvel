@@ -11,11 +11,11 @@
                         <?= e(trim(($m['first_name'] ?? '') . ' ' . ($m['last_name'] ?? ''))) ?>
                         <input type="hidden" name="rows[<?= (int) $i ?>][member_id]" value="<?= e((string) $m['id']) ?>">
                     </td>
-                    <td><input type="number" step="0.01" name="rows[<?= (int) $i ?>][amount]" placeholder="0.00"></td>
-                    <td><input type="date" name="rows[<?= (int) $i ?>][paid_at]" value="<?= e(date('Y-m-d')) ?>"></td>
+                    <td><input class="form-control" type="number" step="0.01" name="rows[<?= (int) $i ?>][amount]" placeholder="0.00"></td>
+                    <td><input class="form-control" type="date" name="rows[<?= (int) $i ?>][paid_at]" value="<?= e(date('Y-m-d')) ?>"></td>
                     <td>
                         <?php $paymentMethods = $paymentMethods ?? \App\Services\Finance\ContributionService::PAYMENT_METHODS; ?>
-                        <select name="rows[<?= (int) $i ?>][payment_method]" aria-label="Payment method for member">
+                        <select class="form-control form-select" name="rows[<?= (int) $i ?>][payment_method]" aria-label="Payment method for member">
                             <?php foreach ($paymentMethods as $pm): ?>
                                 <option value="<?= e($pm) ?>"<?= $pm === 'eft' ? ' selected' : '' ?>><?= e(ucwords(str_replace('_', ' ', $pm))) ?></option>
                             <?php endforeach; ?>

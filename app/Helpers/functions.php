@@ -250,6 +250,8 @@ function route(string $name, array $parameters = []): string
         'platform.stokvel-types' => '/platform/stokvel-types',
         'platform.support' => '/platform/support',
         'platform.features' => '/platform/features',
+        'platform.stokvel-requests' => '/platform/stokvel-requests',
+        'platform.admins' => '/platform/admins',
         'platform.profile' => '/platform/profile',
         'platform.security' => '/platform/security',
         'app.support' => '/app/support',
@@ -401,7 +403,7 @@ function home_path_for_user(?array $user): string
         $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
         $memberships = $auth->membershipsForUser($userId);
         if ($memberships === []) {
-            return '/member';
+            return '/account/get-started';
         }
 
         /** @var \App\Services\PermissionService $permissions */
@@ -422,6 +424,6 @@ function home_path_for_user(?array $user): string
         Session::set('stokvel_id', (int) $memberships[0]['stokvel_id']);
         return '/member';
     } catch (\Throwable) {
-        return '/app';
+        return '/account/get-started';
     }
 }

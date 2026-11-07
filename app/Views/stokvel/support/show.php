@@ -15,6 +15,6 @@
 <form method="post" action="<?= e(url('/app/support/' . (int) $ticket['id'] . '/reply')) ?>" class="form-stack">
 <?= csrf_field() ?>
 <div class="form-group"><label class="form-label" for="body">Add update</label>
-<textarea id="body" name="body" rows="4" required></textarea></div>
+<textarea class="form-control form-textarea" id="body" name="body" rows="4" required></textarea></div>
 <button class="btn btn-primary" type="submit">Reply</button>
 </form>

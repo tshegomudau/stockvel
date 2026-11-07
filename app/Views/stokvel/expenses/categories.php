@@ -5,7 +5,7 @@
 <form method="get" action="<?= e(url('/app/expenses/categories')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or code">
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-secondary">Filter</button>
@@ -17,8 +17,8 @@
 <form method="post" action="<?= e(url('/app/expenses/categories')) ?>" class="form-stack card mb-6">
 <?= csrf_field() ?>
 <div class="form-grid two-col">
-<div class="form-group"><label class="form-label" for="code">Code</label><input id="code" name="code" required placeholder="venue"></div>
-<div class="form-group"><label class="form-label" for="name">Name</label><input id="name" name="name" required placeholder="Venue hire"></div>
+<div class="form-group"><label class="form-label" for="code">Code</label><input class="form-control" type="text" id="code" name="code" required placeholder="venue"></div>
+<div class="form-group"><label class="form-label" for="name">Name</label><input class="form-control" type="text" id="name" name="name" required placeholder="Venue hire"></div>
 </div>
 <button class="btn btn-primary" type="submit">Add category</button>
 </form>
@@ -34,7 +34,7 @@
 <td>
 <form method="post" action="<?= e(url('/app/expenses/categories/' . (int) $cat['id'])) ?>" class="inline-form">
 <?= csrf_field() ?>
-<input name="name" value="<?= e($cat['name'] ?? '') ?>">
+<input class="form-control" type="text" name="name" value="<?= e($cat['name'] ?? '') ?>">
 <button class="btn btn-sm btn-secondary" type="submit">Save</button>
 </form>
 </td>

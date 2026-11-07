@@ -9,11 +9,11 @@
     <div class="form-grid two-col">
         <div class="form-group">
             <label for="q">Search</label>
-            <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or relationship">
+            <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Name or relationship">
         </div>
         <div class="form-group">
             <label for="status">Status</label>
-            <select id="status" name="status">
+            <select class="form-control form-select" id="status" name="status">
                 <option value="">All</option>
                 <option value="active"<?= ($filterStatus ?? '') === 'active' ? ' selected' : '' ?>>Active</option>
                 <option value="inactive"<?= ($filterStatus ?? '') === 'inactive' ? ' selected' : '' ?>>Inactive</option>
@@ -21,7 +21,7 @@
         </div>
         <div class="form-group">
             <label for="member_id">Member</label>
-            <select id="member_id" name="member_id">
+            <select class="form-control form-select" id="member_id" name="member_id">
                 <option value="">All members</option>
                 <?php foreach ($members ?? [] as $m): ?>
                     <option value="<?= (int) $m['id'] ?>"<?= (int) ($filterMemberId ?? 0) === (int) $m['id'] ? ' selected' : '' ?>>

@@ -7,12 +7,12 @@
     <?= csrf_field() ?>
     <div class="form-group">
         <label class="form-label" for="title">Title</label>
-        <input id="title" name="title" required value="<?= e(old('title', $doc['title'] ?? '')) ?>">
+        <input class="form-control" type="text" id="title" name="title" required value="<?= e(old('title', $doc['title'] ?? '')) ?>">
     </div>
     <?php if (!empty($uploadsEnabled)): ?>
     <div class="form-group">
         <label class="form-label" for="upload_file">Replace file (optional)</label>
-        <input type="file" id="upload_file" name="upload_file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv">
+        <input class="form-control" type="file" id="upload_file" name="upload_file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv">
         <p class="form-help">Leave blank to keep the current file.</p>
     </div>
     <?php endif; ?>

@@ -103,7 +103,7 @@ $meetingId = (int) $meeting['id'];
                             <?php if ($currentMembershipId && $isOpen): ?>
                                 <form method="post" action="<?= e(url('/member/meetings/' . $meetingId . '/resolutions/' . $rid . '/vote')) ?>" class="inline-form">
                                     <?= csrf_field() ?>
-                                    <select name="vote" aria-label="Vote on <?= e($res['title'] ?? 'resolution') ?>">
+                                    <select class="form-control form-select" name="vote" aria-label="Vote on <?= e($res['title'] ?? 'resolution') ?>">
                                         <option value="yes"<?= $myVote === 'yes' ? ' selected' : '' ?>>Yes</option>
                                         <option value="no"<?= $myVote === 'no' ? ' selected' : '' ?>>No</option>
                                         <option value="abstain"<?= $myVote === 'abstain' ? ' selected' : '' ?>>Abstain</option>

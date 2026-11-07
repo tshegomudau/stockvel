@@ -1,8 +1,8 @@
 <div class="page-header no-print">
     <h1><?= e($reportTitle ?? 'Report') ?></h1>
     <form method="get" class="toolbar">
-        <input type="date" name="from" value="<?= e($from ?? '') ?>">
-        <input type="date" name="to" value="<?= e($to ?? '') ?>">
+        <input class="form-control" type="date" name="from" value="<?= e($from ?? '') ?>">
+        <input class="form-control" type="date" name="to" value="<?= e($to ?? '') ?>">
         <button type="submit" class="btn">Apply</button>
         <a class="btn" href="<?= e(url('/app/reports/' . ($type ?? '') . '?from=' . urlencode($from ?? '') . '&to=' . urlencode($to ?? '') . '&print=1')) ?>">Print</a>
         <a class="btn btn-primary" href="<?= e(url('/app/reports/' . rawurlencode((string) ($type ?? '')) . '/export?from=' . urlencode((string) ($from ?? '')) . '&to=' . urlencode((string) ($to ?? '')))) ?>">Export CSV</a>

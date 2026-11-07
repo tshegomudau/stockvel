@@ -12,11 +12,11 @@
 <form method="get" action="<?= e(url('/app/fines')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Member, type, or reason">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Member, type, or reason">
     </div>
     <div class="form-group">
         <label for="status">Status</label>
-        <select id="status" name="status">
+        <select class="form-control form-select" id="status" name="status">
             <option value="">All</option>
             <?php foreach ($statusOptions ?? [] as $st): ?>
                 <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(str_replace('_', ' ', ucfirst($st))) ?></option>
@@ -25,7 +25,7 @@
     </div>
     <div class="form-group">
         <label for="fine_type_id">Fine type</label>
-        <select id="fine_type_id" name="fine_type_id">
+        <select class="form-control form-select" id="fine_type_id" name="fine_type_id">
             <option value="">All types</option>
             <?php foreach ($filterTypes ?? [] as $type): ?>
                 <option value="<?= (int) $type['id'] ?>"<?= (int) ($filterTypeId ?? 0) === (int) $type['id'] ? ' selected' : '' ?>><?= e($type['name'] ?? '') ?></option>

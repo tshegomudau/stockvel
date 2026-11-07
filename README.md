@@ -13,7 +13,7 @@ Vanilla PHP 8.3+, MySQL 8+, no Composer frameworks. Composer is used **only** fo
 
 App autoloading remains in `bootstrap/autoload.php` (loads `vendor/autoload.php` when present).
 
-**Temporary shared hosting (no SSH):** pack with `./scripts/pack-shared-hosting.sh`, upload the zip, then run the browser installer — see [`docs/SHARED_HOSTING.md`](docs/SHARED_HOSTING.md).
+**Temporary shared hosting (cPanel):** pack with `./scripts/pack-shared-hosting.sh` **or** use cPanel **Git™ Version Control** (with caveats for `vendor/` / `.env`) — see [`docs/SHARED_HOSTING.md`](docs/SHARED_HOSTING.md).
 
 ## New developer setup (5 minutes)
 

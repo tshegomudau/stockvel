@@ -20,7 +20,7 @@ $qs = static function (array $extra = []) use ($periodKey, $from, $to): string {
     <form method="get" action="<?= e(url('/member/statement')) ?>" class="filter-bar">
         <div class="form-group">
             <label for="period">Period</label>
-            <select id="period" name="period">
+            <select class="form-control form-select" id="period" name="period">
                 <option value="30"<?= $periodKey === '30' ? ' selected' : '' ?>>Last 30 days</option>
                 <option value="60"<?= $periodKey === '60' ? ' selected' : '' ?>>Last 60 days</option>
                 <option value="90"<?= $periodKey === '90' ? ' selected' : '' ?>>Last 90 days</option>
@@ -30,11 +30,11 @@ $qs = static function (array $extra = []) use ($periodKey, $from, $to): string {
         </div>
         <div class="form-group">
             <label for="from">From</label>
-            <input type="date" id="from" name="from" value="<?= e($from) ?>">
+            <input class="form-control" type="date" id="from" name="from" value="<?= e($from) ?>">
         </div>
         <div class="form-group">
             <label for="to">To</label>
-            <input type="date" id="to" name="to" value="<?= e($to) ?>">
+            <input class="form-control" type="date" id="to" name="to" value="<?= e($to) ?>">
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Apply</button>

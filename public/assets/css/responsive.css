@@ -1,15 +1,82 @@
+/* Tablet and below */
 @media (max-width: 959px) {
   .app-topbar .page-title { padding-left: 3.25rem; }
   .topbar-inner { padding-left: 0.85rem; padding-right: 0.85rem; }
   .app-content { padding: 1rem 0.85rem 2rem; }
   body.app-layout { overflow-x: clip; }
+  .filter-bar { align-items: stretch; }
+  .filter-bar .form-group,
+  .filter-bar .form-actions,
+  .filter-bar .btn { width: 100%; }
+  .filter-bar .form-actions { justify-content: stretch; }
+  .filter-bar .form-actions .btn { flex: 1 1 auto; }
+  .modal {
+    width: min(32rem, calc(100vw - 1.5rem));
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+  }
+  .card-header,
+  .panel-header,
+  .page-header {
+    flex-wrap: wrap;
+  }
+  .table-wrap {
+    max-width: 100%;
+  }
 }
+
+/* Narrow phones */
 @media (max-width: 480px) {
   .btn-block-sm { width: 100%; }
   .page-header { align-items: stretch; }
   .page-actions { width: 100%; }
   .page-actions .btn { flex: 1 1 auto; }
+  .auth-card {
+    width: 100%;
+    padding: 1.25rem 1rem;
+  }
+  .auth-shell {
+    width: min(1040px, calc(100% - 1rem));
+  }
+  .form-actions .btn { flex: 1 1 auto; }
+  .stats-grid,
+  .dashboard-grid,
+  .panel-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
+
+/* Shared overflow guards for all supported viewports */
+html, body {
+  max-width: 100%;
+}
+body.guest-layout {
+  overflow-x: clip;
+}
+.card,
+.panel,
+.form-stack,
+.form-grid,
+.form-section,
+.filter-bar,
+.auth-card,
+.modal,
+.table-wrap,
+.dashboard-hero {
+  min-width: 0;
+  max-width: 100%;
+}
+.form-group > .form-control,
+.form-group > .form-select,
+.form-group > .form-textarea,
+.form-group > input,
+.form-group > select,
+.form-group > textarea,
+.form-group > .password-field,
+.form-group > .input-prefix {
+  max-width: 100%;
+}
+
 @media print {
   .sidebar, .drawer, .drawer-toggle, .app-topbar, .toast-stack, .btn, .filter-bar, .no-print {
     display: none !important;

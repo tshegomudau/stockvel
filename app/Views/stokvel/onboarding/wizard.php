@@ -59,25 +59,25 @@ $labels = [
             <div class="form-grid two-col">
                 <div class="form-group">
                     <label class="form-label required" for="name">Official name</label>
-                    <input type="text" id="name" name="name" required value="<?= e((string) ($saved['name'] ?? '')) ?>">
+                    <input class="form-control" type="text" id="name" name="name" required value="<?= e((string) ($saved['name'] ?? '')) ?>">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="short_name">Short name</label>
-                    <input type="text" id="short_name" name="short_name" value="<?= e((string) ($saved['short_name'] ?? '')) ?>">
+                    <input class="form-control" type="text" id="short_name" name="short_name" value="<?= e((string) ($saved['short_name'] ?? '')) ?>">
                 </div>
             </div>
             <div class="form-group">
                 <label class="form-label" for="description">Description</label>
-                <textarea id="description" name="description" rows="3"><?= e((string) ($saved['description'] ?? '')) ?></textarea>
+                <textarea class="form-control form-textarea" id="description" name="description" rows="3"><?= e((string) ($saved['description'] ?? '')) ?></textarea>
             </div>
             <div class="form-group">
                 <label class="form-label" for="registration_number">Registration number</label>
-                <input type="text" id="registration_number" name="registration_number" value="<?= e((string) ($saved['registration_number'] ?? '')) ?>">
+                <input class="form-control" type="text" id="registration_number" name="registration_number" value="<?= e((string) ($saved['registration_number'] ?? '')) ?>">
             </div>
         <?php elseif ($stepKey === 'type'): ?>
             <div class="form-group">
                 <label class="form-label required" for="stokvel_type">Stokvel type</label>
-                <select id="stokvel_type" name="stokvel_type" required>
+                <select class="form-control form-select" id="stokvel_type" name="stokvel_type" required>
                     <?php
                     $typeOptions = $stokvelTypeOptions ?? \App\Support\StokvelTypeCatalog::activeOptions();
                     $currentType = (string) ($saved['stokvel_type'] ?? '');
@@ -92,38 +92,38 @@ $labels = [
         <?php elseif ($stepKey === 'branding'): ?>
             <div class="form-group">
                 <label class="form-label" for="primary_colour">Primary colour</label>
-                <input type="color" id="primary_colour" name="primary_colour" value="<?= e((string) ($saved['primary_colour'] ?? '#14532d')) ?>">
+                <input class="form-control" type="color" id="primary_colour" name="primary_colour" value="<?= e((string) ($saved['primary_colour'] ?? '#14532d')) ?>">
                 <p class="help-text">Used for navigation and accents. Ensure sufficient contrast for accessibility.</p>
             </div>
         <?php elseif ($stepKey === 'contact'): ?>
             <div class="form-grid two-col">
-                <div class="form-group"><label class="form-label" for="contact_email">Contact email</label><input type="email" id="contact_email" name="contact_email" value="<?= e((string) ($saved['contact_email'] ?? '')) ?>"></div>
-                <div class="form-group"><label class="form-label" for="contact_phone">Contact phone</label><input type="tel" id="contact_phone" name="contact_phone" value="<?= e((string) ($saved['contact_phone'] ?? '')) ?>"></div>
+                <div class="form-group"><label class="form-label" for="contact_email">Contact email</label><input class="form-control" type="email" id="contact_email" name="contact_email" value="<?= e((string) ($saved['contact_email'] ?? '')) ?>"></div>
+                <div class="form-group"><label class="form-label" for="contact_phone">Contact phone</label><input class="form-control" type="tel" id="contact_phone" name="contact_phone" value="<?= e((string) ($saved['contact_phone'] ?? '')) ?>"></div>
             </div>
-            <div class="form-group"><label class="form-label" for="province">Province</label><input type="text" id="province" name="province" value="<?= e((string) ($saved['province'] ?? '')) ?>"></div>
+            <div class="form-group"><label class="form-label" for="province">Province</label><input class="form-control" type="text" id="province" name="province" value="<?= e((string) ($saved['province'] ?? '')) ?>"></div>
         <?php elseif ($stepKey === 'banking'): ?>
             <div class="form-grid two-col">
-                <div class="form-group"><label class="form-label" for="bank_name">Bank</label><input type="text" id="bank_name" name="bank_name" value="<?= e((string) ($saved['bank_name'] ?? '')) ?>"></div>
-                <div class="form-group"><label class="form-label" for="account_number">Account number</label><input type="text" id="account_number" name="account_number" autocomplete="off" value="<?= e((string) ($saved['account_number'] ?? '')) ?>"></div>
+                <div class="form-group"><label class="form-label" for="bank_name">Bank</label><input class="form-control" type="text" id="bank_name" name="bank_name" value="<?= e((string) ($saved['bank_name'] ?? '')) ?>"></div>
+                <div class="form-group"><label class="form-label" for="account_number">Account number</label><input class="form-control" type="text" id="account_number" name="account_number" autocomplete="off" value="<?= e((string) ($saved['account_number'] ?? '')) ?>"></div>
             </div>
             <p class="help-text">Account numbers are masked in logs and most UI surfaces.</p>
         <?php elseif ($stepKey === 'contributions'): ?>
             <div class="form-grid two-col">
                 <div class="form-group">
                     <label class="form-label" for="contribution_amount">Default contribution</label>
-                    <div class="input-prefix"><span>R</span><input type="number" step="0.01" min="0" id="contribution_amount" name="contribution_amount" value="<?= e((string) ($saved['contribution_amount'] ?? '')) ?>"></div>
+                    <div class="input-prefix"><span>R</span><input class="form-control" type="number" step="0.01" min="0" id="contribution_amount" name="contribution_amount" value="<?= e((string) ($saved['contribution_amount'] ?? '')) ?>"></div>
                 </div>
-                <div class="form-group"><label class="form-label" for="contribution_day">Collection day</label><input type="number" min="1" max="28" id="contribution_day" name="contribution_day" value="<?= e((string) ($saved['contribution_day'] ?? '1')) ?>"></div>
+                <div class="form-group"><label class="form-label" for="contribution_day">Collection day</label><input class="form-control" type="number" min="1" max="28" id="contribution_day" name="contribution_day" value="<?= e((string) ($saved['contribution_day'] ?? '1')) ?>"></div>
             </div>
         <?php elseif (in_array($stepKey, ['fees', 'penalties'], true)): ?>
             <div class="form-grid two-col">
-                <div class="form-group"><label class="form-label" for="joining_fee">Joining fee</label><div class="input-prefix"><span>R</span><input type="number" step="0.01" id="joining_fee" name="joining_fee" value="<?= e((string) ($saved['joining_fee'] ?? '0')) ?>"></div></div>
-                <div class="form-group"><label class="form-label" for="late_penalty">Late-payment penalty</label><div class="input-prefix"><span>R</span><input type="number" step="0.01" id="late_penalty" name="late_penalty" value="<?= e((string) ($saved['late_penalty'] ?? '0')) ?>"></div></div>
+                <div class="form-group"><label class="form-label" for="joining_fee">Joining fee</label><div class="input-prefix"><span>R</span><input class="form-control" type="number" step="0.01" id="joining_fee" name="joining_fee" value="<?= e((string) ($saved['joining_fee'] ?? '0')) ?>"></div></div>
+                <div class="form-group"><label class="form-label" for="late_penalty">Late-payment penalty</label><div class="input-prefix"><span>R</span><input class="form-control" type="number" step="0.01" id="late_penalty" name="late_penalty" value="<?= e((string) ($saved['late_penalty'] ?? '0')) ?>"></div></div>
             </div>
         <?php elseif ($stepKey === 'invite'): ?>
-            <div class="form-group"><label class="form-label" for="invite_email">Invite email</label><input type="email" id="invite_email" name="invite_email" value="<?= e((string) ($saved['invite_email'] ?? '')) ?>"></div>
+            <div class="form-group"><label class="form-label" for="invite_email">Invite email</label><input class="form-control" type="email" id="invite_email" name="invite_email" value="<?= e((string) ($saved['invite_email'] ?? '')) ?>"></div>
             <div class="form-group"><label class="form-label" for="invite_role">Role</label>
-                <select id="invite_role" name="invite_role">
+                <select class="form-control form-select" id="invite_role" name="invite_role">
                     <?php foreach (['ordinary_member','committee_member','secretary','treasurer','chairperson'] as $role): ?>
                         <option value="<?= e($role) ?>"><?= e(ucfirst(str_replace('_', ' ', $role))) ?></option>
                     <?php endforeach; ?>
@@ -134,7 +134,7 @@ $labels = [
             <p class="text-muted">You can still update settings after activation from the Settings screen.</p>
         <?php else: ?>
             <p class="text-muted">Configure <?= e(str_replace('_', ' ', $stepKey)) ?> for your stokvel.</p>
-            <div class="form-group"><label class="form-label" for="notes">Notes</label><textarea id="notes" name="notes" rows="3"><?= e((string) ($saved['notes'] ?? '')) ?></textarea></div>
+            <div class="form-group"><label class="form-label" for="notes">Notes</label><textarea class="form-control form-textarea" id="notes" name="notes" rows="3"><?= e((string) ($saved['notes'] ?? '')) ?></textarea></div>
         <?php endif; ?>
 
         <div class="form-actions">

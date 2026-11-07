@@ -7,11 +7,11 @@
 <form method="get" action="<?= e(url('/app/rules')) ?>" class="filter-bar" role="search">
     <div class="form-group">
         <label for="q">Search</label>
-        <input type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Title or code">
+        <input class="form-control" type="search" id="q" name="q" value="<?= e((string) ($filterQ ?? '')) ?>" placeholder="Title or code">
     </div>
     <div class="form-group">
         <label for="category">Category</label>
-        <select id="category" name="category">
+        <select class="form-control form-select" id="category" name="category">
             <option value="">All</option>
             <?php foreach ($categoryOptions ?? [] as $code => $label): ?>
                 <option value="<?= e((string) $code) ?>"<?= ($filterCategory ?? '') === (string) $code ? ' selected' : '' ?>><?= e((string) $label) ?></option>
@@ -20,7 +20,7 @@
     </div>
     <div class="form-group">
         <label for="status">Status</label>
-        <select id="status" name="status">
+        <select class="form-control form-select" id="status" name="status">
             <option value="">All</option>
             <?php foreach ($statusOptions ?? ['active', 'inactive'] as $st): ?>
                 <option value="<?= e($st) ?>"<?= ($filterStatus ?? '') === $st ? ' selected' : '' ?>><?= e(ucfirst($st)) ?></option>
