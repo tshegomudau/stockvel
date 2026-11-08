@@ -174,27 +174,17 @@ final class AuthController extends Controller
 
     public function forgot(Request $request): Response
     {
-        $email = trim((string) $request->input('email', ''));
-        $this->service(\App\Services\Auth\PasswordResetService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function sendResetLink(string $email): void
-            {
-                $user = $this->db->fetch('SELECT id FROM users WHERE email = :email', ['email' => $email]);
-                if (!$user) {
-                    return;
-                }
-                $token = bin2hex(random_bytes(32));
-                $this->db->insert(
-                    'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at) VALUES (:uid, :th, :exp, :ca)',
-                    [
-                        'uid' => $user['id'],
-                        'th' => hash('sha256', $token),
-                        'exp' => (new \DateTimeImmutable('+1 hour'))->format('Y-m-d H:i:s'),
-                        'ca' => now_utc(),
-                    ]
-                );
+        $email = strtolower(trim((string) $request->input('email', '')));
+        // Always show the same response — do not reveal whether the email exists.
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            try {
+                /** @var \App\Services\Auth\PasswordResetService $reset */
+                $reset = app()->container()->get(\App\Services\Auth\PasswordResetService::class);
+                $reset->sendResetLink($email);
+            } catch (\Throwable) {
+                // Swallow delivery failures for the public response; check jobs / mail logs.
             }
-        })->sendResetLink($email);
+        }
 
         Session::flash('success', 'If that email exists, we sent reset instructions.');
         return $this->redirect('/login');
@@ -214,27 +204,9 @@ final class AuthController extends Controller
             return $this->redirect('/reset-password/' . urlencode($token));
         }
 
-        $ok = $this->service(\App\Services\Auth\PasswordResetService::class, fn ($db) => new class($db) {
-            public function __construct(private $db) {}
-            public function reset(string $token, string $password): bool
-            {
-                $row = $this->db->fetch(
-                    'SELECT user_id FROM password_reset_tokens WHERE token_hash = :th AND expires_at > UTC_TIMESTAMP() LIMIT 1',
-                    ['th' => hash('sha256', $token)]
-                );
-                if (!$row) {
-                    return false;
-                }
-                $hash = password_hash($password, PASSWORD_ARGON2ID);
-                $this->db->exec('UPDATE users SET password_hash = :ph, updated_at = :ua WHERE id = :id', [
-                    'ph' => $hash,
-                    'ua' => now_utc(),
-                    'id' => $row['user_id'],
-                ]);
-                $this->db->exec('DELETE FROM password_reset_tokens WHERE user_id = :id', ['id' => $row['user_id']]);
-                return true;
-            }
-        })->reset($token, $password);
+        /** @var \App\Services\Auth\PasswordResetService $reset */
+        $reset = app()->container()->get(\App\Services\Auth\PasswordResetService::class);
+        $ok = $reset->reset($token, $password);
 
         if (!$ok) {
             Session::flash('error', 'This reset link is invalid or expired.');

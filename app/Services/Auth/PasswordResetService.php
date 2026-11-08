@@ -8,13 +8,15 @@ use App\Core\Database;
 use App\Exceptions\HttpException;
 use App\Repositories\UserRepository;
 use App\Services\AuditService;
+use App\Services\Notifications\NotificationService;
 
 final class PasswordResetService
 {
     public function __construct(
         private readonly Database $db,
         private readonly UserRepository $users,
-        private readonly AuditService $audit
+        private readonly AuditService $audit,
+        private readonly NotificationService $notifications
     ) {
     }
 
@@ -25,6 +27,11 @@ final class PasswordResetService
 
     public function createToken(string $email): ?string
     {
+        $email = strtolower(trim($email));
+        if ($email === '') {
+            return null;
+        }
+
         $user = $this->users->findByEmail($email);
         if (!$user) {
             return null;
@@ -54,9 +61,29 @@ final class PasswordResetService
             ]
         );
 
+        $link = url('/reset-password/' . $plain);
+        $subject = 'Reset your stockvel password';
+        $body = "We received a request to reset your stockvel password.\n\n"
+            . "Open this link to choose a new password:\n{$link}\n\n"
+            . "This link expires at {$expires} UTC ({$minutes} minutes).\n\n"
+            . "If you did not request this, you can ignore this email.\n";
+
+        $sent = false;
+        try {
+            $sent = $this->notifications->sendMailNow(
+                $email,
+                $subject,
+                $body,
+                ['type' => 'password_reset', 'user_id' => (int) $user['id']]
+            );
+        } catch (\Throwable) {
+            $sent = false;
+        }
+
         try {
             $this->audit->log('password_reset.requested', 'user', (int) $user['id'], metadata: [
                 'user_id' => (int) $user['id'],
+                'email_sent' => $sent,
             ]);
         } catch (\Throwable) {
         }

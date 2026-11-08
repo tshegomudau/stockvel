@@ -52,9 +52,9 @@ final class JobController extends Controller
         $this->db()->exec(
             "UPDATE notification_jobs
              SET status = 'pending', last_error = NULL, attempt_count = 0,
-                 available_at = UTC_TIMESTAMP(), updated_at = :ua
+                 scheduled_for = :sched, updated_at = :ua
              WHERE id = :id AND status IN ('failed', 'dead')",
-            ['ua' => now_utc(), 'id' => (int) $id]
+            ['sched' => now_utc(), 'ua' => now_utc(), 'id' => (int) $id]
         );
         Session::flash('success', 'Job queued for retry.');
         return $this->redirect('/platform/jobs');

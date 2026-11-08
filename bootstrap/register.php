@@ -99,7 +99,6 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(AuditService::class),
         $c->get(Logger::class)
     ));
-    $container->singleton(PasswordResetService::class, static fn (Container $c) => new PasswordResetService($c->get(Database::class), $c->get(UserRepository::class), $c->get(AuditService::class)));
     $container->singleton(EmailVerificationService::class, static fn (Container $c) => new EmailVerificationService($c->get(Database::class), $c->get(UserRepository::class), $c->get(AuditService::class)));
     $container->singleton(MfaService::class, static fn (Container $c) => new MfaService($c->get(Database::class)));
 
@@ -146,6 +145,12 @@ return static function (Container $container, string $basePath, array $dbConfig)
     ));
     $container->singleton(NotificationProcessor::class, static fn (Container $c) => new NotificationProcessor($c->get(NotificationQueueService::class)));
     $container->singleton(NotificationService::class, static fn (Container $c) => new NotificationService($c->get(Database::class), $c->get(TenantContext::class), $c->get(NotificationQueueService::class)));
+    $container->singleton(PasswordResetService::class, static fn (Container $c) => new PasswordResetService(
+        $c->get(Database::class),
+        $c->get(UserRepository::class),
+        $c->get(AuditService::class),
+        $c->get(NotificationService::class)
+    ));
 
     $container->singleton(RateLimitService::class, static fn (Container $c) => new RateLimitService($c->get(Database::class)));
     $container->singleton(CsrfMiddleware::class, static fn () => new CsrfMiddleware());
