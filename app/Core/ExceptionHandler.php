@@ -79,6 +79,11 @@ final class ExceptionHandler
             ], $status)->send();
         }
 
+        // HTML 401 (expired session / requireAuth): send visitors home instead of a login-error page.
+        if ($status === 401) {
+            Response::redirect(url('/'))->send();
+        }
+
         $user = null;
         $platformRole = '';
         try {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Middleware;
 
 use App\Core\Request;
+use App\Core\Response;
 use App\Services\Auth\AuthService;
 
 final class GuestMiddleware implements MiddlewareInterface
@@ -17,7 +18,8 @@ final class GuestMiddleware implements MiddlewareInterface
     public function handle(Request $request, callable $next): mixed
     {
         if ($this->auth->check()) {
-            redirect(url(home_path_for_user($this->auth->user())));
+            // Already signed in: open the dashboard instead of the guest auth screens.
+            return Response::redirect(url(home_path_for_user($this->auth->user())));
         }
 
         return $next($request);

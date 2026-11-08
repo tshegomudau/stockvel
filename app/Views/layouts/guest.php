@@ -17,8 +17,16 @@
             <span class="brand-wordmark">stockvel</span>
         </a>
         <nav class="header-nav" aria-label="Primary">
-            <a href="<?= e(url('/login')) ?>">Sign in</a>
-            <a class="btn btn-primary" href="<?= e(url('/register')) ?>">Register</a>
+            <?php
+            $guestUser = is_array($user ?? null) ? $user : null;
+            $guestSignedIn = $guestUser !== null && !empty($guestUser['id']);
+            $guestSignInHref = $guestSignedIn ? home_path_for_user($guestUser) : '/login';
+            $guestSignInLabel = $guestSignedIn ? 'Dashboard' : 'Sign in';
+            ?>
+            <a href="<?= e(url($guestSignInHref)) ?>"><?= e($guestSignInLabel) ?></a>
+            <?php if (!$guestSignedIn): ?>
+                <a class="btn btn-primary" href="<?= e(url('/register')) ?>">Register</a>
+            <?php endif; ?>
         </nav>
     </div>
 </header>

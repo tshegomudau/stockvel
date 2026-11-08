@@ -29,6 +29,39 @@ return static function (TestRunner $runner): void {
         $client = new HttpClient();
         $res = $client->get('/app');
         test_assert(in_array($res['status'], [401, 302, 403], true), 'Expected auth challenge, got ' . $res['status'] . ' ' . $res['body']);
+        if ((int) $res['status'] === 302) {
+            $loc = (string) ($res['location'] ?? '');
+            $path = parse_url($loc, PHP_URL_PATH) ?: $loc;
+            test_assert($path === '/' || str_ends_with((string) $path, '/'), 'Expired session should redirect home, got ' . $loc);
+            test_assert(!str_contains(strtolower($res['body'] ?? ''), 'sign in required'));
+        }
+    }, 'http');
+
+    $runner->add('Active session visiting login lands on dashboard home path', function (): void {
+        $auth = App::getInstance()->container()->get(AuthService::class);
+        $auth->logout();
+        $user = $auth->login('nomsa.dlamini@example.co.za', 'Password123!');
+        test_assert(isset($user['id']));
+        $stokvel = test_db()->fetch("SELECT id FROM stokvels WHERE slug = 'ubuntu-savings' LIMIT 1");
+        test_assert($stokvel !== null);
+        $auth->switchStokvel((int) $stokvel['id'], (int) $user['id']);
+
+        $client = new HttpClient();
+        $home = $client->get('/');
+        test_assert($home['status'] === 200, 'Signed-in users should still see the marketing home');
+        test_assert(
+            str_contains($home['body'], 'Go to dashboard') || str_contains($home['body'], 'Dashboard'),
+            'Home should offer dashboard entry when signed in'
+        );
+
+        $login = $client->get('/login');
+        test_assert((int) $login['status'] === 302, 'Active session on /login should redirect');
+        $loc = (string) ($login['location'] ?? '');
+        test_assert(
+            str_contains($loc, '/app') || str_contains($loc, '/member') || str_contains($loc, '/platform'),
+            'Login with active session should go to dashboard, got ' . $loc
+        );
+        $auth->logout();
     }, 'http');
 
     $runner->add('Login with seeded treasurer reaches contributions', function (): void {

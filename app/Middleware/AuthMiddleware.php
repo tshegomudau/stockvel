@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Middleware;
 
 use App\Core\Request;
+use App\Core\Response;
 use App\Core\Session;
-use App\Exceptions\HttpException;
 use App\Services\Auth\AuthService;
 
 final class AuthMiddleware
@@ -19,7 +19,8 @@ final class AuthMiddleware
     {
         $this->auth->hydrateTenantFromSession();
         if (!Session::get('user_id')) {
-            throw new HttpException(401, 'Authentication required.');
+            // Expired/anonymous session: land on the public home page (no "sign in required" error).
+            return Response::redirect(url('/'));
         }
         return $next($request);
     }

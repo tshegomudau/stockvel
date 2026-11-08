@@ -6,9 +6,17 @@
         </p>
         <h1>Run your stokvel with confidence</h1>
         <p>Contributions, loans, payouts, meetings, and compliance-ready records — built for South African groups that need clarity without complexity.</p>
+        <?php
+        $homeUser = is_array($user ?? null) ? $user : null;
+        $homeSignedIn = $homeUser !== null && !empty($homeUser['id']);
+        $homeSignInHref = $homeSignedIn ? home_path_for_user($homeUser) : '/login';
+        $homeSignInLabel = $homeSignedIn ? 'Go to dashboard' : 'Sign in';
+        ?>
         <div class="quick-actions" style="margin-top:1.25rem;">
-            <a class="btn btn-primary btn-lg" href="<?= e(url('/register')) ?>">Create account</a>
-            <a class="btn btn-secondary btn-lg" href="<?= e(url('/login')) ?>">Sign in</a>
+            <?php if (!$homeSignedIn): ?>
+                <a class="btn btn-primary btn-lg" href="<?= e(url('/register')) ?>">Create account</a>
+            <?php endif; ?>
+            <a class="btn btn-secondary btn-lg" href="<?= e(url($homeSignInHref)) ?>"><?= e($homeSignInLabel) ?></a>
             <a class="btn btn-ghost btn-lg" href="<?= e(url('/start-stokvel')) ?>">Register a stokvel</a>
         </div>
     </div>
