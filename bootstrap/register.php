@@ -27,6 +27,7 @@ use App\Services\Auth\PasswordResetService;
 use App\Services\Auth\RememberTokenService;
 use App\Services\Finance\ChargeService;
 use App\Services\Finance\ChartOfAccountsService;
+use App\Services\Finance\ContributionEditRequestService;
 use App\Services\Finance\ContributionService;
 use App\Services\Finance\FeeStructureService;
 use App\Services\Finance\AutoFineService;
@@ -132,6 +133,12 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(ChargeService::class),
         $c->get(LedgerService::class),
         $c->get(ChartOfAccountsService::class)
+    ));
+    $container->singleton(ContributionEditRequestService::class, static fn (Container $c) => new ContributionEditRequestService(
+        $c->get(Database::class),
+        $c->get(ContributionService::class),
+        $c->get(ApprovalService::class),
+        $c->get(AuditService::class)
     ));
 
     $container->singleton(MailChannel::class, static fn (Container $c) => new MailChannel($c->get(Logger::class)));

@@ -287,6 +287,11 @@ final class AuthService
         if (!$membership) {
             throw new HttpException(403, 'Not a member of this stokvel.');
         }
+        if ((string) ($membership['stokvel_status'] ?? '') === 'suspended') {
+            Session::forget('active_stokvel_id');
+            Session::forget('stokvel_id');
+            throw new HttpException(403, 'This stokvel has been suspended. Contact your platform administrator.');
+        }
 
         $stokvel = [
             'id' => (int) $membership['stokvel_id'],
@@ -331,14 +336,36 @@ final class AuthService
     /** @return list<array<string, mixed>> */
     public function membershipsForUser(int $userId): array
     {
+        // Suspended stokvels are not usable for day-to-day login/tenant context.
         return $this->db->fetchAll(
-            'SELECT m.*, s.name AS stokvel_name, s.slug AS stokvel_slug
+            'SELECT m.*, s.name AS stokvel_name, s.slug AS stokvel_slug, s.status AS stokvel_status
              FROM memberships m
              INNER JOIN stokvels s ON s.id = m.stokvel_id
-             WHERE m.user_id = :uid AND m.status IN (\'active\', \'suspended\', \'pending\')
+             WHERE m.user_id = :uid
+               AND m.status IN (\'active\', \'suspended\', \'pending\')
+               AND s.status <> \'suspended\'
              ORDER BY FIELD(m.status, \'active\', \'suspended\', \'pending\'), s.name ASC',
             ['uid' => $userId]
         );
+    }
+
+    /** True when the user belongs only to suspended stokvel(s) (no usable tenant). */
+    public function hasOnlySuspendedStokvels(int $userId): bool
+    {
+        if ($this->membershipsForUser($userId) !== []) {
+            return false;
+        }
+        $row = $this->db->fetch(
+            'SELECT m.id
+             FROM memberships m
+             INNER JOIN stokvels s ON s.id = m.stokvel_id
+             WHERE m.user_id = :uid
+               AND m.status IN (\'active\', \'suspended\', \'pending\')
+               AND s.status = \'suspended\'
+             LIMIT 1',
+            ['uid' => $userId]
+        );
+        return $row !== null;
     }
 
     /** @return list<string> */

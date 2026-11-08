@@ -540,18 +540,20 @@ final class StokvelCreationRequestService
         if ($existing) {
             $membershipId = (int) $existing['id'];
             $this->db->exec(
-                "UPDATE memberships SET status = 'active', updated_at = :ua WHERE id = :id",
-                ['ua' => $now, 'id' => $membershipId]
+                "UPDATE memberships SET status = 'active', approved_at = COALESCE(approved_at, :aa), updated_at = :ua WHERE id = :id",
+                ['aa' => $now, 'ua' => $now, 'id' => $membershipId]
             );
         } else {
             $membershipId = (int) $this->db->insert(
-                'INSERT INTO memberships (stokvel_id, user_id, status, joined_at, created_at, updated_at)
-                 VALUES (:sid, :uid, :status, :ja, :ca, :ua)',
+                'INSERT INTO memberships (stokvel_id, user_id, member_number, status, joined_at, approved_at, created_at, updated_at)
+                 VALUES (:sid, :uid, :mn, :status, :ja, :aa, :ca, :ua)',
                 [
                     'sid' => $stokvelId,
                     'uid' => $userId,
+                    'mn' => $this->nextMemberNumberForStokvel($stokvelId),
                     'status' => 'active',
                     'ja' => $now,
+                    'aa' => $now,
                     'ca' => $now,
                     'ua' => $now,
                 ]
@@ -568,21 +570,35 @@ final class StokvelCreationRequestService
                 ['mid' => $membershipId, 'rid' => (int) $role['id']]
             );
             if (!$has) {
-                try {
-                    $this->db->insert(
-                        'INSERT INTO membership_roles (membership_id, role_id, assigned_at) VALUES (:mid, :rid, :aa)',
-                        ['mid' => $membershipId, 'rid' => (int) $role['id'], 'aa' => $now]
-                    );
-                } catch (\Throwable) {
-                    $this->db->insert(
-                        'INSERT INTO membership_roles (membership_id, role_id, created_at) VALUES (:mid, :rid, :ca)',
-                        ['mid' => $membershipId, 'rid' => (int) $role['id'], 'ca' => $now]
-                    );
-                }
+                // stokvel_id is NOT NULL on membership_roles — required for claim/approve paths.
+                $this->db->insert(
+                    'INSERT INTO membership_roles (stokvel_id, membership_id, role_id, assigned_at, created_at)
+                     VALUES (:sid, :mid, :rid, :aa, :ca)',
+                    [
+                        'sid' => $stokvelId,
+                        'mid' => $membershipId,
+                        'rid' => (int) $role['id'],
+                        'aa' => $now,
+                        'ca' => $now,
+                    ]
+                );
             }
         }
 
         return $membershipId;
+    }
+
+    private function nextMemberNumberForStokvel(int $stokvelId): string
+    {
+        $last = $this->db->fetch(
+            'SELECT member_number FROM memberships WHERE stokvel_id = :sid ORDER BY id DESC LIMIT 1',
+            ['sid' => $stokvelId]
+        );
+        $n = 1;
+        if ($last && preg_match('/(\d+)$/', (string) ($last['member_number'] ?? ''), $m)) {
+            $n = (int) $m[1] + 1;
+        }
+        return sprintf('M-%05d', max(1, $n));
     }
 
     private function notifyPlatformAdmins(

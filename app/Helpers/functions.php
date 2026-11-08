@@ -436,6 +436,11 @@ function home_path_for_user(?array $user): string
         $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
         $memberships = $auth->membershipsForUser($userId);
         if ($memberships === []) {
+            if ($auth->hasOnlySuspendedStokvels($userId)) {
+                Session::forget('active_stokvel_id');
+                Session::forget('stokvel_id');
+                return '/account/stokvel-suspended';
+            }
             return '/account/get-started';
         }
 

@@ -45,17 +45,34 @@
 <?php if (empty($list)): ?>
     <?= view('partials/empty', ['emptyTitle' => 'No contributions match', 'emptyMessage' => 'Try clearing filters, or record a payment.', 'emptyActionUrl' => url('/app/contributions/create'), 'emptyActionLabel' => 'Record payment'], null) ?>
 <?php else: ?>
+<?php $pendingEditIds = $pendingEditIds ?? []; ?>
 <div class="table-wrap">
 <table class="table">
-    <thead><tr><th>Member</th><th>Amount</th><th>Method</th><th>Date</th><th>Status</th></tr></thead>
+    <thead><tr><th>Member</th><th>Amount</th><th>Method</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>
     <?php foreach ($list as $row): ?>
+        <?php
+            $pid = (int) ($row['id'] ?? 0);
+            $hasPendingEdit = in_array($pid, $pendingEditIds, true);
+        ?>
         <tr>
             <td><?= e(trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''))) ?></td>
             <td class="money"><?= e(money($row['amount'] ?? 0)) ?></td>
             <td><?= e($row['payment_method'] ?? '') ?></td>
             <td><?= e(sa_date($row['paid_at'] ?? '')) ?></td>
-            <td><span class="badge"><?= e($row['status'] ?? '') ?></span></td>
+            <td>
+                <span class="badge"><?= e($row['status'] ?? '') ?></span>
+                <?php if ($hasPendingEdit): ?>
+                    <span class="badge">edit pending</span>
+                <?php endif; ?>
+            </td>
+            <td>
+                <?php if (can('contributions.edit') && ($row['status'] ?? '') === 'completed'): ?>
+                    <a href="<?= e(url('/app/contributions/' . $pid . '/edit')) ?>"><?= $hasPendingEdit ? 'View edit' : 'Edit' ?></a>
+                <?php else: ?>
+                    —
+                <?php endif; ?>
+            </td>
         </tr>
     <?php endforeach; ?>
     </tbody>

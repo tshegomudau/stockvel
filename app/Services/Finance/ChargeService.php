@@ -313,6 +313,52 @@ final class ChargeService
         );
     }
 
+    /** Undo a previous payment allocation against a charge (used when editing contributions). */
+    public function reverseAllocation(int $stokvelId, int $chargeId, string $amount): void
+    {
+        $charge = $this->db->fetch(
+            'SELECT * FROM member_charges WHERE id = :id AND stokvel_id = :stokvel_id FOR UPDATE',
+            ['id' => $chargeId, 'stokvel_id' => $stokvelId]
+        );
+        if ($charge === null) {
+            throw new FinanceException('Charge not found.');
+        }
+
+        $amount = MoneyMath::normalize($amount);
+        if (!MoneyMath::isPositive($amount)) {
+            throw new FinanceException('Reversal amount must be positive.');
+        }
+
+        $paid = MoneyMath::normalize((string) ($charge['amount_paid'] ?? $charge['paid_amount'] ?? '0'));
+        if (MoneyMath::comp($amount, $paid) > 0) {
+            throw new FinanceException('Cannot reverse more than the charge has been paid.');
+        }
+
+        $newPaid = MoneyMath::sub($paid, $amount);
+        $totalDue = MoneyMath::normalize((string) $charge['amount']);
+        if (MoneyMath::isZero($newPaid)) {
+            $dueDate = (string) ($charge['due_date'] ?? '');
+            $today = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d');
+            $status = ($dueDate !== '' && $dueDate < $today) ? self::STATUS_OVERDUE : self::STATUS_PENDING;
+        } elseif (MoneyMath::equals($newPaid, $totalDue)) {
+            $status = self::STATUS_PAID;
+        } else {
+            $status = self::STATUS_PARTIAL;
+        }
+
+        $this->db->exec(
+            'UPDATE member_charges SET amount_paid = :amount_paid, status = :status, updated_at = :updated_at
+             WHERE id = :id AND stokvel_id = :stokvel_id',
+            [
+                'amount_paid' => $newPaid,
+                'status' => $status,
+                'updated_at' => now_utc(),
+                'id' => $chargeId,
+                'stokvel_id' => $stokvelId,
+            ]
+        );
+    }
+
     private function computePenalty(string $outstanding, string $ratePercent, string $penaltyType): string
     {
         if ($penaltyType === 'fixed') {

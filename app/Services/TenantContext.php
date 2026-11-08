@@ -53,6 +53,9 @@ final class TenantContext
         if ($stokvel === null) {
             throw new TenantException('Stokvel not found.');
         }
+        if ((string) ($stokvel['status'] ?? '') === 'suspended') {
+            throw new TenantException('This stokvel has been suspended. Contact your platform administrator.');
+        }
 
         $this->setActiveStokvelId($stokvelId);
         $this->coreTenant->setTenant($stokvel, $membership);

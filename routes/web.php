@@ -20,6 +20,7 @@ use App\Controllers\Member\ProfileController as MemberProfileController;
 use App\Controllers\Member\StatementController as MemberStatementController;
 use App\Controllers\Member\SupportController as MemberSupportController;
 use App\Controllers\Account\GetStartedController;
+use App\Controllers\Account\StokvelSuspendedController;
 use App\Controllers\Platform\AdminUserController as PlatformAdminUserController;
 use App\Controllers\Platform\AuditController as PlatformAuditController;
 use App\Controllers\Platform\DashboardController as PlatformDashboardController;
@@ -117,6 +118,7 @@ $router->get('/verify-email/notice', [AuthController::class, 'verifyNotice'], ar
 $router->post('/verify-email/resend', [AuthController::class, 'resendVerification'], array_merge($global, $auth, $csrf));
 
 $router->get('/account/get-started', [GetStartedController::class, 'index'], array_merge($global, $auth));
+$router->get('/account/stokvel-suspended', [StokvelSuspendedController::class, 'index'], array_merge($global, $auth));
 
 $router->get('/invitations/{token}', [InvitationController::class, 'show'], $global);
 // Auth is enforced inside the controller so guests get login+intended_url instead of a bare 401.
@@ -241,6 +243,8 @@ $router->post('/app/members/{id}/resign', [MemberController::class, 'resign'], $
 $router->get('/app/contributions', [ContributionController::class, 'index'], $appRead);
 $router->get('/app/contributions/create', [ContributionController::class, 'create'], $appRead);
 $router->post('/app/contributions', [ContributionController::class, 'store'], $appMut);
+$router->get('/app/contributions/{id}/edit', [ContributionController::class, 'edit'], $appRead);
+$router->post('/app/contributions/{id}/edit', [ContributionController::class, 'update'], $appMut);
 $router->get('/app/contributions/bulk', [ContributionController::class, 'bulkForm'], $appRead);
 $router->post('/app/contributions/bulk', [ContributionController::class, 'bulkStore'], $appMut);
 $router->get('/app/contributions/import', [ContributionController::class, 'importForm'], $appRead);

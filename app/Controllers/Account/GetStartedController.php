@@ -31,6 +31,9 @@ final class GetStartedController extends Controller
         if ($memberships !== []) {
             return $this->redirect(home_path_for_user($user));
         }
+        if ($auth->hasOnlySuspendedStokvels($userId)) {
+            return $this->redirect('/account/stokvel-suspended');
+        }
 
         $requests = [];
         try {
@@ -67,7 +70,16 @@ final class GetStartedController extends Controller
                 }
             } catch (HttpException $e) {
                 Session::flash('error', $e->getMessage());
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
+                try {
+                    app()->container()->get(\App\Core\Logger::class)->error('get-started claim failed', [
+                        'user_id' => $userId,
+                        'request_id' => (int) ($approved['id'] ?? 0),
+                        'stokvel_id' => (int) ($approved['stokvel_id'] ?? 0),
+                        'error' => $e->getMessage(),
+                    ]);
+                } catch (\Throwable) {
+                }
                 Session::flash('error', 'Could not open your approved stokvel. Try again or contact support.');
             }
         }

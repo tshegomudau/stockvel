@@ -47,6 +47,8 @@ $decisionMap = $decisionMap ?? [];
         'expense' => 'Expense',
         'payout' => 'Payout',
         'adjustment' => 'Financial adjustment',
+        'contribution_edit' => 'Contribution edit',
+        'contribution_edit_request' => 'Contribution edit',
     ];
     $typeLabel = $labels[$rtype] ?? ucwords(str_replace('_', ' ', $rtype));
     $reqId = (int) ($row['id'] ?? 0);
@@ -63,6 +65,11 @@ $decisionMap = $decisionMap ?? [];
     <?php if (in_array($rtype, ['membership_invite', 'membership'], true)): ?>
         <div class="text-sm text-muted">
             <a href="<?= e(url('/app/members/' . (int) ($row['reference_id'] ?? 0))) ?>">Open member profile</a>
+        </div>
+    <?php endif; ?>
+    <?php if (in_array($rtype, ['contribution_edit', 'contribution_edit_request'], true)): ?>
+        <div class="text-sm text-muted">
+            <a href="<?= e(url('/app/contributions')) ?>">Open contributions</a>
         </div>
     <?php endif; ?>
 </td>

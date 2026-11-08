@@ -105,4 +105,79 @@ return static function (TestRunner $runner): void {
             test_assert($high['min_approvals'] === 3, 'Above threshold expects 3, got ' . $high['min_approvals']);
         });
     }, 'unit');
+
+    $runner->add('Contribution edit request type uses thresholds and applies on approval', function (): void {
+        test_transaction(function () {
+            $db = test_db();
+            $stokvel = $db->fetch("SELECT id FROM stokvels WHERE slug = 'ubuntu-savings' LIMIT 1")
+                ?: $db->fetch("SELECT id FROM stokvels WHERE status = 'active' LIMIT 1");
+            test_assert($stokvel !== null, 'Active stokvel required');
+            $sid = (int) $stokvel['id'];
+
+            $membership = $db->fetch(
+                "SELECT id FROM memberships WHERE stokvel_id = :sid AND status = 'active' ORDER BY id ASC LIMIT 1",
+                ['sid' => $sid]
+            );
+            test_assert($membership !== null, 'Active membership required');
+            $memberId = (int) $membership['id'];
+
+            $users = $db->fetchAll('SELECT id FROM users ORDER BY id ASC LIMIT 3');
+            test_assert(count($users) >= 2, 'Need requester and approver');
+            $requester = (int) $users[0]['id'];
+            $approver = (int) $users[1]['id'];
+
+            /** @var \App\Services\Finance\ChartOfAccountsService $coa */
+            $coa = App::getInstance()->container()->get(\App\Services\Finance\ChartOfAccountsService::class);
+            $coa->ensureDefaultAccounts($sid);
+
+            /** @var \App\Services\Finance\ContributionService $contributions */
+            $contributions = App::getInstance()->container()->get(\App\Services\Finance\ContributionService::class);
+            $payment = $contributions->capturePayment($sid, $memberId, '250.00', 'eft', $requester, null, 'EDIT-REF');
+            $paymentId = (int) $payment['id'];
+
+            /** @var ApprovalService $approvals */
+            $approvals = App::getInstance()->container()->get(ApprovalService::class);
+            $approvals->upsertPolicy($sid, 'contribution_edit', 1, null, []);
+
+            /** @var \App\Services\Finance\ContributionEditRequestService $edits */
+            $edits = App::getInstance()->container()->get(\App\Services\Finance\ContributionEditRequestService::class);
+            $submitted = $edits->submit($sid, $paymentId, $requester, [
+                'membership_id' => $memberId,
+                'amount' => '300.00',
+                'payment_method' => 'cash',
+                'paid_at' => date('Y-m-d'),
+                'external_reference' => 'EDIT-REF-FIXED',
+                'edit_reason' => 'Corrected amount after bank statement',
+            ]);
+            test_assert(($submitted['edit_request_id'] ?? 0) > 0);
+            test_assert(($submitted['approval_request_id'] ?? 0) > 0);
+
+            $before = $db->fetch('SELECT amount, payment_method, external_reference FROM payment_transactions WHERE id = :id', ['id' => $paymentId]);
+            test_assert(\App\Support\MoneyMath::equals((string) $before['amount'], '250.00'), 'Payment must stay unchanged while pending');
+            test_assert(($before['payment_method'] ?? '') === 'eft');
+
+            $approvalRow = $db->fetch(
+                'SELECT * FROM approval_requests WHERE id = :id AND stokvel_id = :sid',
+                ['id' => $submitted['approval_request_id'], 'sid' => $sid]
+            );
+            test_assert(($approvalRow['request_type'] ?? '') === 'contribution_edit');
+            test_assert(($approvalRow['reference_type'] ?? '') === 'contribution_edit_request');
+            test_assert(\App\Support\MoneyMath::equals((string) ($approvalRow['amount'] ?? '0'), '300.00'));
+
+            $result = $approvals->approve($sid, (int) $submitted['approval_request_id'], $approver, 'Looks correct');
+            test_assert($result['finalised'] === true, 'Single-threshold contribution edit should finalise');
+            test_assert($result['status'] === 'approved');
+
+            $after = $db->fetch('SELECT amount, payment_method, external_reference FROM payment_transactions WHERE id = :id', ['id' => $paymentId]);
+            test_assert(\App\Support\MoneyMath::equals((string) $after['amount'], '300.00'), 'Approved edit should update amount');
+            test_assert(($after['payment_method'] ?? '') === 'cash');
+            test_assert(($after['external_reference'] ?? '') === 'EDIT-REF-FIXED');
+
+            $editRow = $db->fetch(
+                'SELECT status FROM contribution_edit_requests WHERE id = :id',
+                ['id' => $submitted['edit_request_id']]
+            );
+            test_assert(($editRow['status'] ?? '') === 'approved');
+        });
+    }, 'unit');
 };

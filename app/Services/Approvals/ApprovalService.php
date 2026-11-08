@@ -32,6 +32,7 @@ final class ApprovalService
         'fine_waiver' => 'Fine waiver',
         'member_change' => 'Member change request',
         'membership_invite' => 'Membership invitation',
+        'contribution_edit' => 'Contribution edit',
     ];
 
     public function __construct(private readonly Database $db)
@@ -623,6 +624,20 @@ final class ApprovalService
                     'sid' => $sid,
                 ]
             );
+            return;
+        }
+
+        if (
+            $refType === 'contribution_edit_request'
+            || (string) ($row['request_type'] ?? '') === 'contribution_edit'
+        ) {
+            /** @var \App\Services\Finance\ContributionEditRequestService $edits */
+            $edits = app()->container()->get(\App\Services\Finance\ContributionEditRequestService::class);
+            if ($status === 'approved') {
+                $edits->applyApproved($sid, $refId, $userId, $notes);
+            } else {
+                $edits->markRejected($sid, $refId, $userId, $notes);
+            }
             return;
         }
 

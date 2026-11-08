@@ -103,6 +103,137 @@ return static function (TestRunner $runner): void {
         });
     }, 'integration');
 
+    $runner->add('Suspended stokvel is excluded from usable memberships and blocks switch', function (): void {
+        test_transaction(function () {
+            $db = test_db();
+            $auth = App::getInstance()->container()->get(AuthService::class);
+            $email = 'susp_' . bin2hex(random_bytes(4)) . '@example.com';
+            $user = $auth->register([
+                'email' => $email,
+                'password' => 'Password123!',
+                'first_name' => 'Suspended',
+                'last_name' => 'Member',
+            ]);
+            $userId = (int) $user['id'];
+            $now = now_utc();
+            $stokvelId = (int) $db->insert(
+                'INSERT INTO stokvels (uuid, name, slug, status, timezone, currency_code, created_at, updated_at)
+                 VALUES (:u, :n, :s, :st, :tz, :cc, :ca, :ua)',
+                [
+                    'u' => bin2hex(random_bytes(8)),
+                    'n' => 'Suspended Circle',
+                    's' => 'suspended-circle-' . bin2hex(random_bytes(2)),
+                    'st' => 'suspended',
+                    'tz' => 'Africa/Johannesburg',
+                    'cc' => 'ZAR',
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+            $db->insert(
+                'INSERT INTO memberships (stokvel_id, user_id, member_number, status, joined_at, approved_at, created_at, updated_at)
+                 VALUES (:sid, :uid, :mn, :st, :ja, :aa, :ca, :ua)',
+                [
+                    'sid' => $stokvelId,
+                    'uid' => $userId,
+                    'mn' => 'M-00001',
+                    'st' => 'active',
+                    'ja' => $now,
+                    'aa' => $now,
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+
+            test_assert($auth->membershipsForUser($userId) === [], 'Suspended stokvel must not be usable');
+            test_assert($auth->hasOnlySuspendedStokvels($userId) === true);
+            test_assert(home_path_for_user($user) === '/account/stokvel-suspended');
+
+            $threw = false;
+            try {
+                $auth->switchStokvel($stokvelId, $userId);
+            } catch (\App\Exceptions\HttpException $e) {
+                $threw = true;
+                test_assert(str_contains(strtolower($e->getMessage()), 'suspended'));
+            }
+            test_assert($threw, 'switchStokvel must reject suspended stokvel');
+        });
+    }, 'integration');
+
+    $runner->add('Approved stokvel claim assigns chairperson membership with member number and role', function (): void {
+        test_transaction(function () {
+            $db = test_db();
+            $auth = App::getInstance()->container()->get(AuthService::class);
+            $email = 'claim_' . bin2hex(random_bytes(4)) . '@example.com';
+            $user = $auth->register([
+                'email' => $email,
+                'password' => 'Password123!',
+                'first_name' => 'Claim',
+                'last_name' => 'Chair',
+            ]);
+            $userId = (int) $user['id'];
+            $now = now_utc();
+            $stokvelId = (int) $db->insert(
+                'INSERT INTO stokvels (uuid, name, slug, status, timezone, currency_code, created_at, updated_at)
+                 VALUES (:u, :n, :s, :st, :tz, :cc, :ca, :ua)',
+                [
+                    'u' => bin2hex(random_bytes(8)),
+                    'n' => 'Claim Circle',
+                    's' => 'claim-circle-' . bin2hex(random_bytes(2)),
+                    'st' => 'active',
+                    'tz' => 'Africa/Johannesburg',
+                    'cc' => 'ZAR',
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+            $token = bin2hex(random_bytes(8));
+            $db->insert(
+                "INSERT INTO stokvel_creation_requests (
+                    public_token, requester_first_name, requester_last_name, requester_email,
+                    stokvel_name, stokvel_type, status, stokvel_id, claim_expires_at, created_at, updated_at
+                 ) VALUES (
+                    :t, 'Claim', 'Chair', :e, 'Claim Circle', 'general_savings', 'approved', :sid, :exp, :ca, :ua
+                 )",
+                [
+                    't' => $token,
+                    'e' => $email,
+                    'sid' => $stokvelId,
+                    'exp' => (new DateTimeImmutable('now', new DateTimeZone('UTC')))->modify('+48 hours')->format('Y-m-d H:i:s'),
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+
+            /** @var \App\Services\Stokvel\StokvelCreationRequestService $svc */
+            $svc = App::getInstance()->container()->get(\App\Services\Stokvel\StokvelCreationRequestService::class);
+            $claimed = $svc->claimApprovedForAuthenticatedUser($userId, $email);
+            test_assert($claimed !== null, 'Claim should return result');
+            test_assert((int) $claimed['stokvel_id'] === $stokvelId);
+
+            $membership = $db->fetch(
+                'SELECT * FROM memberships WHERE stokvel_id = :sid AND user_id = :uid LIMIT 1',
+                ['sid' => $stokvelId, 'uid' => $userId]
+            );
+            test_assert($membership !== null, 'Membership missing');
+            test_assert(($membership['status'] ?? '') === 'active');
+            test_assert(preg_match('/^M-\d+$/', (string) ($membership['member_number'] ?? '')) === 1, 'member_number required');
+
+            $roleLink = $db->fetch(
+                'SELECT mr.*, r.code FROM membership_roles mr
+                 INNER JOIN roles r ON r.id = mr.role_id
+                 WHERE mr.membership_id = :mid LIMIT 1',
+                ['mid' => (int) $membership['id']]
+            );
+            test_assert($roleLink !== null, 'Chairperson role assignment missing');
+            test_assert((string) ($roleLink['code'] ?? '') === 'chairperson');
+            test_assert((int) ($roleLink['stokvel_id'] ?? 0) === $stokvelId);
+
+            $auth->switchStokvel($stokvelId, $userId);
+            test_assert((int) (\App\Core\Session::get('active_stokvel_id') ?? 0) === $stokvelId);
+        });
+    }, 'integration');
+
     $runner->add('Platform job retry uses scheduled_for not available_at', function (): void {
         test_transaction(function () {
             $db = test_db();

@@ -59,6 +59,12 @@ final class TenantMiddleware implements MiddlewareInterface
             throw new TenantException('Stokvel not found.');
         }
 
+        // Platform-suspended tenants cannot be used by members (platform admins use /platform).
+        if ((string) ($stokvel['status'] ?? '') === 'suspended') {
+            $this->tenantContext->setActiveStokvelId(null);
+            return \App\Core\Response::redirect(url('/account/stokvel-suspended'));
+        }
+
         $permissionCodes = $this->permissions->codesForMembership($membership);
         $enabledModules = $this->loadEnabledModules($stokvelId);
 

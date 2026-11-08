@@ -12,6 +12,7 @@ use App\Core\Session;
 use App\Core\Validator;
 use App\Exceptions\FinanceException;
 use App\Services\Finance\ChartOfAccountsService;
+use App\Services\Finance\ContributionEditRequestService;
 use App\Services\Finance\ContributionService;
 use App\Services\Finance\CsvImportService;
 
@@ -67,6 +68,16 @@ final class ContributionController extends Controller
 
         $metrics = $this->monthContributionMetrics($sid);
 
+        $pendingEditIds = [];
+        try {
+            $ids = array_map(static fn ($row) => (int) ($row['id'] ?? 0), $paginator->items);
+            $pendingEditIds = app()->container()
+                ->get(ContributionEditRequestService::class)
+                ->pendingPaymentIds($sid, $ids);
+        } catch (\Throwable) {
+            $pendingEditIds = [];
+        }
+
         return $this->render('stokvel/contributions/index', [
             'title' => 'Contributions',
             'activeNav' => 'contributions',
@@ -76,7 +87,92 @@ final class ContributionController extends Controller
             'filterQ' => $q,
             'statusOptions' => $allowedStatuses,
             'metrics' => $metrics,
+            'pendingEditIds' => $pendingEditIds,
         ]);
+    }
+
+    public function edit(Request $request, string $id): Response
+    {
+        $this->requirePermission('contributions.edit');
+        $sid = $this->requireStokvel();
+        $paymentId = (int) $id;
+        $payment = $this->contributions()->getPayment($sid, $paymentId);
+        if ($payment === null) {
+            Session::flash('error', 'Contribution not found.');
+            return $this->redirect('/app/contributions');
+        }
+
+        $pending = null;
+        try {
+            $pending = app()->container()
+                ->get(ContributionEditRequestService::class)
+                ->findPendingForPayment($sid, $paymentId);
+        } catch (\Throwable) {
+            $pending = null;
+        }
+
+        $memberRow = $this->db()->fetch(
+            'SELECT p.first_name, p.last_name FROM memberships sm
+             JOIN users u ON u.id = sm.user_id
+             LEFT JOIN user_profiles p ON p.user_id = u.id
+             WHERE sm.id = :id AND sm.stokvel_id = :sid LIMIT 1',
+            ['id' => (int) $payment['membership_id'], 'sid' => $sid]
+        );
+
+        return $this->render('stokvel/contributions/edit', [
+            'title' => 'Edit contribution',
+            'activeNav' => 'contributions',
+            'navContext' => 'app',
+            'payment' => $payment,
+            'memberName' => trim(($memberRow['first_name'] ?? '') . ' ' . ($memberRow['last_name'] ?? '')),
+            'members' => $this->activeMembers(),
+            'paymentMethods' => ContributionService::PAYMENT_METHODS,
+            'pendingEdit' => $pending,
+        ]);
+    }
+
+    public function update(Request $request, string $id): Response
+    {
+        $this->requirePermission('contributions.edit');
+        $sid = $this->requireStokvel();
+        $paymentId = (int) $id;
+        $data = [
+            'membership_id' => (int) $request->input('membership_id'),
+            'amount' => (string) $request->input('amount'),
+            'paid_at' => (string) $request->input('paid_at', date('Y-m-d')),
+            'payment_method' => (string) $request->input('payment_method', 'cash'),
+            'external_reference' => trim((string) $request->input('reference', '')),
+            'edit_reason' => trim((string) $request->input('edit_reason', '')),
+        ];
+        $validator = Validator::make($data, [
+            'membership_id' => 'required|integer',
+            'amount' => 'required|numeric',
+            'paid_at' => 'required|date',
+            'edit_reason' => 'required|min:3',
+        ]);
+        if ($validator->fails()) {
+            $this->flashOld($request);
+            Session::flash('error', 'Please check the edit form and try again.');
+            return $this->redirect('/app/contributions/' . $paymentId . '/edit');
+        }
+
+        try {
+            app()->container()->get(ContributionEditRequestService::class)->submit(
+                $sid,
+                $paymentId,
+                (int) $this->userId(),
+                $data
+            );
+            Session::flash('success', 'Contribution edit submitted for approval.');
+            return $this->redirect('/app/approvals');
+        } catch (FinanceException $e) {
+            $this->flashOld($request);
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/contributions/' . $paymentId . '/edit');
+        } catch (\App\Exceptions\HttpException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/contributions');
+        }
     }
 
     public function create(Request $request): Response

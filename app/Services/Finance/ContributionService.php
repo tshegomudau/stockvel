@@ -177,6 +177,134 @@ final class ContributionService
         return $this->enrichPayment($stokvelId, $row);
     }
 
+    /**
+     * Apply an approved contribution correction (allocations + ledger rebuilt when amount/member change).
+     *
+     * @param array{membership_id?:int|string,amount?:string,payment_method?:string,paid_at?:string,external_reference?:string|null} $proposed
+     */
+    public function applyApprovedEdit(
+        int $stokvelId,
+        int $paymentId,
+        array $proposed,
+        int $actedByUserId,
+        string $reason = ''
+    ): array {
+        return $this->db->transaction(function () use ($stokvelId, $paymentId, $proposed, $actedByUserId, $reason): array {
+            $payment = $this->db->fetch(
+                'SELECT * FROM payment_transactions WHERE id = :id AND stokvel_id = :sid LIMIT 1 FOR UPDATE',
+                ['id' => $paymentId, 'sid' => $stokvelId]
+            );
+            if ($payment === null) {
+                throw new FinanceException('Contribution not found.');
+            }
+            if ((string) ($payment['status'] ?? '') !== self::STATUS_COMPLETED) {
+                throw new FinanceException('Only completed contributions can be edited.');
+            }
+
+            $oldMemberId = (int) $payment['membership_id'];
+            $oldAmount = MoneyMath::normalize((string) $payment['amount']);
+            $newMemberId = (int) ($proposed['membership_id'] ?? $oldMemberId);
+            $newAmount = MoneyMath::normalize((string) ($proposed['amount'] ?? $oldAmount));
+            if (!MoneyMath::isPositive($newAmount)) {
+                throw new FinanceException('Payment amount must be positive.');
+            }
+
+            $method = (string) ($proposed['payment_method'] ?? $payment['payment_method'] ?? 'cash');
+            $this->assertPaymentMethod($method);
+
+            $paidAtRaw = (string) ($proposed['paid_at'] ?? $payment['paid_at'] ?? now_utc());
+            $paidAt = $this->normalizePaidAt($paidAtRaw);
+
+            $reference = array_key_exists('external_reference', $proposed)
+                ? ($proposed['external_reference'] !== null && $proposed['external_reference'] !== ''
+                    ? trim((string) $proposed['external_reference'])
+                    : null)
+                : ($payment['external_reference'] ?? null);
+
+            $member = $this->db->fetch(
+                'SELECT id FROM memberships WHERE id = :id AND stokvel_id = :sid LIMIT 1',
+                ['id' => $newMemberId, 'sid' => $stokvelId]
+            );
+            if ($member === null) {
+                throw new FinanceException('Member not found.');
+            }
+
+            $needsRebuild = $oldMemberId !== $newMemberId || !MoneyMath::equals($oldAmount, $newAmount);
+            $meta = $this->parsePaymentNotes($payment['notes'] ?? null);
+            $journalId = isset($meta['journal_entry_id']) ? (int) $meta['journal_entry_id'] : 0;
+
+            if ($needsRebuild) {
+                $allocations = $this->db->fetchAll(
+                    'SELECT * FROM payment_allocations
+                     WHERE stokvel_id = :sid AND payment_transaction_id = :pid',
+                    ['sid' => $stokvelId, 'pid' => $paymentId]
+                );
+                foreach ($allocations as $alloc) {
+                    $chargeId = (int) ($alloc['member_charge_id'] ?? 0);
+                    if ($chargeId > 0) {
+                        $this->charges->reverseAllocation(
+                            $stokvelId,
+                            $chargeId,
+                            MoneyMath::normalize((string) $alloc['amount'])
+                        );
+                    }
+                }
+                $this->db->exec(
+                    'DELETE FROM payment_allocations
+                     WHERE stokvel_id = :sid AND payment_transaction_id = :pid',
+                    ['sid' => $stokvelId, 'pid' => $paymentId]
+                );
+
+                if ($journalId > 0) {
+                    try {
+                        $this->ledger->reverse(
+                            $stokvelId,
+                            $journalId,
+                            $actedByUserId,
+                            $reason !== '' ? $reason : 'Contribution edit'
+                        );
+                    } catch (FinanceException) {
+                        // Journal may already be reversed; continue rebuilding.
+                    }
+                }
+            }
+
+            $now = now_utc();
+            $this->db->exec(
+                'UPDATE payment_transactions
+                 SET membership_id = :mid, amount = :amount, payment_method = :method,
+                     paid_at = :paid_at, external_reference = :eref, updated_at = :ua
+                 WHERE id = :id AND stokvel_id = :sid',
+                [
+                    'mid' => $newMemberId,
+                    'amount' => $newAmount,
+                    'method' => $method,
+                    'paid_at' => $paidAt,
+                    'eref' => $reference,
+                    'ua' => $now,
+                    'id' => $paymentId,
+                    'sid' => $stokvelId,
+                ]
+            );
+
+            if ($needsRebuild) {
+                $allocation = $this->allocatePaymentToCharges($stokvelId, $paymentId, $newMemberId, $newAmount);
+                $receipt = (string) ($payment['transaction_ref'] ?? ('RCP-' . $paymentId));
+                $newJournalId = $this->postPaymentLedger(
+                    $stokvelId,
+                    $paymentId,
+                    $newMemberId,
+                    $newAmount,
+                    $actedByUserId,
+                    $receipt
+                );
+                $this->updatePaymentMeta($stokvelId, $paymentId, $allocation, $newJournalId);
+            }
+
+            return $this->getPayment($stokvelId, $paymentId) ?? [];
+        });
+    }
+
     public function getMemberCreditBalance(int $stokvelId, int $memberId): string
     {
         $rows = $this->db->fetchAll(
