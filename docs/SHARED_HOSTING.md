@@ -184,6 +184,29 @@ MAIL_PASSWORD=...
 | `Call to undefined function …\getmypid()` | Host disables PID functions; current `CronRunner` falls back — redeploy latest code |
 | Class / PHPMailer missing after Git pull | `vendor/` missing — upload from local `composer install --no-dev` |
 | Git pull wiped config | `.env` was never meant to be in the repo — restore from backup; do not `git clean` the app root |
+| `PHPMailer SMTP failed: Could not connect to SMTP host` | **Not bad credentials** (those say “authenticate”). Shared host blocked outbound SMTP. See **SMTP on shared hosting** below. |
+
+## SMTP on shared hosting (SMTP2GO)
+
+Dev works / prod fails with **“Could not connect to SMTP host / Failed to connect to server”** almost always means the **host firewall blocked the port**, not wrong username/password.
+
+1. In production `.env`, try alternate SMTP2GO ports (same username/password):
+
+```env
+MAIL_DRIVER=smtp2go
+MAIL_HOST=mail-eu.smtp2go.com
+MAIL_PORT=587
+MAIL_ENCRYPTION=tls
+MAIL_PORT_FALLBACKS=587,465,8025,80
+```
+
+Other ports to try: `465` + `MAIL_ENCRYPTION=ssl`, or `8025` / `80` + `tls`.
+
+2. Confirm PHP has `openssl` enabled (cPanel → Select PHP Version → Extensions).
+3. If it connects but TLS fails, temporarily test `MAIL_SMTP_OPTIONS_INSECURE=true`, then fix the host CA bundle and turn it off.
+4. Ask the host to allow outbound TCP to `mail-eu.smtp2go.com` / `mail.smtp2go.com` on 587, 465, 2525, 8025.
+5. SMTP2GO must have the From domain verified — that affects delivery after connect, not “could not connect”.
+6. Check `storage/logs` for which host:port was attempted; retry failed jobs after changing `.env`.
 
 ## Security checklist (temporary host)
 

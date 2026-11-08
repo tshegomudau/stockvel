@@ -89,67 +89,175 @@ final class MailChannel
             ]));
         }
 
-        $mail = new PHPMailer(true);
-        try {
-            $mail->isSMTP();
-            $mail->Host = $config['host'];
-            $mail->Port = $config['port'];
-            $mail->SMTPAuth = true;
-            $mail->Username = $config['username'];
-            $mail->Password = $config['password'];
-            $mail->CharSet = PHPMailer::CHARSET_UTF8;
-            $mail->Timeout = (int) env('MAIL_TIMEOUT', 30);
-
-            match ($config['encryption']) {
-                'ssl' => $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS,
-                'tls', 'starttls' => $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS,
-                default => $mail->SMTPSecure = '',
-            };
-            if ($config['encryption'] === '' || $config['encryption'] === 'none') {
-                $mail->SMTPAutoTLS = false;
+        $attempts = $this->smtpAttemptConfigs($config, $smtp2goDefaults);
+        $lastError = '';
+        foreach ($attempts as $attempt) {
+            try {
+                $this->sendSmtpOnce($recipient, $subject, $body, $payload, $attempt);
+                if ($attempt['port'] !== $config['port'] || $attempt['encryption'] !== $config['encryption']) {
+                    $this->log(
+                        'info',
+                        'SMTP sent via fallback ' . $attempt['host'] . ':' . $attempt['port']
+                        . ' (' . ($attempt['encryption'] !== '' ? $attempt['encryption'] : 'none') . ')'
+                    );
+                }
+                return true;
+            } catch (PhpMailerException $e) {
+                $lastError = $e->getMessage();
+                $this->log(
+                    'error',
+                    'PHPMailer SMTP failed on ' . $attempt['host'] . ':' . $attempt['port']
+                    . ' (' . ($attempt['encryption'] !== '' ? $attempt['encryption'] : 'none') . '): ' . $lastError
+                );
+                if (!$this->isConnectionFailure($lastError)) {
+                    // Auth / from / recipient errors will not be fixed by another port.
+                    return false;
+                }
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                $this->log('error', 'Mail send failed: ' . $lastError);
+                return false;
             }
-
-            // Shared hosts sometimes need this when OpenSSL CA bundle is incomplete.
-            if (filter_var(env('MAIL_SMTP_OPTIONS_INSECURE', false), FILTER_VALIDATE_BOOL)) {
-                $mail->SMTPOptions = [
-                    'ssl' => [
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
-                        'allow_self_signed' => true,
-                    ],
-                ];
-            }
-
-            $fromAddress = $config['from_address'];
-            $fromName = $config['from_name'];
-            $mail->setFrom($fromAddress, $fromName);
-            $mail->addAddress($recipient);
-
-            $replyTo = trim((string) env('MAIL_REPLY_TO', ''));
-            if ($replyTo !== '') {
-                $mail->addReplyTo($replyTo, $fromName);
-            }
-
-            $mail->Subject = $subject;
-            $isHtml = !empty($payload['html']) || !empty($payload['is_html']);
-            if ($isHtml) {
-                $mail->isHTML(true);
-                $mail->Body = (string) ($payload['html'] ?? $body);
-                $mail->AltBody = strip_tags((string) ($payload['text'] ?? $body));
-            } else {
-                $mail->isHTML(false);
-                $mail->Body = $body;
-            }
-
-            $mail->send();
-            return true;
-        } catch (PhpMailerException $e) {
-            $this->log('error', 'PHPMailer SMTP failed: ' . $e->getMessage());
-            return false;
-        } catch (\Throwable $e) {
-            $this->log('error', 'Mail send failed: ' . $e->getMessage());
-            return false;
         }
+
+        $this->log(
+            'error',
+            'SMTP could not connect after trying ports '
+            . implode(', ', array_map(static fn (array $a): string => (string) $a['port'], $attempts))
+            . '. Shared hosts often block outbound SMTP — try MAIL_PORT=587 or 465, or ask the host to allow mail-eu.smtp2go.com / mail.smtp2go.com. Last error: '
+            . $lastError
+        );
+        return false;
+    }
+
+    /**
+     * @param array{
+     *   host: string,
+     *   port: int,
+     *   username: string,
+     *   password: string,
+     *   encryption: string,
+     *   from_address: string,
+     *   from_name: string
+     * } $config
+     */
+    private function sendSmtpOnce(
+        string $recipient,
+        string $subject,
+        string $body,
+        array $payload,
+        array $config
+    ): void {
+        $mail = new PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host = $config['host'];
+        $mail->Port = $config['port'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $config['username'];
+        $mail->Password = $config['password'];
+        $mail->CharSet = PHPMailer::CHARSET_UTF8;
+        $mail->Timeout = (int) env('MAIL_TIMEOUT', 30);
+
+        match ($config['encryption']) {
+            'ssl' => $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS,
+            'tls', 'starttls' => $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS,
+            default => $mail->SMTPSecure = '',
+        };
+        if ($config['encryption'] === '' || $config['encryption'] === 'none') {
+            $mail->SMTPAutoTLS = false;
+        }
+
+        // Shared hosts sometimes need this when OpenSSL CA bundle is incomplete.
+        if (filter_var(env('MAIL_SMTP_OPTIONS_INSECURE', false), FILTER_VALIDATE_BOOL)) {
+            $mail->SMTPOptions = [
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true,
+                ],
+            ];
+        }
+
+        $fromAddress = $config['from_address'];
+        $fromName = $config['from_name'];
+        $mail->setFrom($fromAddress, $fromName);
+        $mail->addAddress($recipient);
+
+        $replyTo = trim((string) env('MAIL_REPLY_TO', ''));
+        if ($replyTo !== '') {
+            $mail->addReplyTo($replyTo, $fromName);
+        }
+
+        $mail->Subject = $subject;
+        $isHtml = !empty($payload['html']) || !empty($payload['is_html']);
+        if ($isHtml) {
+            $mail->isHTML(true);
+            $mail->Body = (string) ($payload['html'] ?? $body);
+            $mail->AltBody = strip_tags((string) ($payload['text'] ?? $body));
+        } else {
+            $mail->isHTML(false);
+            $mail->Body = $body;
+        }
+
+        $mail->send();
+    }
+
+    /**
+     * @param array{
+     *   host: string,
+     *   port: int,
+     *   username: string,
+     *   password: string,
+     *   encryption: string,
+     *   from_address: string,
+     *   from_name: string
+     * } $config
+     * @return list<array{
+     *   host: string,
+     *   port: int,
+     *   username: string,
+     *   password: string,
+     *   encryption: string,
+     *   from_address: string,
+     *   from_name: string
+     * }>
+     */
+    private function smtpAttemptConfigs(array $config, bool $smtp2goDefaults): array
+    {
+        $attempts = [$config];
+        $fallbackRaw = trim((string) env('MAIL_PORT_FALLBACKS', $smtp2goDefaults ? '587,465,8025,80' : ''));
+        if ($fallbackRaw === '') {
+            return $attempts;
+        }
+
+        $seen = [$config['port'] => true];
+        foreach (preg_split('/\s*,\s*/', $fallbackRaw) ?: [] as $portText) {
+            $port = (int) $portText;
+            if ($port < 1 || isset($seen[$port])) {
+                continue;
+            }
+            $seen[$port] = true;
+            $attempt = $config;
+            $attempt['port'] = $port;
+            $attempt['encryption'] = match (true) {
+                in_array($port, [465, 8465, 443], true) => 'ssl',
+                in_array($port, [587, 2525, 8025, 80, 25], true) => 'tls',
+                default => $config['encryption'],
+            };
+            $attempts[] = $attempt;
+        }
+
+        return $attempts;
+    }
+
+    private function isConnectionFailure(string $message): bool
+    {
+        $m = strtolower($message);
+        return str_contains($m, 'could not connect')
+            || str_contains($m, 'failed to connect')
+            || str_contains($m, 'connection refused')
+            || str_contains($m, 'timed out')
+            || str_contains($m, 'network is unreachable');
     }
 
     /**
