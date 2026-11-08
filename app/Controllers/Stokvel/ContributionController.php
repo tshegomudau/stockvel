@@ -493,7 +493,7 @@ final class ContributionController extends Controller
         $lines = preg_split('/\R/', trim($content)) ?: [];
         $header = array_map(
             static fn ($h) => strtolower(trim((string) $h)),
-            str_getcsv(array_shift($lines) ?? '')
+            csv_str_get(array_shift($lines) ?? '')
         );
         $imported = 0;
         $errors = [];
@@ -502,7 +502,7 @@ final class ContributionController extends Controller
             if (trim($line) === '') {
                 continue;
             }
-            $cols = str_getcsv($line);
+            $cols = csv_str_get($line);
             $row = [];
             foreach ($header as $idx => $key) {
                 $row[$key] = trim((string) ($cols[$idx] ?? ''));

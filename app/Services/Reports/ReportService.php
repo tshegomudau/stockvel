@@ -428,13 +428,13 @@ final class ReportService
             return '';
         }
 
-        fputcsv($out, $headers);
+        csv_fput($out, $headers);
         foreach ($rows as $row) {
             $line = [];
             foreach ($headers as $header) {
                 $line[] = $row[$header] ?? '';
             }
-            fputcsv($out, $line);
+            csv_fput($out, $line);
         }
 
         rewind($out);

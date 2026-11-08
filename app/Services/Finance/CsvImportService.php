@@ -149,7 +149,7 @@ final class CsvImportService
             throw new FinanceException('CSV content is empty.');
         }
 
-        $rawHeaders = str_getcsv($lines[0]);
+        $rawHeaders = csv_str_get($lines[0]);
         $headers = [];
         foreach ($rawHeaders as $h) {
             $key = strtolower(trim((string) $h));
@@ -158,7 +158,7 @@ final class CsvImportService
 
         $rows = [];
         for ($i = 1, $c = count($lines); $i < $c; ++$i) {
-            $values = str_getcsv($lines[$i]);
+            $values = csv_str_get($lines[$i]);
             if (count($values) === 1 && trim((string) $values[0]) === '') {
                 continue;
             }

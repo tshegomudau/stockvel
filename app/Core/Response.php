@@ -49,7 +49,7 @@ final class Response
     public static function csv(string $filename, array $headers, array $rows): self
     {
         $fh = fopen('php://temp', 'r+');
-        fputcsv($fh, $headers);
+        csv_fput($fh, $headers);
         foreach ($rows as $row) {
             $safe = array_map(static function ($cell) {
                 $cell = (string) $cell;
@@ -58,7 +58,7 @@ final class Response
                 }
                 return $cell;
             }, $row);
-            fputcsv($fh, $safe);
+            csv_fput($fh, $safe);
         }
         rewind($fh);
         $content = stream_get_contents($fh) ?: '';

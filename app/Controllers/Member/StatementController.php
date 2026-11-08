@@ -228,16 +228,16 @@ final class StatementController extends Controller
         if ($fh === false) {
             throw new HttpException(500, 'Unable to generate CSV.');
         }
-        fputcsv($fh, ['Stokvel', $stokvel['name'] ?? '']);
-        fputcsv($fh, ['Member', trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''))]);
-        fputcsv($fh, ['Member number', $membership['member_number'] ?? $membership['id'] ?? '']);
-        fputcsv($fh, ['Period from', $from]);
-        fputcsv($fh, ['Period to', $to]);
-        fputcsv($fh, ['Opening balance (amount owing)', number_format($openingBalance, 2, '.', '')]);
-        fputcsv($fh, []);
-        fputcsv($fh, ['Date', 'Reference', 'Description', 'Debit', 'Credit', 'Running balance']);
+        csv_fput($fh, ['Stokvel', $stokvel['name'] ?? '']);
+        csv_fput($fh, ['Member', trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''))]);
+        csv_fput($fh, ['Member number', $membership['member_number'] ?? $membership['id'] ?? '']);
+        csv_fput($fh, ['Period from', $from]);
+        csv_fput($fh, ['Period to', $to]);
+        csv_fput($fh, ['Opening balance (amount owing)', number_format($openingBalance, 2, '.', '')]);
+        csv_fput($fh, []);
+        csv_fput($fh, ['Date', 'Reference', 'Description', 'Debit', 'Credit', 'Running balance']);
         foreach ($lines as $line) {
-            fputcsv($fh, [
+            csv_fput($fh, [
                 $line['entry_date'],
                 $line['reference'],
                 $line['description'],

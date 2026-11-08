@@ -28,6 +28,27 @@ function e(?string $value): string
 }
 
 /**
+ * PHP 8.4+ requires an explicit $escape for str_getcsv (default will change).
+ *
+ * @return list<string|null>
+ */
+function csv_str_get(string $line, string $separator = ',', string $enclosure = '"', string $escape = '\\'): array
+{
+    return str_getcsv($line, $separator, $enclosure, $escape);
+}
+
+/**
+ * PHP 8.4+ requires an explicit $escape for fputcsv (default will change).
+ *
+ * @param resource $stream
+ * @param list<null|scalar> $fields
+ */
+function csv_fput($stream, array $fields, string $separator = ',', string $enclosure = '"', string $escape = '\\'): int|false
+{
+    return fputcsv($stream, $fields, $separator, $enclosure, $escape);
+}
+
+/**
  * Re-sanitize HTML on output so only an allowlisted tag set is rendered.
  */
 function safe_html(?string $html): string

@@ -394,7 +394,7 @@ final class MemberController extends Controller
             Session::flash('error', 'CSV is empty.');
             return $this->redirect('/app/members/import');
         }
-        $header = str_getcsv(array_shift($lines) ?? '');
+        $header = csv_str_get(array_shift($lines) ?? '');
         $header = array_map(static fn ($h) => strtolower(trim((string) $h)), $header);
         $imported = 0;
         $errors = [];
@@ -402,7 +402,7 @@ final class MemberController extends Controller
             if (trim($line) === '') {
                 continue;
             }
-            $cols = str_getcsv($line);
+            $cols = csv_str_get($line);
             $row = [];
             foreach ($header as $idx => $key) {
                 $row[$key] = trim((string) ($cols[$idx] ?? ''));
