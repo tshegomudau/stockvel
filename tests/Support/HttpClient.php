@@ -162,7 +162,13 @@ final class HttpClient
         Session::start();
         $_SERVER['REQUEST_METHOD'] = $method;
         $_SERVER['REQUEST_URI'] = $path;
-        $_GET = [];
+        $query = [];
+        $queryString = parse_url($path, PHP_URL_QUERY);
+        if (is_string($queryString) && $queryString !== '') {
+            parse_str($queryString, $query);
+        }
+        $_GET = $query;
+        $_SERVER['QUERY_STRING'] = is_string($queryString) ? $queryString : '';
         $_POST = $method === 'POST' ? $form : [];
         $_REQUEST = array_merge($_GET, $_POST);
         foreach ($headers as $k => $v) {

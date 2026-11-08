@@ -27,9 +27,13 @@ final class AuditController extends Controller
         /** @var PermissionService $perms */
         $perms = app()->container()->get(PermissionService::class);
         $source = trim((string) $request->query('source', 'audit'));
+        $canViewAppLogs = $perms->platformCan('application_logs.view')
+            || $perms->platformCan('audit_logs.view');
         if ($source === 'application') {
-            $perms->requirePlatformPermission('application_logs.view');
-            return $this->applicationLogs($request);
+            if (!$canViewAppLogs) {
+                $perms->requirePlatformPermission('application_logs.view');
+            }
+            return $this->applicationLogs($request, true);
         }
         $perms->requirePlatformPermission('audit_logs.view');
 
@@ -109,11 +113,11 @@ final class AuditController extends Controller
                 'q' => $q,
             ],
             'appLogItems' => null,
-            'canViewAppLogs' => $perms->platformCan('application_logs.view'),
+            'canViewAppLogs' => $canViewAppLogs,
         ]);
     }
 
-    private function applicationLogs(Request $request): Response
+    private function applicationLogs(Request $request, bool $canViewAppLogs = true): Response
     {
         $page = $this->page($request);
         $perPage = $this->perPage($request);
@@ -126,6 +130,9 @@ final class AuditController extends Controller
         ];
         $result = $reader->search($filters, $page, $perPage);
 
+        $queryBase = array_filter(array_merge($filters, ['source' => 'application']), static fn ($v) => $v !== null && $v !== '');
+        $totalPages = max(1, (int) ceil($result['total'] / max(1, $result['per_page'])));
+
         return $this->render('platform/audit/index', [
             'title' => 'Application logs',
             'activeNav' => 'platform-audit',
@@ -135,8 +142,10 @@ final class AuditController extends Controller
             'appLogTotal' => $result['total'],
             'appLogPage' => $result['page'],
             'appLogPerPage' => $result['per_page'],
+            'appLogTotalPages' => $totalPages,
+            'appLogQuery' => $queryBase,
             'filters' => array_merge($filters, ['source' => 'application']),
-            'canViewAppLogs' => true,
+            'canViewAppLogs' => $canViewAppLogs,
         ]);
     }
 }

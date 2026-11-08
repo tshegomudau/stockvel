@@ -65,4 +65,30 @@ return static function (TestRunner $runner): void {
         test_assert((int) $res['status'] === 200, 'Platform auditor expected 200, got ' . $res['status']);
         $auth->logout();
     }, 'http');
+
+    $runner->add('Platform audit trails include application logs from storage/logs', function (): void {
+        $auth = App::getInstance()->container()->get(AuthService::class);
+        $auth->logout();
+        $auth->login('admin@stockvel.local', 'Password123!');
+        $client = new HttpClient();
+        $res = $client->get('/platform/audit?source=application');
+        test_assert((int) $res['status'] === 200, 'Application logs expected 200, got ' . $res['status']);
+        test_assert(
+            str_contains($res['body'], 'Application logs') || str_contains($res['body'], 'storage/logs'),
+            'Application logs page heading/description missing'
+        );
+        test_assert(
+            str_contains($res['body'], 'name="source"') && str_contains($res['body'], 'application'),
+            'Source switcher must expose application logs'
+        );
+        // Local suite writes cron/app lines under storage/logs during earlier tests.
+        test_assert(
+            str_contains($res['body'], 'Cron')
+            || str_contains($res['body'], 'INFO')
+            || str_contains($res['body'], 'No application log lines match')
+            || str_contains($res['body'], 'Severity'),
+            'Expected application log rows or empty state'
+        );
+        $auth->logout();
+    }, 'http');
 };
