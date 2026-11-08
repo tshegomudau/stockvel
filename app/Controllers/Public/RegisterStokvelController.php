@@ -17,10 +17,34 @@ final class RegisterStokvelController extends Controller
 {
     public function show(Request $request): Response
     {
+        $user = $this->user();
+        if ($user) {
+            $email = strtolower(trim((string) ($user['email'] ?? '')));
+            if ($email !== '') {
+                try {
+                    $open = $this->db()->fetch(
+                        "SELECT public_token, status FROM stokvel_creation_requests
+                         WHERE requester_email = :e AND status IN ('pending', 'approved')
+                         ORDER BY id DESC LIMIT 1",
+                        ['e' => $email]
+                    );
+                    if ($open) {
+                        Session::flash('info', 'You already have a stokvel request in progress.');
+                        if ((string) $open['status'] === 'approved') {
+                            return $this->redirect('/account/get-started');
+                        }
+                        return $this->redirect('/stokvel-requests/' . rawurlencode((string) $open['public_token']));
+                    }
+                } catch (\Throwable) {
+                    // Fall through to form.
+                }
+            }
+        }
+
         return $this->render('public/start-stokvel', [
             'title' => 'Create a stokvel',
             'stokvelTypeOptions' => StokvelTypeCatalog::activeOptions($this->db()),
-            'user' => $this->user(),
+            'user' => $user,
         ], 'layouts/guest');
     }
 

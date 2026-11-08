@@ -278,12 +278,30 @@ function money(float|string|null $amount, string $currency = 'ZAR'): string
     return $prefix . ' ' . $formatted;
 }
 
+function app_timezone(): string
+{
+    try {
+        $tz = (string) config('app.timezone', env('APP_TIMEZONE', 'Africa/Johannesburg'));
+    } catch (Throwable) {
+        $tz = (string) env('APP_TIMEZONE', 'Africa/Johannesburg');
+    }
+    if ($tz === '') {
+        $tz = 'Africa/Johannesburg';
+    }
+    try {
+        new DateTimeZone($tz);
+        return $tz;
+    } catch (Throwable) {
+        return 'Africa/Johannesburg';
+    }
+}
+
 function sa_date(?string $datetime, string $format = 'd M Y'): string
 {
     if ($datetime === null || $datetime === '') {
         return '';
     }
-    $tz = env('APP_TIMEZONE', 'Africa/Johannesburg');
+    $tz = app_timezone();
     $dt = new DateTimeImmutable($datetime, new DateTimeZone('UTC'));
     return $dt->setTimezone(new DateTimeZone($tz))->format($format);
 }
@@ -291,6 +309,21 @@ function sa_date(?string $datetime, string $format = 'd M Y'): string
 function sa_datetime(?string $datetime): string
 {
     return sa_date($datetime, 'd M Y H:i');
+}
+
+/**
+ * Human-readable datetime for outbound emails, using APP_TIMEZONE / config app.timezone.
+ * Example: "08 Nov 2026 14:30 SAST".
+ */
+function sa_datetime_email(?string $datetime, string $format = 'd M Y H:i'): string
+{
+    if ($datetime === null || $datetime === '') {
+        return '';
+    }
+    $tz = app_timezone();
+    $dt = (new DateTimeImmutable($datetime, new DateTimeZone('UTC')))
+        ->setTimezone(new DateTimeZone($tz));
+    return $dt->format($format) . ' (' . $dt->format('T') . ')';
 }
 
 function now_utc(): string

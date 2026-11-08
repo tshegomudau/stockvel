@@ -25,7 +25,7 @@ final class FeatureSettingsController extends Controller
         $settings = app()->container()->get(PlatformSettingsService::class);
 
         return $this->render('platform/features', [
-            'title' => 'Storage & default editor flags',
+            'title' => 'Platform settings',
             'activeNav' => 'platform-features',
             'navContext' => 'platform',
             'settings' => $settings->all(),
@@ -45,6 +45,14 @@ final class FeatureSettingsController extends Controller
             $driver = 'local';
         }
 
+        $minLength = (int) $request->input('password_min_length', 8);
+        if ($minLength < 6) {
+            $minLength = 6;
+        }
+        if ($minLength > 128) {
+            $minLength = 128;
+        }
+
         $payload = [
             'file_uploads_enabled' => $request->input('file_uploads_enabled') ? true : false,
             'storage_driver' => $driver,
@@ -57,6 +65,11 @@ final class FeatureSettingsController extends Controller
             'wysiwyg_images_enabled' => $request->input('wysiwyg_images_enabled') ? true : false,
             'wysiwyg_tables_enabled' => $request->input('wysiwyg_tables_enabled') ? true : false,
             'wysiwyg_colors_enabled' => $request->input('wysiwyg_colors_enabled') ? true : false,
+            'password_min_length' => $minLength,
+            'password_require_upper' => $request->input('password_require_upper') ? true : false,
+            'password_require_lower' => $request->input('password_require_lower') ? true : false,
+            'password_require_number' => $request->input('password_require_number') ? true : false,
+            'password_require_special' => $request->input('password_require_special') ? true : false,
         ];
 
         // Keep existing application key when the field is left blank (password-style).

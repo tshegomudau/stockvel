@@ -22,6 +22,7 @@ use App\Services\AuditService;
 use App\Services\Auth\AuthService;
 use App\Services\Auth\EmailVerificationService;
 use App\Services\Auth\MfaService;
+use App\Services\Auth\PasswordPolicyService;
 use App\Services\Auth\PasswordResetService;
 use App\Services\Auth\RememberTokenService;
 use App\Services\Finance\ChargeService;
@@ -195,6 +196,9 @@ return static function (Container $container, string $basePath, array $dbConfig)
         $c->get(Database::class)
     ));
     $container->singleton(ReconciliationService::class, static fn (Container $c) => new ReconciliationService($c->get(Database::class)));
+    $container->singleton(PasswordPolicyService::class, static fn (Container $c) => new PasswordPolicyService(
+        $c->get(PlatformSettingsService::class)
+    ));
     $container->singleton(PlatformSettingsService::class, static fn (Container $c) => new PlatformSettingsService(
         $c->get(Database::class)
     ));

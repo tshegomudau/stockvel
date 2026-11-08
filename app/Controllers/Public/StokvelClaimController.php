@@ -43,11 +43,19 @@ final class StokvelClaimController extends Controller
             ['e' => strtolower((string) $row['requester_email'])]
         );
 
+        $passwordPolicy = [];
+        try {
+            $passwordPolicy = app()->container()->get(\App\Services\Auth\PasswordPolicyService::class)->clientConfig();
+        } catch (\Throwable) {
+            $passwordPolicy = [];
+        }
+
         return $this->render('public/stokvel-claim', [
             'title' => 'Claim your stokvel',
             'token' => $token,
             'request' => $row,
             'existingAccount' => $existingUser !== null,
+            'passwordPolicy' => $passwordPolicy,
         ], 'layouts/guest');
     }
 
@@ -67,13 +75,11 @@ final class StokvelClaimController extends Controller
             $auth = app()->container()->get(AuthService::class);
             if ($user) {
                 $auth->establishSession($user);
-                Session::set('active_stokvel_id', $result['stokvel_id']);
-                Session::set('stokvel_id', $result['stokvel_id']);
-                if (method_exists($auth, 'switchStokvel')) {
-                    try {
-                        $auth->switchStokvel((int) $result['user_id'], (int) $result['stokvel_id']);
-                    } catch (\Throwable) {
-                    }
+                try {
+                    $auth->switchStokvel((int) $result['stokvel_id'], (int) $result['user_id']);
+                } catch (\Throwable) {
+                    Session::set('active_stokvel_id', $result['stokvel_id']);
+                    Session::set('stokvel_id', $result['stokvel_id']);
                 }
             }
             Session::flash('success', 'Welcome! Your stokvel is ready.');

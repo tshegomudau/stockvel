@@ -1,10 +1,29 @@
 <?= view('partials/page-header', [
-    'title' => 'Storage & default editor flags',
-    'description' => 'Backblaze/local storage credentials are global. Upload and WYSIWYG checkboxes here are defaults for stokvels that have not set their own values — manage per-stokvel overrides on each stokvel’s platform page.',
+    'title' => 'Platform settings',
+    'description' => 'Global storage credentials, default editor flags, and password requirements for registration and resets.',
 ], null) ?>
 <?php $s = $settings ?? []; ?>
 <form method="post" action="<?= e(url('/platform/features')) ?>" class="form-stack card">
     <?= csrf_field() ?>
+
+    <h2 class="h3">Password requirements</h2>
+    <p class="form-help">Applied when users register, reset a password, claim a stokvel, or change their password.</p>
+    <div class="form-group">
+        <label class="form-label" for="password_min_length">Minimum length</label>
+        <input class="form-control" type="number" id="password_min_length" name="password_min_length" min="6" max="128" value="<?= e((string) ($s['password_min_length'] ?? 8)) ?>">
+    </div>
+    <div class="form-group">
+        <label class="form-check"><input type="checkbox" name="password_require_upper" value="1"<?= !empty($s['password_require_upper']) ? ' checked' : '' ?>> Require uppercase letter</label>
+    </div>
+    <div class="form-group">
+        <label class="form-check"><input type="checkbox" name="password_require_lower" value="1"<?= !empty($s['password_require_lower']) ? ' checked' : '' ?>> Require lowercase letter</label>
+    </div>
+    <div class="form-group">
+        <label class="form-check"><input type="checkbox" name="password_require_number" value="1"<?= !empty($s['password_require_number']) ? ' checked' : '' ?>> Require number</label>
+    </div>
+    <div class="form-group">
+        <label class="form-check"><input type="checkbox" name="password_require_special" value="1"<?= !empty($s['password_require_special']) ? ' checked' : '' ?>> Require special character</label>
+    </div>
 
     <h2 class="h3">File storage</h2>
     <div class="form-group">

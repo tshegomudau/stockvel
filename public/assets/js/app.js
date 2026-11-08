@@ -164,6 +164,71 @@
     });
   }
 
+  function initPasswordPolicy() {
+    var labels = ['Too weak', 'Weak', 'Fair', 'Good', 'Strong'];
+    qsa('[data-password-policy]').forEach(function (wrap) {
+      var input = qs('[data-password-input]', wrap) || qs('input[type="password"]', wrap);
+      if (!input) return;
+      var cfg = {};
+      try {
+        cfg = JSON.parse(wrap.getAttribute('data-password-policy') || '{}') || {};
+      } catch (e) {
+        cfg = {};
+      }
+      var minLen = parseInt(cfg.min_length, 10) || 8;
+      var strength = qs('[data-password-strength]', wrap);
+      var strengthLabel = qs('[data-password-strength-label]', wrap);
+      var reqItems = qsa('[data-password-req]', wrap);
+
+      function score(pw) {
+        if (!pw) return 0;
+        var s = 0;
+        var classes = 0;
+        if (pw.length >= minLen) s++;
+        if (pw.length >= Math.max(12, minLen + 4)) s++;
+        if (/[a-z]/.test(pw)) classes++;
+        if (/[A-Z]/.test(pw)) classes++;
+        if (/[0-9]/.test(pw)) classes++;
+        if (/[^A-Za-z0-9]/.test(pw)) classes++;
+        if (classes >= 2) s++;
+        if (classes >= 3) s++;
+        return Math.min(4, s);
+      }
+
+      function update() {
+        var pw = input.value || '';
+        if (strength) {
+          if (pw === '') {
+            strength.hidden = true;
+            strength.removeAttribute('data-level');
+          } else {
+            strength.hidden = false;
+            var level = score(pw);
+            strength.setAttribute('data-level', String(level));
+            if (strengthLabel) {
+              strengthLabel.textContent = 'Strength: ' + (labels[level] || 'Too weak');
+            }
+          }
+        }
+        if (reqItems.length) {
+          // Same order as PasswordPolicyService::requirementLabels().
+          var checks = [pw.length >= minLen];
+          if (cfg.require_upper) checks.push(/[A-Z]/.test(pw));
+          if (cfg.require_lower) checks.push(/[a-z]/.test(pw));
+          if (cfg.require_number) checks.push(/[0-9]/.test(pw));
+          if (cfg.require_special) checks.push(/[^A-Za-z0-9]/.test(pw));
+          reqItems.forEach(function (li, idx) {
+            li.classList.toggle('is-met', !!pw && checks[idx] === true);
+          });
+        }
+      }
+
+      input.addEventListener('input', update);
+      input.addEventListener('change', update);
+      update();
+    });
+  }
+
   function initFormLoading() {
     qsa('form[method="post"], form[method="POST"]').forEach(function (form) {
       form.addEventListener('submit', function () {
@@ -694,6 +759,7 @@
     initConfirm();
     initToasts();
     initPasswordToggle();
+    initPasswordPolicy();
     initFormLoading();
     initTableFilter();
     initTabs();

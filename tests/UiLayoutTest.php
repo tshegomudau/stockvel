@@ -131,6 +131,11 @@ return static function (TestRunner $runner): void {
                 );
             }
         }
+        $register = $client->get('/register');
+        test_assert($register['status'] === 200, 'Register page required for password strength UI');
+        test_assert(str_contains($register['body'], 'data-password-policy'), 'Register must expose password policy config');
+        test_assert(str_contains($register['body'], 'data-password-strength'), 'Register must show password strength meter');
+        test_assert(str_contains($register['body'], 'password-requirements'), 'Register must list password requirements');
     }, 'ui');
 
     $runner->add('Member profile, stokvel settings, and platform audit forms use form-control', function () use ($assertStyledControls): void {

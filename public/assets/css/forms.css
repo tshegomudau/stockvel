@@ -160,6 +160,42 @@ select,
   font-size: 0.8rem;
   font-weight: 600;
 }
+.password-requirements {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.15rem;
+}
+.password-requirements li.is-met { color: var(--color-success, #166534); }
+.password-strength {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.25rem;
+}
+.password-strength-bar {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--color-surface-alt, #e8eee9);
+  overflow: hidden;
+}
+.password-strength-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--color-text-muted);
+  transition: width 0.15s ease, background 0.15s ease;
+}
+.password-strength[data-level="0"] .password-strength-bar > span { width: 12%; background: #991b1b; }
+.password-strength[data-level="1"] .password-strength-bar > span { width: 25%; background: #b91c1c; }
+.password-strength[data-level="2"] .password-strength-bar > span { width: 50%; background: #c2410c; }
+.password-strength[data-level="3"] .password-strength-bar > span { width: 75%; background: #a16207; }
+.password-strength[data-level="4"] .password-strength-bar > span { width: 100%; background: #15803d; }
+.password-strength-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
 
 .checkbox,
 .radio,

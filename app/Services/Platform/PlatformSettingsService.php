@@ -27,6 +27,11 @@ final class PlatformSettingsService
         'wysiwyg_images_enabled' => false,
         'wysiwyg_tables_enabled' => false,
         'wysiwyg_colors_enabled' => false,
+        'password_min_length' => 8,
+        'password_require_upper' => true,
+        'password_require_lower' => true,
+        'password_require_number' => true,
+        'password_require_special' => false,
     ];
 
     public function __construct(private readonly Database $db)
@@ -103,6 +108,8 @@ final class PlatformSettingsService
             $value = $values[$key];
             if (is_bool($default)) {
                 $value = filter_var($value, FILTER_VALIDATE_BOOL);
+            } elseif (is_int($default)) {
+                $value = (int) $value;
             } elseif (is_string($default)) {
                 $value = trim((string) $value);
             }
@@ -139,6 +146,11 @@ final class PlatformSettingsService
             'wysiwyg_tables_enabled' => (bool) $all['wysiwyg_full_enabled'] && (bool) $all['wysiwyg_tables_enabled'],
             'wysiwyg_colors_enabled' => (bool) $all['wysiwyg_full_enabled'] && (bool) $all['wysiwyg_colors_enabled'],
             'storage_driver' => (string) $all['storage_driver'],
+            'password_min_length' => (int) $all['password_min_length'],
+            'password_require_upper' => (bool) $all['password_require_upper'],
+            'password_require_lower' => (bool) $all['password_require_lower'],
+            'password_require_number' => (bool) $all['password_require_number'],
+            'password_require_special' => (bool) $all['password_require_special'],
         ];
     }
 

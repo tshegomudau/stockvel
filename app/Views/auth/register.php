@@ -42,16 +42,15 @@
                 <label class="form-label" for="mobile">Mobile</label>
                 <input class="form-control" type="tel" id="mobile" name="mobile" inputmode="tel" value="<?= e((string) old('mobile')) ?>" placeholder="+27">
             </div>
-            <div class="form-group">
-                <label class="form-label required" for="password">Password</label>
-                <div class="password-field">
-                    <input class="form-control" type="password" id="password" name="password" required minlength="8" autocomplete="new-password">
-                    <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password">Show</button>
-                </div>
-            </div>
+            <?= view('partials/password-field', [
+                'id' => 'password',
+                'name' => 'password',
+                'label' => 'Password',
+                'passwordPolicy' => $passwordPolicy ?? null,
+            ], null) ?>
             <div class="form-group">
                 <label class="form-label required" for="password_confirmation">Confirm password</label>
-                <input class="form-control" type="password" id="password_confirmation" name="password_confirmation" required minlength="8" autocomplete="new-password">
+                <input class="form-control" type="password" id="password_confirmation" name="password_confirmation" required minlength="<?= (int) (($passwordPolicy['min_length'] ?? 8)) ?>" autocomplete="new-password">
             </div>
             <label class="checkbox">
                 <input type="checkbox" name="consent" value="1" required <?= old('consent') ? 'checked' : '' ?>>

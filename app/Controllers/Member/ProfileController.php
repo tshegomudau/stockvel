@@ -73,11 +73,19 @@ final class ProfileController extends Controller
             $idDocuments = [];
         }
 
+        $passwordPolicy = [];
+        try {
+            $passwordPolicy = app()->container()->get(\App\Services\Auth\PasswordPolicyService::class)->clientConfig();
+        } catch (\Throwable) {
+            $passwordPolicy = [];
+        }
+
         return $this->render('member/profile', [
             'title' => 'My profile',
             'activeNav' => 'member-profile',
             'navContext' => 'member',
             'profile' => $user,
+            'passwordPolicy' => $passwordPolicy,
             'idMasked' => SensitiveData::maskId($idPlain),
             'completeness' => $completeness,
             'uploadsEnabled' => $uploadsEnabled,
@@ -252,8 +260,13 @@ final class ProfileController extends Controller
             Session::flash('error', 'Current password is incorrect.');
             return $this->redirect('/member/profile');
         }
-        if (strlen($password) < 8 || $password !== $confirm) {
-            Session::flash('error', 'New passwords must match and be at least 8 characters.');
+        if ($password !== $confirm) {
+            Session::flash('error', 'New passwords must match.');
+            return $this->redirect('/member/profile');
+        }
+        $policyErrors = app()->container()->get(\App\Services\Auth\PasswordPolicyService::class)->validate($password);
+        if ($policyErrors !== []) {
+            Session::flash('error', $policyErrors[0]);
             return $this->redirect('/member/profile');
         }
 

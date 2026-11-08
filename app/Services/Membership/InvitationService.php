@@ -49,10 +49,11 @@ final class InvitationService
 
         if ($email !== '') {
             $link = url('/invitations/' . $plain);
+            $expiresLocal = sa_datetime_email($expires);
             $subject = 'You are invited to join a stokvel';
             $body = "You have been invited to join a stokvel on stockvel.\n\n"
                 . "Open this link to accept or decline:\n{$link}\n\n"
-                . "This invitation expires on {$expires} (UTC).\n";
+                . "This invitation expires on {$expiresLocal}.\n";
             try {
                 $stokvelId = (int) (app()->container()->get(\App\Core\TenantContext::class)->stokvelId() ?? 0);
                 if ($stokvelId > 0) {
@@ -63,6 +64,7 @@ final class InvitationService
                             'member_name' => $email,
                             'invite_url' => $link,
                             'inviter_name' => '',
+                            'expires_at' => $expiresLocal,
                         ]);
                     $subject = $rendered['subject'];
                     $body = $rendered['body'];

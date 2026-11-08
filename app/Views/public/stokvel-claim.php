@@ -17,13 +17,15 @@
                     <label class="form-label" for="mobile">Mobile (optional)</label>
                     <input class="form-control" type="text" id="mobile" name="mobile" value="">
                 </div>
-                <div class="form-group">
-                    <label class="form-label required" for="password">Password</label>
-                    <input class="form-control" type="password" id="password" name="password" required minlength="8" autocomplete="new-password">
-                </div>
+                <?= view('partials/password-field', [
+                    'id' => 'password',
+                    'name' => 'password',
+                    'label' => 'Password',
+                    'passwordPolicy' => $passwordPolicy ?? null,
+                ], null) ?>
                 <div class="form-group">
                     <label class="form-label required" for="password_confirmation">Confirm password</label>
-                    <input class="form-control" type="password" id="password_confirmation" name="password_confirmation" required minlength="8" autocomplete="new-password">
+                    <input class="form-control" type="password" id="password_confirmation" name="password_confirmation" required minlength="<?= (int) (($passwordPolicy['min_length'] ?? 8)) ?>" autocomplete="new-password">
                 </div>
             <?php endif; ?>
             <button type="submit" class="btn btn-primary btn-block">Claim stokvel</button>

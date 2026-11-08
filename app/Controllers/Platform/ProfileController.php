@@ -32,11 +32,19 @@ final class ProfileController extends Controller
             ['id' => $userId]
         );
 
+        $passwordPolicy = [];
+        try {
+            $passwordPolicy = app()->container()->get(\App\Services\Auth\PasswordPolicyService::class)->clientConfig();
+        } catch (\Throwable) {
+            $passwordPolicy = [];
+        }
+
         return $this->render('platform/profile', [
             'title' => 'My profile',
             'activeNav' => 'platform-profile',
             'navContext' => 'platform',
             'profile' => $user,
+            'passwordPolicy' => $passwordPolicy,
         ]);
     }
 
@@ -110,8 +118,13 @@ final class ProfileController extends Controller
             Session::flash('error', 'Current password is incorrect.');
             return $this->redirect('/platform/profile');
         }
-        if (strlen($password) < 8 || $password !== $confirm) {
-            Session::flash('error', 'New passwords must match and be at least 8 characters.');
+        if ($password !== $confirm) {
+            Session::flash('error', 'New passwords must match.');
+            return $this->redirect('/platform/profile');
+        }
+        $policyErrors = app()->container()->get(\App\Services\Auth\PasswordPolicyService::class)->validate($password);
+        if ($policyErrors !== []) {
+            Session::flash('error', $policyErrors[0]);
             return $this->redirect('/platform/profile');
         }
 

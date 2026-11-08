@@ -86,7 +86,10 @@ final class AuthController extends Controller
         if ($this->userId() !== null) {
             return $this->redirect(home_path_for_user($this->user()));
         }
-        return $this->render('auth/register', ['title' => 'Create account'], 'layouts/guest');
+        return $this->render('auth/register', [
+            'title' => 'Create account',
+            'passwordPolicy' => $this->passwordPolicyConfig(),
+        ], 'layouts/guest');
     }
 
     public function register(Request $request): Response
@@ -95,6 +98,9 @@ final class AuthController extends Controller
         if (!in_array($intent, ['create_stokvel', 'join_stokvel'], true)) {
             $intent = 'create_stokvel';
         }
+        /** @var \App\Services\Auth\PasswordPolicyService $policy */
+        $policy = app()->container()->get(\App\Services\Auth\PasswordPolicyService::class);
+        $min = (int) $policy->rules()['min_length'];
         $data = [
             'first_name' => trim((string) $request->input('first_name', '')),
             'last_name' => trim((string) $request->input('last_name', '')),
@@ -109,12 +115,17 @@ final class AuthController extends Controller
             'first_name' => 'required|min:2',
             'last_name' => 'required|min:2',
             'email' => 'required|email',
-            'password' => 'required|min:8|confirmed',
+            'password' => 'required|min:' . $min . '|confirmed',
             'consent' => 'required',
         ]);
-        if ($validator->fails()) {
+        $passwordErrors = $policy->validate($data['password']);
+        if ($validator->fails() || $passwordErrors !== []) {
             $this->flashOld($request);
-            $this->flashErrors($validator->errors());
+            $errors = $validator->errors();
+            if ($passwordErrors !== []) {
+                $errors['password'] = array_merge($errors['password'] ?? [], $passwordErrors);
+            }
+            $this->flashErrors($errors);
             Session::flash('error', 'Could not create your account.');
             return $this->redirect('/register');
         }
@@ -192,15 +203,26 @@ final class AuthController extends Controller
 
     public function showReset(Request $request, string $token): Response
     {
-        return $this->render('auth/reset', ['title' => 'Reset password', 'token' => $token], 'layouts/guest');
+        return $this->render('auth/reset', [
+            'title' => 'Reset password',
+            'token' => $token,
+            'passwordPolicy' => $this->passwordPolicyConfig(),
+        ], 'layouts/guest');
     }
 
     public function reset(Request $request, string $token): Response
     {
         $password = (string) $request->input('password', '');
         $confirm = (string) $request->input('password_confirmation', '');
-        if (strlen($password) < 8 || $password !== $confirm) {
-            Session::flash('error', 'Passwords must match and be at least 8 characters.');
+        /** @var \App\Services\Auth\PasswordPolicyService $policy */
+        $policy = app()->container()->get(\App\Services\Auth\PasswordPolicyService::class);
+        if ($password !== $confirm) {
+            Session::flash('error', 'Passwords must match.');
+            return $this->redirect('/reset-password/' . urlencode($token));
+        }
+        $passwordErrors = $policy->validate($password);
+        if ($passwordErrors !== []) {
+            Session::flash('error', $passwordErrors[0]);
             return $this->redirect('/reset-password/' . urlencode($token));
         }
 
@@ -271,5 +293,27 @@ final class AuthController extends Controller
     public function verifyNotice(Request $request): Response
     {
         return $this->render('auth/verify-notice', ['title' => 'Verify your email'], 'layouts/guest');
+    }
+
+    /** @return array<string, mixed> */
+    private function passwordPolicyConfig(): array
+    {
+        try {
+            return app()->container()->get(\App\Services\Auth\PasswordPolicyService::class)->clientConfig();
+        } catch (\Throwable) {
+            return [
+                'min_length' => 8,
+                'require_upper' => true,
+                'require_lower' => true,
+                'require_number' => true,
+                'require_special' => false,
+                'labels' => [
+                    'At least 8 characters',
+                    'At least one uppercase letter (A–Z)',
+                    'At least one lowercase letter (a–z)',
+                    'At least one number (0–9)',
+                ],
+            ];
+        }
     }
 }

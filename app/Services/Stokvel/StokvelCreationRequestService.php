@@ -171,12 +171,62 @@ final class StokvelCreationRequestService
                 'admin_user_id' => $adminUserId,
             ], stokvelId: $stokvelId, userId: $adminUserId);
 
+            $email = strtolower((string) $row['requester_email']);
+            $existingUser = $this->db->fetch('SELECT id FROM users WHERE email = :e LIMIT 1', ['e' => $email]);
+
+            // Existing account: assign chairperson immediately and email a login/manage link.
+            if ($existingUser) {
+                $userId = (int) $existingUser['id'];
+                $membershipId = $this->ensureChairpersonMembership($stokvelId, $userId);
+                $this->db->exec(
+                    "UPDATE stokvel_creation_requests SET
+                        status = 'claimed', claimed_at = :ca, claimed_user_id = :uid,
+                        claim_token_hash = NULL, updated_at = :ua
+                     WHERE id = :id AND status = 'approved'",
+                    ['ca' => $now, 'uid' => $userId, 'ua' => $now, 'id' => $requestId]
+                );
+                $this->db->exec(
+                    'UPDATE stokvels SET created_by_user_id = COALESCE(created_by_user_id, :uid), updated_at = :ua WHERE id = :id',
+                    ['uid' => $userId, 'ua' => $now, 'id' => $stokvelId]
+                );
+                $this->audit->log('stokvel_request.claimed', 'stokvel_creation_request', $requestId, metadata: [
+                    'stokvel_id' => $stokvelId,
+                    'membership_id' => $membershipId,
+                    'created_user' => false,
+                    'auto_assigned_on_approve' => true,
+                ], stokvelId: $stokvelId, userId: $userId);
+
+                $loginUrl = url('/login');
+                $manageUrl = url('/app');
+                $body = "Your stokvel creation request for \"{$row['stokvel_name']}\" was approved.\n\n"
+                    . "You have been assigned as chairperson with full management permissions.\n\n"
+                    . "Sign in to manage your stokvel:\n{$loginUrl}\n\n"
+                    . "After signing in, open your dashboard:\n{$manageUrl}\n";
+                $this->notifications->sendMailNow(
+                    $email,
+                    'Your stokvel was approved — sign in to manage it',
+                    $body,
+                    ['type' => 'stokvel_approved_login', 'request_id' => $requestId, 'stokvel_id' => $stokvelId]
+                );
+
+                return [
+                    'request_id' => $requestId,
+                    'stokvel_id' => $stokvelId,
+                    'claim_token' => null,
+                    'auto_claimed' => true,
+                    'user_id' => $userId,
+                ];
+            }
+
             $claimUrl = url('/stokvel-claims/' . $claimPlain);
+            $expiresLocal = sa_datetime_email($expires);
             $body = "Your stokvel creation request for \"{$row['stokvel_name']}\" was approved.\n\n"
-                . "Use this secure link within " . self::CLAIM_TTL_HOURS . " hours to claim your chairperson account:\n"
-                . $claimUrl . "\n\nIf you did not request this, ignore this email.";
+                . "Use this secure link to create your chairperson account and manage the stokvel:\n"
+                . $claimUrl . "\n\n"
+                . "This link expires at {$expiresLocal} (" . self::CLAIM_TTL_HOURS . " hours).\n\n"
+                . "If you did not request this, ignore this email.";
             $this->notifications->sendMailNow(
-                (string) $row['requester_email'],
+                $email,
                 'Your stokvel was approved — claim your account',
                 $body,
                 ['type' => 'stokvel_claim', 'request_id' => $requestId]
@@ -186,6 +236,77 @@ final class StokvelCreationRequestService
                 'request_id' => $requestId,
                 'stokvel_id' => $stokvelId,
                 'claim_token' => $claimPlain,
+                'auto_claimed' => false,
+            ];
+        });
+    }
+
+    /**
+     * Logged-in requester with matching email claims an approved stokvel (no password prompt).
+     *
+     * @return array{user_id:int,stokvel_id:int,created_user:bool}|null
+     */
+    public function claimApprovedForAuthenticatedUser(int $userId, string $email): ?array
+    {
+        $email = strtolower(trim($email));
+        if ($userId < 1 || $email === '') {
+            return null;
+        }
+
+        return $this->db->transaction(function () use ($userId, $email) {
+            $row = $this->db->fetch(
+                "SELECT * FROM stokvel_creation_requests
+                 WHERE requester_email = :e AND status = 'approved'
+                 ORDER BY id DESC LIMIT 1 FOR UPDATE",
+                ['e' => $email]
+            );
+            if (!$row) {
+                return null;
+            }
+
+            $expires = (string) ($row['claim_expires_at'] ?? '');
+            if ($expires !== '' && $expires < now_utc()) {
+                $this->db->exec(
+                    "UPDATE stokvel_creation_requests SET status = 'expired', updated_at = :ua WHERE id = :id",
+                    ['ua' => now_utc(), 'id' => (int) $row['id']]
+                );
+                throw new HttpException(422, 'Your approval claim window has expired. Contact support or submit a new request.');
+            }
+
+            $user = $this->db->fetch('SELECT id, email FROM users WHERE id = :id LIMIT 1', ['id' => $userId]);
+            if (!$user || strtolower((string) $user['email']) !== $email) {
+                throw new HttpException(403, 'You can only claim a stokvel requested with your account email.');
+            }
+
+            $stokvelId = (int) ($row['stokvel_id'] ?? 0);
+            if ($stokvelId < 1) {
+                throw new HttpException(500, 'Approved request is missing a stokvel.');
+            }
+
+            $membershipId = $this->ensureChairpersonMembership($stokvelId, $userId);
+            $now = now_utc();
+            $this->db->exec(
+                "UPDATE stokvel_creation_requests SET
+                    status = 'claimed', claimed_at = :ca, claimed_user_id = :uid,
+                    claim_token_hash = NULL, updated_at = :ua
+                 WHERE id = :id AND status = 'approved'",
+                ['ca' => $now, 'uid' => $userId, 'ua' => $now, 'id' => (int) $row['id']]
+            );
+            $this->db->exec(
+                'UPDATE stokvels SET created_by_user_id = COALESCE(created_by_user_id, :uid), updated_at = :ua WHERE id = :id',
+                ['uid' => $userId, 'ua' => $now, 'id' => $stokvelId]
+            );
+            $this->audit->log('stokvel_request.claimed', 'stokvel_creation_request', (int) $row['id'], metadata: [
+                'stokvel_id' => $stokvelId,
+                'membership_id' => $membershipId,
+                'created_user' => false,
+                'claimed_from_get_started' => true,
+            ], stokvelId: $stokvelId, userId: $userId);
+
+            return [
+                'user_id' => $userId,
+                'stokvel_id' => $stokvelId,
+                'created_user' => false,
             ];
         });
     }
@@ -319,9 +440,10 @@ final class StokvelCreationRequestService
             } else {
                 $password = (string) ($accountData['password'] ?? '');
                 $confirm = (string) ($accountData['password_confirmation'] ?? '');
-                if (strlen($password) < 8 || $password !== $confirm) {
-                    throw new HttpException(422, 'Choose a password of at least 8 characters and confirm it.');
+                if ($password !== $confirm) {
+                    throw new HttpException(422, 'Password confirmation does not match.');
                 }
+                app()->container()->get(\App\Services\Auth\PasswordPolicyService::class)->assertValid($password);
                 /** @var AuthService $auth */
                 $auth = app()->container()->get(AuthService::class);
                 $user = $auth->register([

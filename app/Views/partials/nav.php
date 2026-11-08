@@ -72,7 +72,7 @@ $platformLinks = [
     'platform-stokvel-types' => ['label' => 'Stokvel types', 'url' => route('platform.stokvel-types')],
     'platform-support' => ['label' => 'Support tickets', 'url' => route('platform.support')],
     'platform-features' => [
-        'label' => 'Storage (B2)',
+        'label' => 'Settings',
         'url' => route('platform.features'),
         'platform_permission' => 'features.manage',
     ],

@@ -22,9 +22,13 @@
 <h2>Change password</h2>
 <div class="form-group"><label class="form-label" for="current_password">Current password</label>
 <input class="form-control" type="password" id="current_password" name="current_password" required autocomplete="current-password"></div>
-<div class="form-group"><label class="form-label" for="password">New password</label>
-<input class="form-control" type="password" id="password" name="password" required minlength="8" autocomplete="new-password"></div>
+<?= view('partials/password-field', [
+    'id' => 'password',
+    'name' => 'password',
+    'label' => 'New password',
+    'passwordPolicy' => $passwordPolicy ?? null,
+], null) ?>
 <div class="form-group"><label class="form-label" for="password_confirmation">Confirm new password</label>
-<input class="form-control" type="password" id="password_confirmation" name="password_confirmation" required minlength="8" autocomplete="new-password"></div>
+<input class="form-control" type="password" id="password_confirmation" name="password_confirmation" required minlength="<?= (int) (($passwordPolicy['min_length'] ?? 8)) ?>" autocomplete="new-password"></div>
 <button class="btn btn-primary" type="submit">Update password</button>
 </form>

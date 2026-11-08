@@ -62,10 +62,11 @@ final class PasswordResetService
         );
 
         $link = url('/reset-password/' . $plain);
+        $expiresLocal = sa_datetime_email($expires);
         $subject = 'Reset your stockvel password';
         $body = "We received a request to reset your stockvel password.\n\n"
             . "Open this link to choose a new password:\n{$link}\n\n"
-            . "This link expires at {$expires} UTC ({$minutes} minutes).\n\n"
+            . "This link expires at {$expiresLocal} ({$minutes} minutes).\n\n"
             . "If you did not request this, you can ignore this email.\n";
 
         $sent = false;
@@ -114,6 +115,8 @@ final class PasswordResetService
         if (!$row) {
             throw new HttpException(400, 'Invalid or expired password reset token.');
         }
+
+        app()->container()->get(PasswordPolicyService::class)->assertValid($newPassword);
 
         $userId = (int) $row['user_id'];
         $this->users->updatePassword($userId, AuthService::hashPassword($newPassword));

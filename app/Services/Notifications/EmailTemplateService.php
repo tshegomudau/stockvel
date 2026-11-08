@@ -18,8 +18,8 @@ final class EmailTemplateService
         'invitation' => [
             'label' => 'Member invitation',
             'subject' => 'You are invited to join {{stokvel_name}}',
-            'body' => "Hello {{member_name}},\n\nYou have been invited to join {{stokvel_name}}.\n\nAccept your invitation:\n{{invite_url}}\n\nIf you did not expect this email, you can ignore it.",
-            'variables' => ['stokvel_name', 'member_name', 'invite_url', 'inviter_name'],
+            'body' => "Hello {{member_name}},\n\nYou have been invited to join {{stokvel_name}}.\n\nAccept your invitation:\n{{invite_url}}\n\nThis invitation expires on {{expires_at}}.\n\nIf you did not expect this email, you can ignore it.",
+            'variables' => ['stokvel_name', 'member_name', 'invite_url', 'inviter_name', 'expires_at'],
         ],
         'announcement' => [
             'label' => 'Announcement email',

@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Services\Auth\PasswordPolicyService;
 use App\Services\Loans\LoanScheduleCalculator;
+use App\Services\Platform\PlatformSettingsService;
 use App\Support\MoneyMath;
 use Tests\TestRunner;
 
@@ -35,6 +37,45 @@ return static function (TestRunner $runner): void {
             $code = 0;
             exec(escapeshellarg(PHP_BINARY) . ' -l ' . escapeshellarg($path), $out, $code);
             test_assert($code === 0, implode("\n", $out));
+        }
+    }, 'unit');
+
+    $runner->add('Password policy validates length and character classes', function (): void {
+        PlatformSettingsService::clearCache();
+        /** @var PasswordPolicyService $policy */
+        $policy = App\Core\App::getInstance()->container()->get(PasswordPolicyService::class);
+        $weak = $policy->validate('short');
+        test_assert($weak !== [], 'Short password must fail');
+        $noUpper = $policy->validate('password1');
+        test_assert($noUpper !== [], 'Missing uppercase must fail under defaults');
+        $ok = $policy->validate('Password1');
+        test_assert($ok === [], 'Password1 should pass default policy, got: ' . implode('; ', $ok));
+        test_assert($policy->strengthScore('') === 0);
+        test_assert($policy->strengthScore('Password1!') >= 3, 'Expected strong-ish score');
+        $cfg = $policy->clientConfig();
+        test_assert(($cfg['min_length'] ?? 0) >= 6);
+        test_assert(is_array($cfg['labels'] ?? null) && $cfg['labels'] !== []);
+    }, 'unit');
+
+    $runner->add('Email datetime helper uses configured app timezone', function (): void {
+        $prevEnv = $_ENV['APP_TIMEZONE'] ?? null;
+        $_ENV['APP_TIMEZONE'] = 'Africa/Johannesburg';
+        $_SERVER['APP_TIMEZONE'] = 'Africa/Johannesburg';
+        putenv('APP_TIMEZONE=Africa/Johannesburg');
+
+        // 12:00 UTC → 14:00 SAST
+        $formatted = sa_datetime_email('2026-11-08 12:00:00');
+        test_assert(str_contains($formatted, '14:00'), 'Expected SAST conversion, got: ' . $formatted);
+        test_assert(str_contains($formatted, 'SAST') || str_contains($formatted, '+02'), 'Expected timezone label, got: ' . $formatted);
+        test_assert(!str_contains($formatted, ' UTC)'), 'Email datetime must not show UTC label');
+
+        if ($prevEnv === null) {
+            unset($_ENV['APP_TIMEZONE'], $_SERVER['APP_TIMEZONE']);
+            putenv('APP_TIMEZONE');
+        } else {
+            $_ENV['APP_TIMEZONE'] = $prevEnv;
+            $_SERVER['APP_TIMEZONE'] = $prevEnv;
+            putenv('APP_TIMEZONE=' . $prevEnv);
         }
     }, 'unit');
 };
