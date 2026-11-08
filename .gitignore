@@ -25,3 +25,4 @@
 /dist/
 /storage/install.lock
 /storage/install.token
+deploy_stokvel.sh
