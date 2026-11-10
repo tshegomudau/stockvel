@@ -59,11 +59,11 @@ final class Session
     private static function ensureDir(string $path): string
     {
         if (!is_dir($path)) {
-            @mkdir($path, 0777, true);
+            @mkdir($path, 0770, true);
         }
-        // Local/dev: allow PHP-FPM/Apache (often "nobody"/"www-data") to write sessions.
+        // Prefer group-writable sessions for PHP-FPM/Apache without world-writable 0777.
         if (is_dir($path) && !is_writable($path)) {
-            @chmod($path, 0777);
+            @chmod($path, 0770);
         }
 
         return $path;

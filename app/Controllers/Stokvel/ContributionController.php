@@ -185,6 +185,7 @@ final class ContributionController extends Controller
             'navContext' => 'app',
             'members' => $members,
             'paymentMethods' => ContributionService::PAYMENT_METHODS,
+            'idempotencyKey' => 'contrib_manual_' . bin2hex(random_bytes(16)),
         ]);
     }
 
@@ -198,6 +199,7 @@ final class ContributionController extends Controller
             'paid_at' => (string) $request->input('paid_at', date('Y-m-d')),
             'payment_method' => (string) $request->input('payment_method', 'cash'),
             'reference' => trim((string) $request->input('reference', '')),
+            'idempotency_key' => trim((string) $request->input('idempotency_key', '')),
         ];
         $validator = Validator::make($data, [
             'member_id' => 'required|integer',
@@ -210,6 +212,12 @@ final class ContributionController extends Controller
             return $this->redirect('/app/contributions/create');
         }
 
+        $idempotencyKey = $data['idempotency_key'];
+        if ($idempotencyKey === '' || strlen($idempotencyKey) > 128 || preg_match('/^[A-Za-z0-9_\-:]+$/', $idempotencyKey) !== 1) {
+            // Fallback still unique per request; double-submit protection requires the form token.
+            $idempotencyKey = 'contrib_manual_' . bin2hex(random_bytes(16));
+        }
+
         try {
             app()->container()->get(ChartOfAccountsService::class)->ensureDefaultAccounts($sid);
             $this->contributions()->capturePayment(
@@ -218,7 +226,7 @@ final class ContributionController extends Controller
                 $data['amount'],
                 $data['payment_method'],
                 (int) $this->userId(),
-                null,
+                $idempotencyKey,
                 $data['reference'] !== '' ? $data['reference'] : null,
                 $data['paid_at']
             );

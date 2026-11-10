@@ -119,6 +119,11 @@ final class MoneyMath
 
     private static function format(string|float $value): string
     {
+        // Prefer BCMath so normalize/add/sub never round-trip through IEEE float when available.
+        if (is_string($value) && function_exists('bcadd') && is_numeric($value)) {
+            return bcadd($value, '0', self::SCALE);
+        }
+
         return number_format((float) $value, self::SCALE, '.', '');
     }
 }

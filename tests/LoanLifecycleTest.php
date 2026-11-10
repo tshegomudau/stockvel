@@ -19,10 +19,20 @@ return static function (TestRunner $runner): void {
             $user = $db->fetch('SELECT id FROM users LIMIT 1');
             $uid = (int) $user['id'];
             $member = $db->fetch(
-                "SELECT id FROM memberships WHERE stokvel_id = :sid AND status = 'active' LIMIT 1",
+                "SELECT id, user_id FROM memberships WHERE stokvel_id = :sid AND status = 'active' LIMIT 1",
                 ['sid' => $sid]
             );
             test_assert($member !== null);
+            $applicantUserId = (int) $member['user_id'];
+            $approver = $db->fetch(
+                "SELECT u.id FROM users u
+                 INNER JOIN memberships m ON m.user_id = u.id AND m.stokvel_id = :sid AND m.status = 'active'
+                 WHERE u.id <> :applicant
+                 ORDER BY u.id ASC LIMIT 1",
+                ['sid' => $sid, 'applicant' => $applicantUserId]
+            );
+            test_assert($approver !== null, 'Need a second active member to approve loans');
+            $approverUserId = (int) $approver['id'];
             $product = $db->fetch(
                 "SELECT id, min_amount, max_amount, max_term_months FROM loan_products
                  WHERE stokvel_id = :sid AND is_active = 1 LIMIT 1",
@@ -48,7 +58,7 @@ return static function (TestRunner $runner): void {
                 (int) $product['id'],
                 $amount,
                 $term,
-                $uid,
+                $applicantUserId,
                 '',
                 null,
                 (int) $purpose['id']
@@ -61,13 +71,20 @@ return static function (TestRunner $runner): void {
             test_assert((string) ($stored['status'] ?? '') === LoanService::STATUS_APPLIED);
 
             try {
-                $loans->disburse($sid, $appId, $uid);
+                $loans->disburse($sid, $appId, $approverUserId);
                 test_assert(false, 'Disburse before approve must fail');
             } catch (FinanceException $e) {
                 test_assert(str_contains(strtolower($e->getMessage()), 'committee'), $e->getMessage());
             }
 
-            $loans->committeeApprove($sid, $appId, $uid);
+            try {
+                $loans->committeeApprove($sid, $appId, $applicantUserId);
+                test_assert(false, 'Applicant must not self-approve');
+            } catch (FinanceException $e) {
+                test_assert(str_contains(strtolower($e->getMessage()), 'own loan'), $e->getMessage());
+            }
+
+            $loans->committeeApprove($sid, $appId, $approverUserId);
             $loans->disburse($sid, $appId, $uid);
 
             try {
