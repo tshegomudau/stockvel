@@ -77,6 +77,30 @@ return static function (TestRunner $runner): void {
         $auth->logout();
     }, 'http');
 
+    $runner->add('Same-stokvel peer cannot open another member support ticket', function () use ($loginAs): void {
+        $creatorAuth = $loginAs('sipho.ndlovu@example.co.za');
+        $client = new HttpClient();
+        $create = $client->post('/app/support', [
+            'subject' => 'Peer isolation ' . bin2hex(random_bytes(3)),
+            'category' => 'support',
+            'priority' => 'low',
+            'body' => 'Private ticket body must not leak to peers.',
+        ]);
+        test_assert(preg_match('#/app/support/(\d+)#', (string) ($create['location'] ?? ''), $m) === 1);
+        $ticketId = (int) $m[1];
+        $creatorAuth->logout();
+
+        $peerAuth = $loginAs('lerato.pillay@example.co.za');
+        $peerClient = new HttpClient();
+        $show = $peerClient->get('/app/support/' . $ticketId);
+        test_assert(in_array($show['status'], [302, 403], true), 'Peer show should be denied, got ' . $show['status']);
+        test_assert(
+            !str_contains($show['body'], 'Private ticket body must not leak'),
+            'Peer must not see ticket body'
+        );
+        $peerAuth->logout();
+    }, 'http');
+
     $runner->add('Unauthorized cross-tenant support ticket show is denied', function () use ($loginAs): void {
         $ubuntuAuth = $loginAs('sipho.ndlovu@example.co.za', 'ubuntu-savings');
         $client = new HttpClient();

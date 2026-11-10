@@ -8,6 +8,9 @@ final class Request
 {
     private array $attributes = [];
 
+    /** @var string|null Override for in-process tests (php://input is empty outside real HTTP). */
+    private static ?string $forcedRawBody = null;
+
     public function __construct(
         private readonly string $method,
         private readonly string $path,
@@ -17,6 +20,11 @@ final class Request
         private readonly array $cookies,
         private readonly array $files,
     ) {
+    }
+
+    public static function forceRawBody(?string $body): void
+    {
+        self::$forcedRawBody = $body;
     }
 
     public static function capture(): self
@@ -109,6 +117,10 @@ final class Request
 
     public function rawBody(): string
     {
+        if (self::$forcedRawBody !== null) {
+            return self::$forcedRawBody;
+        }
+
         return file_get_contents('php://input') ?: '';
     }
 

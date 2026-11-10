@@ -8,6 +8,10 @@ use App\Core\Database;
 use App\Exceptions\FinanceException;
 use App\Services\Finance\ContributionService;
 
+/**
+ * Verifies payment webhook signatures and records events against the
+ * migration-003 webhook_events schema (external_id / payload_json / status).
+ */
 final class PaymentWebhookService
 {
     public function __construct(
@@ -30,15 +34,15 @@ final class PaymentWebhookService
         }
 
         $existing = $this->db->fetch(
-            'SELECT id, processing_status FROM webhook_events
-             WHERE provider = :provider AND event_id = :event_id LIMIT 1',
-            ['provider' => $this->gateway->providerName(), 'event_id' => $event['event_id']]
+            'SELECT id, status FROM webhook_events
+             WHERE provider = :provider AND external_id = :external_id LIMIT 1',
+            ['provider' => $this->gateway->providerName(), 'external_id' => $event['event_id']]
         );
         if ($existing !== null) {
             return [
                 'duplicate' => true,
                 'event_id' => $event['event_id'],
-                'status' => $existing['processing_status'],
+                'status' => (string) $existing['status'],
             ];
         }
 
@@ -47,45 +51,57 @@ final class PaymentWebhookService
             throw new FinanceException('Webhook missing stokvel_id.');
         }
 
+        $now = now_utc();
         $eventRowId = (int) $this->db->insert(
             'INSERT INTO webhook_events
-                (provider, event_id, event_type, stokvel_id, payload, signature_valid, processing_status, received_at, created_at)
+                (stokvel_id, provider, event_type, external_id, payload_json, status, processed_at, error_message, created_at, updated_at)
              VALUES
-                (:provider, :event_id, :event_type, :stokvel_id, :payload, 1, :status, :received_at, :created_at)',
+                (:stokvel_id, :provider, :event_type, :external_id, :payload_json, :status, NULL, NULL, :created_at, :updated_at)',
             [
-                'provider' => $this->gateway->providerName(),
-                'event_id' => $event['event_id'],
-                'event_type' => $event['event_type'],
                 'stokvel_id' => $stokvelId,
-                'payload' => $rawPayload,
-                'status' => 'processing',
-                'received_at' => now_utc(),
-                'created_at' => now_utc(),
+                'provider' => $this->gateway->providerName(),
+                'event_type' => (string) $event['event_type'],
+                'external_id' => $event['event_id'],
+                'payload_json' => json_encode([
+                    'payload' => json_decode($rawPayload, true) ?: $rawPayload,
+                    'signature_valid' => true,
+                ], JSON_THROW_ON_ERROR),
+                'status' => 'received',
+                'created_at' => $now,
+                'updated_at' => $now,
             ]
         );
 
         try {
+            $this->db->exec(
+                'UPDATE webhook_events SET status = :status, updated_at = :updated_at WHERE id = :id',
+                ['status' => 'processing', 'updated_at' => now_utc(), 'id' => $eventRowId]
+            );
+
             $result = $this->processEvent($stokvelId, $event, $processedByUserId);
             $this->db->exec(
-                'UPDATE webhook_events SET processing_status = :status, processed_at = :processed_at, resource_id = :resource_id
+                'UPDATE webhook_events
+                 SET status = :status, processed_at = :processed_at, updated_at = :updated_at, error_message = NULL
                  WHERE id = :id',
                 [
                     'status' => 'processed',
                     'processed_at' => now_utc(),
-                    'resource_id' => (string) ($result['payment_id'] ?? ''),
+                    'updated_at' => now_utc(),
                     'id' => $eventRowId,
                 ]
             );
 
-            return array_merge(['duplicate' => false], $result);
+            return array_merge(['duplicate' => false, 'event_id' => $event['event_id']], $result);
         } catch (\Throwable $e) {
             $this->db->exec(
-                'UPDATE webhook_events SET processing_status = :status, failure_reason = :reason, processed_at = :processed_at
+                'UPDATE webhook_events
+                 SET status = :status, error_message = :reason, processed_at = :processed_at, updated_at = :updated_at
                  WHERE id = :id',
                 [
                     'status' => 'failed',
                     'reason' => $e->getMessage(),
                     'processed_at' => now_utc(),
+                    'updated_at' => now_utc(),
                     'id' => $eventRowId,
                 ]
             );
@@ -101,7 +117,7 @@ final class PaymentWebhookService
         }
 
         if ($this->gateway->providerName() === MockPaymentGateway::PROVIDER) {
-            $configured = (string) env('PAYMENT_GATEWAY', 'mock');
+            $configured = (string) env('PAYMENT_GATEWAY', env('PAYMENT_DRIVER', 'mock'));
             if ($configured !== MockPaymentGateway::PROVIDER) {
                 throw new FinanceException('Mock provider webhook rejected: gateway not configured as mock.');
             }

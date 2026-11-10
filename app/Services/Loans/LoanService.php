@@ -122,6 +122,18 @@ final class LoanService
         if ($guarantorMemberIds !== []) {
             $each = MoneyMath::div($amount, (string) count($guarantorMemberIds));
             foreach ($guarantorMemberIds as $guarantorId) {
+                $guarantorMembershipId = (int) $guarantorId;
+                if ($guarantorMembershipId === $memberId) {
+                    throw new FinanceException('A member cannot guarantee their own loan.');
+                }
+                $guarantor = $this->db->fetch(
+                    'SELECT id FROM memberships
+                     WHERE id = :id AND stokvel_id = :stokvel_id AND status = :status LIMIT 1',
+                    ['id' => $guarantorMembershipId, 'stokvel_id' => $stokvelId, 'status' => 'active']
+                );
+                if ($guarantor === null) {
+                    throw new FinanceException('Each guarantor must be an active member of this stokvel.');
+                }
                 $this->db->insert(
                     'INSERT INTO loan_guarantors
                         (stokvel_id, loan_application_id, guarantor_membership_id, guaranteed_amount, status, created_at, updated_at)
@@ -130,7 +142,7 @@ final class LoanService
                     [
                         'stokvel_id' => $stokvelId,
                         'loan_application_id' => $applicationId,
-                        'guarantor_membership_id' => (int) $guarantorId,
+                        'guarantor_membership_id' => $guarantorMembershipId,
                         'guaranteed_amount' => $each,
                         'status' => 'pending',
                         'created_at' => $now,
@@ -228,6 +240,14 @@ final class LoanService
         $application = $this->lockApplication($stokvelId, $loanId);
         if ($application['status'] !== self::STATUS_APPLIED) {
             throw new FinanceException('Only applied loans can be committee-approved.');
+        }
+
+        $applicant = $this->db->fetch(
+            'SELECT user_id FROM memberships WHERE id = :id AND stokvel_id = :stokvel_id LIMIT 1',
+            ['id' => (int) $application['membership_id'], 'stokvel_id' => $stokvelId]
+        );
+        if ($applicant !== null && (int) ($applicant['user_id'] ?? 0) === $committeeMemberId) {
+            throw new FinanceException('You cannot approve your own loan application.');
         }
 
         $amount = MoneyMath::normalize($approvedAmount ?? (string) $application['requested_amount']);

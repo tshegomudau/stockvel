@@ -49,8 +49,12 @@ final class TenantMiddleware implements MiddlewareInterface
             throw new TenantException('You are not a member of the selected stokvel.');
         }
 
-        // pending = accepted invite, waiting for admin approval (limited portal access).
-        if (!in_array($membership['status'] ?? '', ['active', 'suspended', 'pending'], true)) {
+        $membershipStatus = (string) ($membership['status'] ?? '');
+        // suspended members must not retain portal access; pending = invite accepted, awaiting activation.
+        if ($membershipStatus === 'suspended') {
+            throw new TenantException('Your membership is suspended for this stokvel.');
+        }
+        if (!in_array($membershipStatus, ['active', 'pending'], true)) {
             throw new TenantException('Your membership is not active for this stokvel.');
         }
 
@@ -65,7 +69,16 @@ final class TenantMiddleware implements MiddlewareInterface
             return \App\Core\Response::redirect(url('/account/stokvel-suspended'));
         }
 
+        // Pending members may only use the member portal — never /app management routes.
+        $path = $request->path();
+        if ($membershipStatus === 'pending' && str_starts_with($path, '/app')) {
+            return \App\Core\Response::redirect(url('/member'));
+        }
+
         $permissionCodes = $this->permissions->codesForMembership($membership);
+        if ($membershipStatus === 'pending') {
+            $permissionCodes = $this->limitPendingPermissions($permissionCodes);
+        }
         $enabledModules = $this->loadEnabledModules($stokvelId);
 
         $this->coreTenant->setUser($this->auth->user());
@@ -76,6 +89,41 @@ final class TenantMiddleware implements MiddlewareInterface
         $request->setAttribute('stokvel', $stokvel);
 
         return $next($request);
+    }
+
+    /**
+     * Pending invitees must not inherit committee/finance powers before activation.
+     *
+     * @param list<string> $codes
+     * @return list<string>
+     */
+    private function limitPendingPermissions(array $codes): array
+    {
+        $blockedPrefixes = [
+            'contributions.', 'funds.', 'fines.', 'expenses.', 'loans.', 'payouts.',
+            'fees.', 'members.', 'settings.', 'roles.', 'approvals.', 'reports.',
+            'documents.manage', 'meetings.manage', 'rules.manage', 'burial.', 'grocery.',
+        ];
+
+        $out = [];
+        foreach ($codes as $code) {
+            $code = (string) $code;
+            if ($code === '*' || $code === 'platform.*') {
+                continue;
+            }
+            $blocked = false;
+            foreach ($blockedPrefixes as $prefix) {
+                if (str_starts_with($code, $prefix) || $code === rtrim($prefix, '.')) {
+                    $blocked = true;
+                    break;
+                }
+            }
+            if (!$blocked) {
+                $out[] = $code;
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 
     /** @return array<string, bool> */

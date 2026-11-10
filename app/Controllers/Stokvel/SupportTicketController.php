@@ -108,13 +108,14 @@ final class SupportTicketController extends Controller
     public function show(Request $request, string $id): Response
     {
         $this->requireAuth();
+        $sid = (int) ($this->stokvelId() ?? 0);
         $ticket = $this->db()->fetch(
-            'SELECT * FROM support_tickets WHERE id = :id LIMIT 1',
-            ['id' => (int) $id]
+            'SELECT * FROM support_tickets WHERE id = :id AND (stokvel_id = :sid OR stokvel_id IS NULL) LIMIT 1',
+            ['id' => (int) $id, 'sid' => $sid]
         );
-        if (!$ticket || ((int) $ticket['created_by_user_id'] !== (int) $this->userId()
-            && (int) ($ticket['stokvel_id'] ?? 0) !== (int) ($this->stokvelId() ?? 0)
-            && !$this->tenant()->isPlatformAdmin())) {
+        $isCreator = $ticket && (int) $ticket['created_by_user_id'] === (int) $this->userId();
+        $canManage = $this->tenant()->can('support.manage') || $this->tenant()->isPlatformAdmin();
+        if (!$ticket || (!$isCreator && !$canManage)) {
             return $this->redirect('/app/support');
         }
 

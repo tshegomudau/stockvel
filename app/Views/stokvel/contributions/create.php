@@ -2,6 +2,7 @@
     <h1>Capture contribution</h1>
     <form method="post" action="<?= e(url('/app/contributions')) ?>" class="form-stack">
         <?= csrf_field() ?>
+        <input type="hidden" name="idempotency_key" value="<?= e((string) ($idempotencyKey ?? old('idempotency_key', ''))) ?>">
         <div class="form-group">
             <label for="member_id">Member</label>
             <select class="form-control form-select" id="member_id" name="member_id" required>

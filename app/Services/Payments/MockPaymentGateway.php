@@ -56,7 +56,7 @@ final class MockPaymentGateway implements PaymentGatewayInterface
             return false;
         }
 
-        $secret = (string) env('MOCK_PAYMENT_WEBHOOK_SECRET', 'mock-dev-secret');
+        $secret = (string) env('MOCK_PAYMENT_WEBHOOK_SECRET', env('PAYMENT_WEBHOOK_SECRET', 'mock-dev-secret'));
         $expected = hash_hmac('sha256', $rawPayload, $secret);
         if (hash_equals($expected, $signatureHeader)) {
             return true;
@@ -115,7 +115,7 @@ final class MockPaymentGateway implements PaymentGatewayInterface
 
     public function signPayload(string $rawPayload): string
     {
-        $secret = (string) env('MOCK_PAYMENT_WEBHOOK_SECRET', 'mock-dev-secret');
+        $secret = (string) env('MOCK_PAYMENT_WEBHOOK_SECRET', env('PAYMENT_WEBHOOK_SECRET', 'mock-dev-secret'));
 
         return hash_hmac('sha256', $rawPayload, $secret);
     }

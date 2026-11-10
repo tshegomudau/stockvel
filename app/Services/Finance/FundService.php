@@ -123,13 +123,18 @@ final class FundService
         }
 
         return (int) $this->db->transaction(function () use ($stokvelId, $fundId, $fund, $direction, $normalized, $userId, $meta, $key) {
+            // Serialize concurrent fund posts for the same pocket.
+            $this->db->fetch(
+                'SELECT id FROM stokvel_funds WHERE id = :id AND stokvel_id = :sid FOR UPDATE',
+                ['id' => $fundId, 'sid' => $stokvelId]
+            );
             $current = $this->balance($stokvelId, $fundId);
             if ($direction === 'credit') {
                 $after = MoneyMath::add($current, $normalized);
             } else {
                 $after = MoneyMath::sub($current, $normalized);
                 $allowNeg = (int) ($fund['allow_negative'] ?? 0) === 1;
-                if (!$allowNeg && (float) $after < -0.00001) {
+                if (!$allowNeg && MoneyMath::comp($after, '0') < 0) {
                     throw new FinanceException(
                         'Insufficient fund balance. Recorded balance is R ' . number_format((float) $current, 2)
                         . '. Negative balances are not permitted for this fund.'
