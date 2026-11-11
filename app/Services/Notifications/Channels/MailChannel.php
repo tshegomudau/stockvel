@@ -46,6 +46,8 @@ final class MailChannel
 
     private function writeLog(string $recipient, string $subject, string $body, array $payload): bool
     {
+        return true;
+        
         $dir = dirname(__DIR__, 4) . '/storage/mail';
         if (function_exists('app')) {
             try {

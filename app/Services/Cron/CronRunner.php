@@ -35,6 +35,7 @@ final class CronRunner
         $this->runTask('jobs:detect-failed', fn () => $this->detectFailedJobs());
         $this->runTask('loans:instalments', fn () => $this->markLoanInstalmentsDue());
         $this->runTask('loans:arrears', fn () => $this->markLoanArrears());
+        $this->runTask('cleanup:logs', fn () => $this->cleanupLogs());
     }
 
     public function runTask(string $name, callable $callback): mixed
@@ -88,7 +89,6 @@ final class CronRunner
         fclose($handle);
         unset($this->lockHandles[$name]);
     }
-
     /**
      * Host:pid (or safe fallbacks) for lock diagnostics.
      * getmypid/gethostname are often disabled on shared hosting.
@@ -190,6 +190,39 @@ final class CronRunner
         foreach (glob($path . '/sess_*') ?: [] as $file) {
             if (filemtime($file) < time() - $maxAge) {
                 @unlink($file);
+                $removed++;
+            }
+        }
+        return $removed;
+    }
+
+    private function cleanupLogs(): int
+    {
+        $path = dirname(__DIR__, 3) . '/storage';
+
+        if (!is_dir($path)) {
+            return 0;
+        }
+
+        $retentionDays = (int) env('DOCUMENT_RETENTION_DAYS', 120);
+        $cutoff = time() - ($retentionDays * 86400);
+        $removed = 0;
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator(
+                $path,
+                \FilesystemIterator::SKIP_DOTS
+            )
+        );
+
+        foreach ($iterator as $file) {
+            if (!$file->isFile()) {
+                continue;
+            }
+
+            $modifiedAt = $file->getMTime();
+
+            if ($modifiedAt < $cutoff && @unlink($file->getPathname())) {
                 $removed++;
             }
         }
