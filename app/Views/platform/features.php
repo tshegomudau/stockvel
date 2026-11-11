@@ -1,10 +1,23 @@
 <?= view('partials/page-header', [
     'title' => 'Platform settings',
-    'description' => 'Global storage credentials, default editor flags, and password requirements for registration and resets.',
+    'description' => 'Global storage credentials, support contacts, editor flags, and password requirements for registration and resets.',
 ], null) ?>
 <?php $s = $settings ?? []; ?>
 <form method="post" action="<?= e(url('/platform/features')) ?>" class="form-stack card">
     <?= csrf_field() ?>
+
+    <h2 class="h3">Support &amp; alerts</h2>
+    <p class="form-help">Used for operational alerts such as failed <code>php bin/console test:all</code> runs. Falls back to <code>SUPPORT_EMAIL</code> / <code>MAIL_REPLY_TO</code> in <code>.env</code> when blank.</p>
+    <div class="form-group">
+        <label class="form-label" for="support_email">Support email</label>
+        <input class="form-control" type="email" id="support_email" name="support_email" value="<?= e((string) ($s['support_email'] ?? '')) ?>" placeholder="support@example.com" autocomplete="off">
+    </div>
+    <div class="form-group">
+        <label class="form-check">
+            <input type="checkbox" name="test_failure_email_enabled" value="1"<?= !empty($s['test_failure_email_enabled']) ? ' checked' : '' ?>>
+            Email support when <code>test:all</code> reports failures
+        </label>
+    </div>
 
     <h2 class="h3">Password requirements</h2>
     <p class="form-help">Applied when users register, reset a password, claim a stokvel, or change their password.</p>

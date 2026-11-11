@@ -70,6 +70,8 @@ final class FeatureSettingsController extends Controller
             'password_require_lower' => $request->input('password_require_lower') ? true : false,
             'password_require_number' => $request->input('password_require_number') ? true : false,
             'password_require_special' => $request->input('password_require_special') ? true : false,
+            'support_email' => trim((string) $request->input('support_email', '')),
+            'test_failure_email_enabled' => $request->input('test_failure_email_enabled') ? true : false,
         ];
 
         // Keep existing application key when the field is left blank (password-style).
@@ -78,6 +80,11 @@ final class FeatureSettingsController extends Controller
         $current = $settings->all();
         if ($payload['b2_application_key'] === '' && (string) ($current['b2_application_key'] ?? '') !== '') {
             $payload['b2_application_key'] = (string) $current['b2_application_key'];
+        }
+
+        if ($payload['support_email'] !== '' && !filter_var($payload['support_email'], FILTER_VALIDATE_EMAIL)) {
+            Session::flash('error', 'Support email must be a valid address.');
+            return $this->redirect('/platform/features');
         }
 
         if ($payload['file_uploads_enabled'] && $payload['storage_driver'] === 'backblaze') {

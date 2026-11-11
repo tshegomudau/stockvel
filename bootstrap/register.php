@@ -50,6 +50,7 @@ use App\Services\PermissionService;
 use App\Services\Documents\DocumentService;
 use App\Services\Notifications\EmailTemplateService;
 use App\Services\Platform\PlatformSettingsService;
+use App\Services\Platform\TestFailureNotifier;
 use App\Services\Stokvel\StokvelCreationRequestService;
 use App\Services\Stokvel\StokvelEditorSettingsService;
 use App\Services\Storage\StorageManager;
@@ -208,6 +209,11 @@ return static function (Container $container, string $basePath, array $dbConfig)
     ));
     $container->singleton(PlatformSettingsService::class, static fn (Container $c) => new PlatformSettingsService(
         $c->get(Database::class)
+    ));
+    $container->singleton(TestFailureNotifier::class, static fn (Container $c) => new TestFailureNotifier(
+        $c->get(PlatformSettingsService::class),
+        $c->get(MailChannel::class),
+        dirname(__DIR__)
     ));
     $container->singleton(StokvelEditorSettingsService::class, static fn (Container $c) => new StokvelEditorSettingsService(
         $c->get(Database::class),

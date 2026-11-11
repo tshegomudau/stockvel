@@ -32,6 +32,8 @@ final class PlatformSettingsService
         'password_require_lower' => true,
         'password_require_number' => true,
         'password_require_special' => false,
+        'support_email' => '',
+        'test_failure_email_enabled' => true,
     ];
 
     public function __construct(private readonly Database $db)
@@ -81,6 +83,9 @@ final class PlatformSettingsService
         if ($out['storage_driver'] === 'local' && env('STORAGE_DRIVER')) {
             $out['storage_driver'] = (string) env('STORAGE_DRIVER');
         }
+        if ($out['support_email'] === '') {
+            $out['support_email'] = trim((string) env('SUPPORT_EMAIL', env('MAIL_REPLY_TO', '')));
+        }
 
         self::$cache = $out;
         return $out;
@@ -112,6 +117,9 @@ final class PlatformSettingsService
                 $value = (int) $value;
             } elseif (is_string($default)) {
                 $value = trim((string) $value);
+            }
+            if ($key === 'support_email' && $value !== '' && !filter_var((string) $value, FILTER_VALIDATE_EMAIL)) {
+                continue;
             }
             $encoded = json_encode($value, JSON_THROW_ON_ERROR);
             $existing = $this->db->fetch(
