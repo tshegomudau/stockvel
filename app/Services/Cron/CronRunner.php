@@ -35,6 +35,7 @@ final class CronRunner
         $this->runTask('jobs:detect-failed', fn () => $this->detectFailedJobs());
         $this->runTask('loans:instalments', fn () => $this->markLoanInstalmentsDue());
         $this->runTask('loans:arrears', fn () => $this->markLoanArrears());
+        $this->runTask('cleanup:email', fn () => $this->cleanupEmailLog());
         $this->runTask('cleanup:logs', fn () => $this->cleanupLogs());
     }
 
