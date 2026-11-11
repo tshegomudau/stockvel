@@ -40,7 +40,7 @@ final class PasswordResetService
         $plain = bin2hex(random_bytes(32));
         $hash = hash('sha256', $plain);
         $minutes = (int) env('PASSWORD_RESET_TTL_MINUTES', 60);
-        $expires = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+        $expires = (new \DateTimeImmutable(now_utc(), new \DateTimeZone(app_timezone())))
             ->modify("+{$minutes} minutes")
             ->format('Y-m-d H:i:s');
 

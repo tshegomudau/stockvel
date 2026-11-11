@@ -323,8 +323,9 @@ function sa_date(?string $datetime, string $format = 'd M Y'): string
         return '';
     }
     $tz = app_timezone();
-    $dt = new DateTimeImmutable($datetime, new DateTimeZone('UTC'));
-    return $dt->setTimezone(new DateTimeZone($tz))->format($format);
+    // Timestamps from now_utc() are wall-clock values in APP_TIMEZONE.
+    $dt = new DateTimeImmutable($datetime, new DateTimeZone($tz));
+    return $dt->format($format);
 }
 
 function sa_datetime(?string $datetime): string
@@ -342,14 +343,17 @@ function sa_datetime_email(?string $datetime, string $format = 'd M Y H:i'): str
         return '';
     }
     $tz = app_timezone();
-    $dt = (new DateTimeImmutable($datetime, new DateTimeZone('UTC')))
-        ->setTimezone(new DateTimeZone($tz));
+    $dt = new DateTimeImmutable($datetime, new DateTimeZone($tz));
     return $dt->format($format) . ' (' . $dt->format('T') . ')';
 }
 
+/**
+ * Current wall-clock timestamp in APP_TIMEZONE (env/config).
+ * Name retained for call-site compatibility; values are not forced to UTC.
+ */
 function now_utc(): string
 {
-    return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+    return (new DateTimeImmutable('now', new DateTimeZone(app_timezone())))->format('Y-m-d H:i:s');
 }
 
 function uuid(): string

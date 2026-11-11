@@ -21,7 +21,7 @@ final class RememberTokenService
         $validator = bin2hex(random_bytes(32));
         $hash = hash('sha256', $validator);
         $days = (int) env('REMEMBER_ME_DAYS', 30);
-        $expires = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+        $expires = (new \DateTimeImmutable(now_utc(), new \DateTimeZone(app_timezone())))
             ->modify("+{$days} days")
             ->format('Y-m-d H:i:s');
 

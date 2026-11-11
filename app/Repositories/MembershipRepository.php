@@ -111,6 +111,21 @@ final class MembershipRepository extends BaseRepository
         );
     }
 
+    /** @return list<array<string, mixed>> */
+    public function listPendingInvitations(int $limit = 50): array
+    {
+        $sql = 'SELECT i.id, i.email, i.mobile, i.status, i.expires_at, i.created_at,
+                       i.role_id, r.code AS role_code, r.name AS role_name
+                FROM invitations i
+                LEFT JOIN roles r ON r.id = i.role_id
+                WHERE ' . $this->applyTenant('i') . "
+                  AND i.status = 'pending'
+                ORDER BY i.created_at DESC
+                LIMIT " . (int) max(1, min(200, $limit));
+
+        return $this->db->fetchAll($sql, $this->tenantParams());
+    }
+
     public function createInvitation(array $data): int
     {
         if (!isset($data['stokvel_id'])) {

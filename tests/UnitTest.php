@@ -74,11 +74,15 @@ return static function (TestRunner $runner): void {
         $_SERVER['APP_TIMEZONE'] = 'Africa/Johannesburg';
         putenv('APP_TIMEZONE=Africa/Johannesburg');
 
-        // 12:00 UTC → 14:00 SAST
+        // Stored timestamps are wall-clock APP_TIMEZONE values (not UTC).
         $formatted = sa_datetime_email('2026-11-08 12:00:00');
-        test_assert(str_contains($formatted, '14:00'), 'Expected SAST conversion, got: ' . $formatted);
+        test_assert(str_contains($formatted, '12:00'), 'Expected local wall-clock time, got: ' . $formatted);
         test_assert(str_contains($formatted, 'SAST') || str_contains($formatted, '+02'), 'Expected timezone label, got: ' . $formatted);
         test_assert(!str_contains($formatted, ' UTC)'), 'Email datetime must not show UTC label');
+
+        $stamp = now_utc();
+        $expected = (new DateTimeImmutable('now', new DateTimeZone('Africa/Johannesburg')))->format('Y-m-d H:i');
+        test_assert(str_starts_with($stamp, $expected), 'now_utc must use APP_TIMEZONE, got: ' . $stamp);
 
         if ($prevEnv === null) {
             unset($_ENV['APP_TIMEZONE'], $_SERVER['APP_TIMEZONE']);

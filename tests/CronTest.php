@@ -47,6 +47,81 @@ return static function (TestRunner $runner): void {
         test_assert($second === null);
     });
 
+    $runner->add('cleanup:logs and cleanup:email remove aged files only', function (): void {
+        $container = App::getInstance()->container();
+        $base = App::getInstance()->basePath('storage');
+        $logsDir = $base . '/logs';
+        $mailDir = $base . '/mail';
+        @mkdir($logsDir, 0775, true);
+        @mkdir($mailDir, 0775, true);
+
+        $oldLog = $logsDir . '/app-2020-01-01.log';
+        $keepLog = $logsDir . '/app-' . date('Y-m-d') . '.log';
+        $oldMail = $mailDir . '/2020-01-01_120000_cleanuptest.eml';
+        $keepMail = $mailDir . '/' . date('Y-m-d') . '_120000_cleanupkeep.eml';
+
+        file_put_contents($oldLog, "{\"ts\":\"2020-01-01\",\"level\":\"INFO\",\"message\":\"old\"}\n");
+        file_put_contents($keepLog, "{\"ts\":\"" . now_utc() . "\",\"level\":\"INFO\",\"message\":\"keep\"}\n", FILE_APPEND);
+        file_put_contents($oldMail, "Subject: old\n\nbody\n");
+        file_put_contents($keepMail, "Subject: keep\n\nbody\n");
+        touch($oldLog, strtotime('2020-01-01 12:00:00'));
+        touch($oldMail, strtotime('2020-01-01 12:00:00'));
+
+        $prevLog = $_ENV['LOG_RETENTION_DAYS'] ?? null;
+        $prevEmail = $_ENV['EMAIL_LOG_RETENTION_DAYS'] ?? null;
+        $_ENV['LOG_RETENTION_DAYS'] = '7';
+        $_SERVER['LOG_RETENTION_DAYS'] = '7';
+        putenv('LOG_RETENTION_DAYS=7');
+        $_ENV['EMAIL_LOG_RETENTION_DAYS'] = '7';
+        $_SERVER['EMAIL_LOG_RETENTION_DAYS'] = '7';
+        putenv('EMAIL_LOG_RETENTION_DAYS=7');
+
+        try {
+            $cron = new CronRunner(
+                test_db(),
+                $container->get(\App\Core\Logger::class),
+                $container->get(\App\Services\Finance\ChargeService::class),
+                $container->get(NotificationQueueService::class),
+                300
+            );
+            $ref = new \ReflectionClass($cron);
+            $cleanLogs = $ref->getMethod('cleanupLogs');
+            $cleanLogs->setAccessible(true);
+            $cleanMail = $ref->getMethod('cleanupEmailLog');
+            $cleanMail->setAccessible(true);
+
+            $removedLogs = (int) $cleanLogs->invoke($cron);
+            $removedMail = (int) $cleanMail->invoke($cron);
+
+            test_assert($removedLogs >= 1, 'Expected at least one aged log removed');
+            test_assert($removedMail >= 1, 'Expected at least one aged mail log removed');
+            test_assert(!is_file($oldLog), 'Old app log should be deleted');
+            test_assert(is_file($keepLog), 'Current day log must be kept');
+            test_assert(!is_file($oldMail), 'Old .eml should be deleted');
+            test_assert(is_file($keepMail), 'Recent .eml must be kept');
+        } finally {
+            @unlink($oldLog);
+            @unlink($keepMail);
+            @unlink($oldMail);
+            if ($prevLog === null) {
+                unset($_ENV['LOG_RETENTION_DAYS'], $_SERVER['LOG_RETENTION_DAYS']);
+                putenv('LOG_RETENTION_DAYS');
+            } else {
+                $_ENV['LOG_RETENTION_DAYS'] = $prevLog;
+                $_SERVER['LOG_RETENTION_DAYS'] = $prevLog;
+                putenv('LOG_RETENTION_DAYS=' . $prevLog);
+            }
+            if ($prevEmail === null) {
+                unset($_ENV['EMAIL_LOG_RETENTION_DAYS'], $_SERVER['EMAIL_LOG_RETENTION_DAYS']);
+                putenv('EMAIL_LOG_RETENTION_DAYS');
+            } else {
+                $_ENV['EMAIL_LOG_RETENTION_DAYS'] = $prevEmail;
+                $_SERVER['EMAIL_LOG_RETENTION_DAYS'] = $prevEmail;
+                putenv('EMAIL_LOG_RETENTION_DAYS=' . $prevEmail);
+            }
+        }
+    }, 'integration');
+
     $runner->add('Notification retry increments attempts', function (): void {
         test_transaction(function () {
             $db = test_db();

@@ -387,7 +387,7 @@ final class AuthService
         $attempts = (int) ($user['failed_login_count'] ?? $user['failed_login_attempts'] ?? $user['login_attempts'] ?? 0);
         if ($attempts >= $max) {
             $minutes = (int) env('LOGIN_LOCKOUT_MINUTES', 15);
-            $lockedUntil = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            $lockedUntil = (new \DateTimeImmutable(now_utc(), new \DateTimeZone(app_timezone())))
                 ->modify("+{$minutes} minutes")
                 ->format('Y-m-d H:i:s');
             $this->users->lockUntil($userId, $lockedUntil);

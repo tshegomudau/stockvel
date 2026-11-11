@@ -145,7 +145,7 @@ final class StokvelCreationRequestService
 
             $claimPlain = bin2hex(random_bytes(32));
             $claimHash = hash('sha256', $claimPlain);
-            $expires = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            $expires = (new \DateTimeImmutable(now_utc(), new \DateTimeZone(app_timezone())))
                 ->modify('+' . self::CLAIM_TTL_HOURS . ' hours')
                 ->format('Y-m-d H:i:s');
             $now = now_utc();

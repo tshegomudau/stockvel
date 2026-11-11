@@ -24,6 +24,7 @@ $appLinks = [
     'onboarding' => [
         'label' => 'Setup wizard',
         'url' => route('app.onboarding'),
+        // settings.manage is required to open the wizard; only show while incomplete.
         'permission' => 'settings.manage',
         'show' => $setupIncomplete,
     ],

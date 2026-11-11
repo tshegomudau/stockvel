@@ -125,6 +125,86 @@ return static function (TestRunner $runner): void {
         });
     }, 'integration');
 
+    $runner->add('Wizard invite step creates pending invitations for multiple emails', function (): void {
+        test_transaction(function (): void {
+            $db = test_db();
+            $auth = App::getInstance()->container()->get(AuthService::class);
+            $admin = $db->fetch("SELECT id FROM users WHERE email = 'admin@stockvel.local' LIMIT 1");
+            /** @var StokvelCreationRequestService $svc */
+            $svc = App::getInstance()->container()->get(StokvelCreationRequestService::class);
+            $sid = $svc->createDirectByAdmin([
+                'name' => 'Invite Wizard ' . bin2hex(random_bytes(3)),
+            ], (int) $admin['id']);
+
+            $email = 'wiz_inv_' . bin2hex(random_bytes(3)) . '@example.com';
+            $user = $auth->register([
+                'email' => $email,
+                'password' => 'Password123!',
+                'first_name' => 'Invite',
+                'last_name' => 'Chair',
+            ]);
+            $userId = (int) $user['id'];
+            $now = now_utc();
+            $membershipId = (int) $db->insert(
+                'INSERT INTO memberships (stokvel_id, user_id, member_number, status, joined_at, approved_at, created_at, updated_at)
+                 VALUES (:sid, :uid, :mn, :st, :ja, :aa, :ca, :ua)',
+                [
+                    'sid' => $sid,
+                    'uid' => $userId,
+                    'mn' => 'M-00001',
+                    'st' => 'active',
+                    'ja' => $now,
+                    'aa' => $now,
+                    'ca' => $now,
+                    'ua' => $now,
+                ]
+            );
+            $role = $db->fetch("SELECT id FROM roles WHERE code = 'chairperson' AND stokvel_id IS NULL LIMIT 1");
+            test_assert($role !== null);
+            $db->insert(
+                'INSERT INTO membership_roles (stokvel_id, membership_id, role_id, assigned_by_user_id, assigned_at, created_at)
+                 VALUES (:sid, :mid, :rid, :by, :aa, :ca)',
+                [
+                    'sid' => $sid,
+                    'mid' => $membershipId,
+                    'rid' => (int) $role['id'],
+                    'by' => $userId,
+                    'aa' => $now,
+                    'ca' => $now,
+                ]
+            );
+
+            $auth->logout();
+            $auth->login($email, 'Password123!');
+            \App\Core\Session::set('active_stokvel_id', $sid);
+            \App\Core\Session::set('stokvel_id', $sid);
+
+            $one = 'a_' . bin2hex(random_bytes(2)) . '@example.com';
+            $two = 'b_' . bin2hex(random_bytes(2)) . '@example.com';
+            $client = new HttpClient();
+            $client->get('/app/onboarding?step=8');
+            $resp = $client->post('/app/onboarding/8', [
+                'invite_emails' => $one . "\n" . $two,
+                'invite_role' => 'ordinary_member',
+                'direction' => 'continue',
+            ]);
+            test_assert(
+                in_array((int) $resp['status'], [200, 302], true),
+                'Invite step should respond, got ' . $resp['status'] . ' ' . substr((string) $resp['body'], 0, 200)
+            );
+
+            $pending = $db->fetchAll(
+                "SELECT email, status FROM invitations WHERE stokvel_id = :sid AND status = 'pending' ORDER BY email ASC",
+                ['sid' => $sid]
+            );
+            $emails = array_map(static fn (array $r): string => (string) $r['email'], $pending);
+            test_assert(in_array($one, $emails, true), 'First invite missing');
+            test_assert(in_array($two, $emails, true), 'Second invite missing');
+
+            $auth->logout();
+        });
+    }, 'http');
+
     $runner->add('Completed setup hides wizard route and shows dashboard', function (): void {
         $auth = App::getInstance()->container()->get(AuthService::class);
         $auth->logout();

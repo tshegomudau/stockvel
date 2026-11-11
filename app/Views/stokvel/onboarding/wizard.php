@@ -4,6 +4,10 @@ $current = (int) ($step ?? 1);
 $total = max(1, count($stepKeys));
 $percent = (int) ($percent ?? 0);
 $stepsCompleted = $stepsCompleted ?? [];
+$maxReachedStep = (int) ($maxReachedStep ?? $current);
+$canInvite = !empty($canInvite);
+$canAssignRoles = !empty($canAssignRoles);
+$pendingInvitations = is_array($pendingInvitations ?? null) ? $pendingInvitations : [];
 $labels = [
     'organisation' => 'Stokvel details',
     'type' => 'Stokvel type',
@@ -17,6 +21,9 @@ $labels = [
     'review' => 'Review & finish',
 ];
 $stokvelRow = $stokvel ?? [];
+$inviteRoleOptions = $canAssignRoles
+    ? ['ordinary_member', 'committee_member', 'secretary', 'treasurer']
+    : ['ordinary_member'];
 ?>
 <?= view('partials/page-header', [
     'title' => 'Stokvel setup wizard',
@@ -36,11 +43,19 @@ $stokvelRow = $stokvel ?? [];
             ? 'is-done'
             : ($i === $current ? 'is-current' : '');
         $label = $labels[$key] ?? ucfirst(str_replace('_', ' ', (string) $key));
+        $canJump = $i <= $maxReachedStep;
         ?>
-        <div class="wizard-step <?= e($state) ?>">
-            <strong>Step <?= $i ?></strong>
-            <?= e($label) ?>
-        </div>
+        <?php if ($canJump): ?>
+            <a class="wizard-step <?= e($state) ?>" href="<?= e(url('/app/onboarding?step=' . $i)) ?>"<?= $i === $current ? ' aria-current="step"' : '' ?>>
+                <strong>Step <?= $i ?></strong>
+                <?= e($label) ?>
+            </a>
+        <?php else: ?>
+            <div class="wizard-step <?= e($state) ?>" aria-disabled="true">
+                <strong>Step <?= $i ?></strong>
+                <?= e($label) ?>
+            </div>
+        <?php endif; ?>
     <?php endforeach; ?>
 </div>
 
@@ -132,15 +147,57 @@ $stokvelRow = $stokvel ?? [];
                 <div class="form-group"><label class="form-label" for="late_penalty">Late-payment penalty</label><div class="input-prefix"><span>R</span><input class="form-control" type="number" step="0.01" id="late_penalty" name="late_penalty" value="<?= e((string) ($saved['late_penalty'] ?? '0')) ?>"></div></div>
             </div>
         <?php elseif ($stepKey === 'invite'): ?>
-            <div class="form-group"><label class="form-label" for="invite_email">Invite email</label><input class="form-control" type="email" id="invite_email" name="invite_email" value="<?= e((string) ($saved['invite_email'] ?? '')) ?>"></div>
-            <div class="form-group"><label class="form-label" for="invite_role">Role</label>
-                <select class="form-control form-select" id="invite_role" name="invite_role">
-                    <?php foreach (['ordinary_member','committee_member','secretary','treasurer'] as $role): ?>
-                        <option value="<?= e($role) ?>"<?= (string) ($saved['invite_role'] ?? '') === $role ? ' selected' : '' ?>><?= e(ucfirst(str_replace('_', ' ', $role))) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <p class="form-help">You can send formal invitations from Members after setup. This step records your plan.</p>
+            <?php if ($canInvite): ?>
+                <div class="form-group">
+                    <label class="form-label" for="invite_emails">Invite emails</label>
+                    <textarea class="form-control form-textarea" id="invite_emails" name="invite_emails" rows="5" placeholder="one@example.com&#10;two@example.com"><?= e((string) ($saved['invite_emails'] ?? $saved['invite_email'] ?? '')) ?></textarea>
+                    <p class="form-help">Enter one or more emails — separate with new lines, commas, or spaces. Each valid address gets a pending invitation.</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="invite_role">Role for invitees</label>
+                    <select class="form-control form-select" id="invite_role" name="invite_role"<?= $canAssignRoles ? '' : ' disabled' ?>>
+                        <?php foreach ($inviteRoleOptions as $role): ?>
+                            <option value="<?= e($role) ?>"<?= (string) ($saved['invite_role'] ?? 'ordinary_member') === $role ? ' selected' : '' ?>><?= e(ucfirst(str_replace('_', ' ', $role))) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if (!$canAssignRoles): ?>
+                        <input type="hidden" name="invite_role" value="ordinary_member">
+                        <p class="form-help">Without members.manage you can only invite ordinary members.</p>
+                    <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <div class="alert alert-warning" role="status">
+                    You can continue setup, but sending invitations requires the <strong>members.invite</strong> permission.
+                </div>
+            <?php endif; ?>
+
+            <?php if ($pendingInvitations !== []): ?>
+                <div class="mt-4">
+                    <h3 class="card-title">Pending invitations</h3>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Expires</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($pendingInvitations as $inv): ?>
+                                    <tr>
+                                        <td><?= e((string) ($inv['email'] ?? '—')) ?></td>
+                                        <td><?= e(ucfirst(str_replace('_', ' ', (string) ($inv['role_code'] ?? $inv['role_name'] ?? 'member')))) ?></td>
+                                        <td><span class="badge"><?= e((string) ($inv['status'] ?? 'pending')) ?></span></td>
+                                        <td><?= e(sa_datetime((string) ($inv['expires_at'] ?? ''))) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php endif; ?>
         <?php elseif ($stepKey === 'rules'): ?>
             <div class="form-group">
                 <label class="form-label" for="notes">Governance notes</label>
@@ -156,12 +213,13 @@ $stokvelRow = $stokvel ?? [];
 
         <div class="form-actions">
             <?php if ($current > 1): ?>
-                <a class="btn btn-secondary" href="<?= e(url('/app/onboarding?step=' . ($current - 1))) ?>">Previous</a>
+                <button type="submit" class="btn btn-secondary" name="direction" value="back">Save &amp; previous</button>
+                <a class="btn btn-ghost" href="<?= e(url('/app/onboarding?step=' . ($current - 1))) ?>">Previous without saving</a>
             <?php endif; ?>
             <?php if ($stepKey !== 'review'): ?>
-                <button type="submit" class="btn btn-primary">Save &amp; continue</button>
+                <button type="submit" class="btn btn-primary" name="direction" value="continue">Save &amp; continue</button>
             <?php else: ?>
-                <button type="submit" class="btn btn-secondary">Save review notes</button>
+                <button type="submit" class="btn btn-secondary" name="direction" value="continue">Save review notes</button>
             <?php endif; ?>
         </div>
     </form>

@@ -7,8 +7,10 @@ namespace App\Controllers\Stokvel;
 use App\Controllers\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\MembershipRepository;
 use App\Services\Analytics\GroupHealthService;
 use App\Services\Finance\FundService;
+use App\Services\Onboarding\OnboardingService;
 
 final class DashboardController extends Controller
 {
@@ -19,18 +21,20 @@ final class DashboardController extends Controller
         $db = $this->db();
         $tenant = $this->tenant();
 
-        // Chairpersons with unfinished setup land on the wizard instead of the dashboard.
-        if ($tenant->can('settings.manage')) {
+        $setupIncomplete = false;
+        $canManageSetup = $tenant->can('settings.manage');
+        if ($canManageSetup) {
             try {
-                /** @var \App\Services\Onboarding\OnboardingService $onboarding */
-                $onboarding = app()->container()->get(\App\Services\Onboarding\OnboardingService::class);
-                if ($onboarding->needsSetup($sid)) {
-                    return $this->redirect('/app/onboarding');
-                }
+                /** @var OnboardingService $onboarding */
+                $onboarding = app()->container()->get(OnboardingService::class);
+                $setupIncomplete = $onboarding->needsSetup($sid);
             } catch (\Throwable) {
-                // Continue to dashboard if onboarding status cannot be resolved.
+                $setupIncomplete = false;
             }
         }
+
+        // Soft nudge only — stay on dashboard so pending invites and metrics remain visible.
+        // First login still lands on the wizard via home_path_for_user().
 
         $canMembers = $tenant->can('members.view');
         $canContributions = $tenant->can('contributions.view');
@@ -48,6 +52,11 @@ final class DashboardController extends Controller
         ) ?? [];
         $loansEnabled = !empty($settings['loans_enabled']);
 
+        $tz = new \DateTimeZone(app_timezone());
+        $nowLocal = new \DateTimeImmutable('now', $tz);
+        $monthStart = $nowLocal->modify('first day of this month')->setTime(0, 0, 0);
+        $nextMonthStart = $monthStart->modify('+1 month');
+
         $stats = [];
         if ($canMembers) {
             $stats['members'] = (int) ($db->fetch(
@@ -59,9 +68,12 @@ final class DashboardController extends Controller
             $stats['contributions_mtd'] = (float) ($db->fetch(
                 "SELECT COALESCE(SUM(amount),0) AS t FROM payment_transactions
                  WHERE stokvel_id = :sid AND status IN ('posted','completed','allocated','confirmed')
-                   AND MONTH(paid_at) = MONTH(UTC_TIMESTAMP())
-                   AND YEAR(paid_at) = YEAR(UTC_TIMESTAMP())",
-                ['sid' => $sid]
+                   AND paid_at >= :start AND paid_at < :end",
+                [
+                    'sid' => $sid,
+                    'start' => $monthStart->format('Y-m-d H:i:s'),
+                    'end' => $nextMonthStart->format('Y-m-d H:i:s'),
+                ]
             )['t'] ?? 0);
             $stats['arrears'] = (float) ($db->fetch(
                 "SELECT COALESCE(SUM(amount - amount_paid),0) AS t FROM member_charges
@@ -78,8 +90,8 @@ final class DashboardController extends Controller
         if ($canMeetings) {
             $stats['upcoming_meetings'] = (int) ($db->fetch(
                 "SELECT COUNT(*) AS c FROM meetings
-                 WHERE stokvel_id = :sid AND scheduled_at >= UTC_TIMESTAMP() AND status IN ('scheduled','confirmed')",
-                ['sid' => $sid]
+                 WHERE stokvel_id = :sid AND scheduled_at >= :now AND status IN ('scheduled','confirmed')",
+                ['sid' => $sid, 'now' => now_utc()]
             )['c'] ?? 0);
         }
         if ($canLoans && $loansEnabled) {
@@ -120,20 +132,34 @@ final class DashboardController extends Controller
             }
         }
 
+        $pendingInvitations = [];
+        if ($canMembers || $canInvite) {
+            try {
+                /** @var MembershipRepository $memberships */
+                $memberships = app()->container()->get(MembershipRepository::class);
+                $pendingInvitations = $memberships->listPendingInvitations(50);
+                $stats['pending_invitations'] = count($pendingInvitations);
+            } catch (\Throwable) {
+                $pendingInvitations = [];
+            }
+        }
+
         $chartLabels = [];
         $chartValues = [];
         if ($canContributions) {
             for ($i = 5; $i >= 0; $i--) {
-                $month = (new \DateTimeImmutable('first day of this month', new \DateTimeZone('UTC')))->modify("-{$i} months");
+                $month = (new \DateTimeImmutable('first day of this month', $tz))->modify("-{$i} months");
+                $start = $month->setTime(0, 0, 0);
+                $end = $start->modify('+1 month');
                 $row = $db->fetch(
                     "SELECT COALESCE(SUM(amount),0) AS t FROM payment_transactions
                      WHERE stokvel_id = :sid
-                       AND MONTH(paid_at) = :m AND YEAR(paid_at) = :y
+                       AND paid_at >= :start AND paid_at < :end
                        AND status IN ('posted','completed','allocated','confirmed')",
                     [
                         'sid' => $sid,
-                        'm' => (int) $month->format('n'),
-                        'y' => (int) $month->format('Y'),
+                        'start' => $start->format('Y-m-d H:i:s'),
+                        'end' => $end->format('Y-m-d H:i:s'),
                     ]
                 );
                 $chartLabels[] = $month->format('M');
@@ -150,6 +176,8 @@ final class DashboardController extends Controller
             'chartLabels' => $chartLabels,
             'chartValues' => $chartValues,
             'settings' => $settings,
+            'setupIncomplete' => $setupIncomplete,
+            'pendingInvitations' => $pendingInvitations,
             'can' => [
                 'members' => $canMembers,
                 'contributions' => $canContributions,
@@ -160,6 +188,7 @@ final class DashboardController extends Controller
                 'invite' => $canInvite,
                 'capture' => $canCapture,
                 'fees' => $canFees,
+                'onboarding' => $canManageSetup && $setupIncomplete,
             ],
         ]);
     }

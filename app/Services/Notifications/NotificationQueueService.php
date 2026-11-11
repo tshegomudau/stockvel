@@ -29,7 +29,8 @@ final class NotificationQueueService
         ?array $payload = null,
         ?\DateTimeImmutable $scheduledFor = null
     ): int {
-        $scheduled = ($scheduledFor ?? new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $scheduled = ($scheduledFor ?? new \DateTimeImmutable(now_utc(), new \DateTimeZone(app_timezone())))
+            ->format('Y-m-d H:i:s');
 
         return (int) $this->db->insert(
             'INSERT INTO notification_jobs (stokvel_id, user_id, channel, recipient, subject, body, payload_json, status, attempt_count, max_attempts, scheduled_for, created_at, updated_at)
@@ -131,7 +132,7 @@ final class NotificationQueueService
             return true;
         } catch (\Throwable $e) {
             $delay = $this->backoffSeconds($attempt);
-            $next = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            $next = (new \DateTimeImmutable(now_utc(), new \DateTimeZone(app_timezone())))
                 ->modify("+{$delay} seconds")
                 ->format('Y-m-d H:i:s');
 

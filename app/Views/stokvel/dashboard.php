@@ -1,15 +1,28 @@
 <?php
 $can = $can ?? [];
 $hasAnyStat = !empty($stats);
+$pendingInvitations = is_array($pendingInvitations ?? null) ? $pendingInvitations : [];
 ?>
+<?php if (!empty($can['onboarding']) || !empty($setupIncomplete)): ?>
+<div class="alert alert-warning" role="status">
+    Setup is incomplete.
+    <?php if (!empty($can['onboarding'])): ?>
+        <a href="<?= e(url('/app/onboarding')) ?>">Continue the setup wizard</a>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="dashboard-hero">
     <div>
         <h1><?= e($stokvel['name'] ?? 'Stokvel dashboard') ?></h1>
         <p>Live figures from your ledger, memberships, and approvals</p>
     </div>
     <div class="quick-actions">
+        <?php if (!empty($can['onboarding'])): ?>
+            <a class="btn btn-primary" href="<?= e(url('/app/onboarding')) ?>">Setup wizard</a>
+        <?php endif; ?>
         <?php if (!empty($can['capture'])): ?>
-            <a class="btn btn-primary" href="<?= e(url('/app/contributions/create')) ?>">Record contribution</a>
+            <a class="btn <?= !empty($can['onboarding']) ? 'btn-secondary' : 'btn-primary' ?>" href="<?= e(url('/app/contributions/create')) ?>">Record contribution</a>
         <?php endif; ?>
         <?php if (!empty($can['invite'])): ?>
             <a class="btn btn-secondary" href="<?= e(url('/app/members/invite')) ?>">Invite member</a>
@@ -42,6 +55,9 @@ $hasAnyStat = !empty($stats);
     <?php endif; ?>
     <?php if (array_key_exists('pending_approvals', $stats)): ?>
         <?= view('partials/stat-card', ['label' => 'Pending approvals', 'value' => (string) $stats['pending_approvals']], null) ?>
+    <?php endif; ?>
+    <?php if (array_key_exists('pending_invitations', $stats)): ?>
+        <?= view('partials/stat-card', ['label' => 'Pending invitations', 'value' => (string) $stats['pending_invitations']], null) ?>
     <?php endif; ?>
 </div>
 
@@ -95,7 +111,7 @@ $hasAnyStat = !empty($stats);
     </section>
     <?php endif; ?>
 
-    <?php if (!empty($can['approvals']) || !empty($can['contributions']) || !empty($can['meetings'])): ?>
+    <?php if (!empty($can['approvals']) || !empty($can['contributions']) || !empty($can['meetings']) || !empty($can['members']) || !empty($can['invite'])): ?>
     <section class="card">
         <div class="card-header">
             <div>
@@ -108,6 +124,12 @@ $hasAnyStat = !empty($stats);
             <li class="activity-item">
                 <div><strong>Pending approvals</strong></div>
                 <a href="<?= e(url('/app/approvals')) ?>"><?= (int) $stats['pending_approvals'] ?></a>
+            </li>
+            <?php endif; ?>
+            <?php if (array_key_exists('pending_invitations', $stats)): ?>
+            <li class="activity-item">
+                <div><strong>Pending invitations</strong></div>
+                <a href="<?= e(url('/app/members')) ?>"><?= (int) $stats['pending_invitations'] ?></a>
             </li>
             <?php endif; ?>
             <?php if (array_key_exists('arrears', $stats)): ?>
@@ -126,3 +148,48 @@ $hasAnyStat = !empty($stats);
     </section>
     <?php endif; ?>
 </div>
+
+<?php if (($can['members'] ?? false) || ($can['invite'] ?? false)): ?>
+<section class="card mt-6">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title">Pending invitations</h2>
+            <p class="card-subtitle">Invited members who have not accepted yet</p>
+        </div>
+        <?php if (!empty($can['invite'])): ?>
+            <a class="btn btn-secondary btn-sm" href="<?= e(url('/app/members/invite')) ?>">Invite more</a>
+        <?php endif; ?>
+    </div>
+    <?php if ($pendingInvitations === []): ?>
+        <?= view('partials/empty', [
+            'emptyTitle' => 'No pending invitations',
+            'emptyMessage' => 'When you invite members, unanswered invites appear here with pending status.',
+        ], null) ?>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Sent</th>
+                        <th>Expires</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($pendingInvitations as $inv): ?>
+                        <tr>
+                            <td><?= e((string) ($inv['email'] ?? '—')) ?></td>
+                            <td><?= e(ucfirst(str_replace('_', ' ', (string) ($inv['role_code'] ?? $inv['role_name'] ?? 'member')))) ?></td>
+                            <td><span class="badge"><?= e((string) ($inv['status'] ?? 'pending')) ?></span></td>
+                            <td><?= e(sa_datetime((string) ($inv['created_at'] ?? ''))) ?></td>
+                            <td><?= e(sa_datetime((string) ($inv['expires_at'] ?? ''))) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
+<?php endif; ?>

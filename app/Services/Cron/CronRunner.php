@@ -182,72 +182,112 @@ final class CronRunner
 
     private function cleanupSessions(): int
     {
-        $path = dirname(__DIR__, 3) . '/storage/sessions';
+        $path = $this->storagePath('sessions');
         if (!is_dir($path)) {
             return 0;
         }
         $removed = 0;
         $maxAge = (int) env('SESSION_LIFETIME', 120) * 60 * 2;
         foreach (glob($path . '/sess_*') ?: [] as $file) {
-            if (filemtime($file) < time() - $maxAge) {
-                @unlink($file);
+            if (!is_file($file)) {
+                continue;
+            }
+            if (filemtime($file) < time() - $maxAge && @unlink($file)) {
                 $removed++;
             }
         }
         return $removed;
     }
+
+    /** Remove aged .eml files written by MAIL_DRIVER=log under storage/mail. */
     private function cleanupEmailLog(): int
     {
-        $path = dirname(__DIR__, 3) . '/storage/sessions';
+        $path = $this->storagePath('mail');
         if (!is_dir($path)) {
             return 0;
         }
+
+        $days = (int) env(
+            'EMAIL_LOG_RETENTION_DAYS',
+            env('LOG_RETENTION_DAYS', env('DOCUMENT_RETENTION_DAYS', 14))
+        );
+        $days = max(1, $days);
+        $cutoff = time() - ($days * 86400);
         $removed = 0;
-        $maxAge =  60;
-        foreach (glob($path . '/20*') ?: [] as $file) {
-            if (filemtime($file) < time() - $maxAge) {
-                @unlink($file);
+
+        foreach (glob($path . '/*.eml') ?: [] as $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            $mtime = (int) (filemtime($file) ?: 0);
+            if ($mtime < $cutoff && @unlink($file)) {
                 $removed++;
             }
         }
+
         return $removed;
     }
 
+    /** Remove aged application/deploy/cron logs under storage/logs only. */
     private function cleanupLogs(): int
     {
-        $path = dirname(__DIR__, 3) . '/storage';
-
+        $path = $this->storagePath('logs');
         if (!is_dir($path)) {
             return 0;
         }
 
-        $retentionDays = (int) env('DOCUMENT_RETENTION_DAYS', 120);
-        $cutoff = time() - ($retentionDays * 86400);
+        $days = (int) env('LOG_RETENTION_DAYS', env('DOCUMENT_RETENTION_DAYS', 30));
+        $days = max(1, $days);
+        $cutoff = time() - ($days * 86400);
         $removed = 0;
 
-        $directory = new \RecursiveDirectoryIterator(
-            $path,
-            \FilesystemIterator::SKIP_DOTS
-        );
-
-        $filtered = new \RecursiveCallbackFilterIterator(
-            $directory,
-            static function (\SplFileInfo $file): bool {
-                return !in_array($file->getFilename(), ['.git', '.gitkeep'], true);
+        foreach (scandir($path) ?: [] as $name) {
+            if ($name === '.' || $name === '..' || $name === '.gitkeep') {
+                continue;
             }
-        );
+            $file = $path . DIRECTORY_SEPARATOR . $name;
+            if (!is_file($file)) {
+                continue;
+            }
 
-        $iterator = new \RecursiveIteratorIterator($filtered);
-
-        foreach ($iterator as $file) {
-            if ($file->isFile() && $file->getMTime() < $cutoff) {
-                if (@unlink($file->getPathname())) {
-                    $removed++;
-                }
+            $ageAnchor = $this->logFileAgeAnchor($name, (int) (filemtime($file) ?: 0));
+            if ($ageAnchor >= $cutoff) {
+                continue;
+            }
+            if (@unlink($file)) {
+                $removed++;
             }
         }
 
         return $removed;
+    }
+
+    private function storagePath(string $subdir = ''): string
+    {
+        try {
+            $base = app()->basePath('storage');
+        } catch (\Throwable) {
+            $base = dirname(__DIR__, 3) . '/storage';
+        }
+
+        if ($subdir === '') {
+            return $base;
+        }
+
+        return $base . '/' . trim($subdir, '/');
+    }
+
+    /** Prefer dated filename (app-YYYY-MM-DD / deploy-YYYYMMDD); else mtime. */
+    private function logFileAgeAnchor(string $filename, int $mtime): int
+    {
+        if (preg_match('/^app-(\d{4})-(\d{2})-(\d{2})(?:\.|\z)/', $filename, $m) === 1) {
+            return (int) (strtotime(sprintf('%s-%s-%s 23:59:59', $m[1], $m[2], $m[3])) ?: $mtime);
+        }
+        if (preg_match('/^deploy-(\d{4})(\d{2})(\d{2})(?:\.|\z)/', $filename, $m) === 1) {
+            return (int) (strtotime(sprintf('%s-%s-%s 23:59:59', $m[1], $m[2], $m[3])) ?: $mtime);
+        }
+
+        return $mtime;
     }
 
     private function detectFailedJobs(): int
