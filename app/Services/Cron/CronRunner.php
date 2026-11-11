@@ -35,8 +35,34 @@ final class CronRunner
         $this->runTask('jobs:detect-failed', fn () => $this->detectFailedJobs());
         $this->runTask('loans:instalments', fn () => $this->markLoanInstalmentsDue());
         $this->runTask('loans:arrears', fn () => $this->markLoanArrears());
-        $this->runTask('cleanup:email', fn () => $this->cleanupEmailLog());
-        $this->runTask('cleanup:logs', fn () => $this->cleanupLogs());
+        $this->runTask('cleanup:email', fn () => $this->runCleanupEmail()['removed']);
+        $this->runTask('cleanup:logs', fn () => $this->runCleanupLogs()['removed']);
+    }
+
+    /**
+     * Remove aged MAIL_DRIVER=log files under storage/mail.
+     *
+     * @return array{removed:int,scanned:int,failed:int,kept:int,days:int,cutoff:string,path:string}
+     */
+    public function runCleanupEmail(): array
+    {
+        return $this->cleanupEmailLog();
+    }
+
+    /**
+     * Remove aged application/deploy logs under storage/logs.
+     *
+     * @return array{removed:int,scanned:int,failed:int,kept:int,days:int,cutoff:string,path:string}
+     */
+    public function runCleanupLogs(): array
+    {
+        return $this->cleanupLogs();
+    }
+
+    /** @return array{removed:int,scanned:int,failed:int,kept:int,days:int,cutoff:string,path:string} */
+    public function runCleanupSessions(): array
+    {
+        return $this->cleanupSessions();
     }
 
     public function runTask(string $name, callable $callback): mixed
@@ -180,66 +206,91 @@ final class CronRunner
         return $n;
     }
 
-    private function cleanupSessions(): int
+    /** @return array{removed:int,scanned:int,failed:int,kept:int,days:int,cutoff:string,path:string} */
+    private function cleanupSessions(): array
     {
         $path = $this->storagePath('sessions');
-        if (!is_dir($path)) {
-            return 0;
-        }
-        $removed = 0;
+        $days = 0;
         $maxAge = (int) env('SESSION_LIFETIME', 120) * 60 * 2;
+        $cutoffTs = time() - max(0, $maxAge);
+        $stats = $this->emptyCleanupStats($path, $days, $cutoffTs);
+        if (!is_dir($path)) {
+            return $stats;
+        }
+
         foreach (glob($path . '/sess_*') ?: [] as $file) {
             if (!is_file($file)) {
                 continue;
             }
-            if (filemtime($file) < time() - $maxAge && @unlink($file)) {
-                $removed++;
+            $stats['scanned']++;
+            $mtime = (int) (filemtime($file) ?: 0);
+            if ($mtime >= $cutoffTs) {
+                $stats['kept']++;
+                continue;
+            }
+            if (@unlink($file)) {
+                $stats['removed']++;
+            } else {
+                $stats['failed']++;
+                $this->logger->warning('cleanup:sessions failed to unlink', ['file' => $file]);
             }
         }
-        return $removed;
+
+        return $stats;
     }
 
-    /** Remove aged .eml files written by MAIL_DRIVER=log under storage/mail. */
-    private function cleanupEmailLog(): int
+    /**
+     * Remove aged .eml files written by MAIL_DRIVER=log under storage/mail.
+     *
+     * @return array{removed:int,scanned:int,failed:int,kept:int,days:int,cutoff:string,path:string}
+     */
+    private function cleanupEmailLog(): array
     {
         $path = $this->storagePath('mail');
+        $days = $this->retentionDays('EMAIL_LOG_RETENTION_DAYS', 'LOG_RETENTION_DAYS', 7);
+        $cutoffTs = $this->retentionCutoffTimestamp($days);
+        $stats = $this->emptyCleanupStats($path, $days, $cutoffTs);
         if (!is_dir($path)) {
-            return 0;
+            return $stats;
         }
-
-        $days = (int) env(
-            'EMAIL_LOG_RETENTION_DAYS',
-            env('LOG_RETENTION_DAYS', env('DOCUMENT_RETENTION_DAYS', 14))
-        );
-        $days = max(1, $days);
-        $cutoff = time() - ($days * 86400);
-        $removed = 0;
 
         foreach (glob($path . '/*.eml') ?: [] as $file) {
             if (!is_file($file)) {
                 continue;
             }
+            $stats['scanned']++;
+            $name = basename($file);
             $mtime = (int) (filemtime($file) ?: 0);
-            if ($mtime < $cutoff && @unlink($file)) {
-                $removed++;
+            $ageAnchor = $this->mailFileAgeAnchor($name, $mtime);
+            if ($ageAnchor >= $cutoffTs) {
+                $stats['kept']++;
+                continue;
+            }
+            if (@unlink($file)) {
+                $stats['removed']++;
+            } else {
+                $stats['failed']++;
+                $this->logger->warning('cleanup:email failed to unlink', ['file' => $file]);
             }
         }
 
-        return $removed;
+        return $stats;
     }
 
-    /** Remove aged application/deploy/cron logs under storage/logs only. */
-    private function cleanupLogs(): int
+    /**
+     * Remove aged application/deploy/cron logs under storage/logs only.
+     *
+     * @return array{removed:int,scanned:int,failed:int,kept:int,days:int,cutoff:string,path:string}
+     */
+    private function cleanupLogs(): array
     {
         $path = $this->storagePath('logs');
+        $days = $this->retentionDays('LOG_RETENTION_DAYS', 'DOCUMENT_RETENTION_DAYS', 14);
+        $cutoffTs = $this->retentionCutoffTimestamp($days);
+        $stats = $this->emptyCleanupStats($path, $days, $cutoffTs);
         if (!is_dir($path)) {
-            return 0;
+            return $stats;
         }
-
-        $days = (int) env('LOG_RETENTION_DAYS', env('DOCUMENT_RETENTION_DAYS', 30));
-        $days = max(1, $days);
-        $cutoff = time() - ($days * 86400);
-        $removed = 0;
 
         foreach (scandir($path) ?: [] as $name) {
             if ($name === '.' || $name === '..' || $name === '.gitkeep') {
@@ -249,17 +300,21 @@ final class CronRunner
             if (!is_file($file)) {
                 continue;
             }
-
+            $stats['scanned']++;
             $ageAnchor = $this->logFileAgeAnchor($name, (int) (filemtime($file) ?: 0));
-            if ($ageAnchor >= $cutoff) {
+            if ($ageAnchor >= $cutoffTs) {
+                $stats['kept']++;
                 continue;
             }
             if (@unlink($file)) {
-                $removed++;
+                $stats['removed']++;
+            } else {
+                $stats['failed']++;
+                $this->logger->warning('cleanup:logs failed to unlink', ['file' => $file]);
             }
         }
 
-        return $removed;
+        return $stats;
     }
 
     private function storagePath(string $subdir = ''): string
@@ -277,6 +332,44 @@ final class CronRunner
         return $base . '/' . trim($subdir, '/');
     }
 
+    /** Keep the last N calendar days (app timezone). 0 = keep only today. */
+    private function retentionDays(string $primary, string $fallback, int $default): int
+    {
+        $raw = env($primary);
+        if ($raw === null || $raw === '') {
+            $raw = env($fallback);
+        }
+        if ($raw === null || $raw === '') {
+            $raw = $default;
+        }
+
+        return max(0, (int) $raw);
+    }
+
+    private function retentionCutoffTimestamp(int $days): int
+    {
+        $tz = new \DateTimeZone(app_timezone());
+        $startOfToday = new \DateTimeImmutable('today', $tz);
+
+        return $startOfToday->modify('-' . $days . ' days')->getTimestamp();
+    }
+
+    /**
+     * @return array{removed:int,scanned:int,failed:int,kept:int,days:int,cutoff:string,path:string}
+     */
+    private function emptyCleanupStats(string $path, int $days, int $cutoffTs): array
+    {
+        return [
+            'removed' => 0,
+            'scanned' => 0,
+            'failed' => 0,
+            'kept' => 0,
+            'days' => $days,
+            'cutoff' => date('Y-m-d H:i:s', $cutoffTs),
+            'path' => $path,
+        ];
+    }
+
     /** Prefer dated filename (app-YYYY-MM-DD / deploy-YYYYMMDD); else mtime. */
     private function logFileAgeAnchor(string $filename, int $mtime): int
     {
@@ -284,6 +377,16 @@ final class CronRunner
             return (int) (strtotime(sprintf('%s-%s-%s 23:59:59', $m[1], $m[2], $m[3])) ?: $mtime);
         }
         if (preg_match('/^deploy-(\d{4})(\d{2})(\d{2})(?:\.|\z)/', $filename, $m) === 1) {
+            return (int) (strtotime(sprintf('%s-%s-%s 23:59:59', $m[1], $m[2], $m[3])) ?: $mtime);
+        }
+
+        return $mtime;
+    }
+
+    /** Prefer YYYY-MM-DD_ prefix on .eml files; else mtime. */
+    private function mailFileAgeAnchor(string $filename, int $mtime): int
+    {
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})[_.]/', $filename, $m) === 1) {
             return (int) (strtotime(sprintf('%s-%s-%s 23:59:59', $m[1], $m[2], $m[3])) ?: $mtime);
         }
 

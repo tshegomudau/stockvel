@@ -84,17 +84,11 @@ return static function (TestRunner $runner): void {
                 $container->get(NotificationQueueService::class),
                 300
             );
-            $ref = new \ReflectionClass($cron);
-            $cleanLogs = $ref->getMethod('cleanupLogs');
-            $cleanLogs->setAccessible(true);
-            $cleanMail = $ref->getMethod('cleanupEmailLog');
-            $cleanMail->setAccessible(true);
+            $logStats = $cron->runCleanupLogs();
+            $mailStats = $cron->runCleanupEmail();
 
-            $removedLogs = (int) $cleanLogs->invoke($cron);
-            $removedMail = (int) $cleanMail->invoke($cron);
-
-            test_assert($removedLogs >= 1, 'Expected at least one aged log removed');
-            test_assert($removedMail >= 1, 'Expected at least one aged mail log removed');
+            test_assert((int) $logStats['removed'] >= 1, 'Expected at least one aged log removed');
+            test_assert((int) $mailStats['removed'] >= 1, 'Expected at least one aged mail log removed');
             test_assert(!is_file($oldLog), 'Old app log should be deleted');
             test_assert(is_file($keepLog), 'Current day log must be kept');
             test_assert(!is_file($oldMail), 'Old .eml should be deleted');

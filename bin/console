@@ -230,15 +230,52 @@ try {
             echo "Updated {$total} penalty charge(s).\n";
             break;
 
+        case 'cleanup:email':
+            $stats = cronRunner($container)->runCleanupEmail();
+            echo sprintf(
+                "cleanup:email removed %d / scanned %d (kept %d, failed %d) retention=%d day(s) cutoff=%s path=%s\n",
+                $stats['removed'],
+                $stats['scanned'],
+                $stats['kept'],
+                $stats['failed'],
+                $stats['days'],
+                $stats['cutoff'],
+                $stats['path']
+            );
+            break;
+
+        case 'cleanup:logs':
+            $stats = cronRunner($container)->runCleanupLogs();
+            echo sprintf(
+                "cleanup:logs removed %d / scanned %d (kept %d, failed %d) retention=%d day(s) cutoff=%s path=%s\n",
+                $stats['removed'],
+                $stats['scanned'],
+                $stats['kept'],
+                $stats['failed'],
+                $stats['days'],
+                $stats['cutoff'],
+                $stats['path']
+            );
+            break;
+
+        case 'cleanup:sessions':
+            $stats = cronRunner($container)->runCleanupSessions();
+            echo sprintf(
+                "cleanup:sessions removed %d / scanned %d (kept %d, failed %d) path=%s\n",
+                $stats['removed'],
+                $stats['scanned'],
+                $stats['kept'],
+                $stats['failed'],
+                $stats['path']
+            );
+            break;
+
         case 'loans:instalments':
         case 'loans:arrears':
         case 'payouts:process':
         case 'tokens:expire':
-        case 'cleanup:sessions':
         case 'jobs:detect-failed':
-            cronRunner($container)->runTask($command, static function () use ($command, $container) {
-                cronRunner($container)->runAll();
-            });
+            cronRunner($container)->runAll();
             echo "{$command} complete.\n";
             break;
 
@@ -286,6 +323,8 @@ stockvel console
   payouts:process             Process scheduled payouts
   tokens:expire               Purge expired reset tokens
   cleanup:sessions            Remove stale session files
+  cleanup:email               Remove aged storage/mail .eml files
+  cleanup:logs                Remove aged storage/logs files
   jobs:detect-failed          Record permanently failed jobs
   serve [host] [port]         PHP built-in server
 
