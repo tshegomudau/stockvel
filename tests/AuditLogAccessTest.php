@@ -86,8 +86,10 @@ return static function (TestRunner $runner): void {
             str_contains($res['body'], 'Cron')
             || str_contains($res['body'], 'INFO')
             || str_contains($res['body'], 'No application log lines match')
-            || str_contains($res['body'], 'Severity'),
-            'Expected application log rows or empty state'
+            || str_contains($res['body'], 'Severity')
+            || str_contains($res['body'], 'Deploy')
+            || str_contains($res['body'], 'name="kind"'),
+            'Expected application log rows, deploy kind filter, or empty state'
         );
         $auth->logout();
     }, 'http');

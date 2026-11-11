@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Platform;
 
 /**
- * Streams and filters rotated application JSON log files without loading entire files.
+ * Streams and filters rotated application / deploy / cron log files without loading entire files.
  */
 final class ApplicationLogReader
 {
@@ -14,7 +14,7 @@ final class ApplicationLogReader
     }
 
     /**
-     * @param array{q?:string,level?:string,date_from?:string,date_to?:string} $filters
+     * @param array{q?:string,level?:string,date_from?:string,date_to?:string,kind?:string} $filters
      * @return array{items:list<array<string,mixed>>,total:int,page:int,per_page:int}
      */
     public function search(array $filters, int $page = 1, int $perPage = 50): array
@@ -23,10 +23,11 @@ final class ApplicationLogReader
         $perPage = max(1, min(100, $perPage));
         $q = strtolower(trim((string) ($filters['q'] ?? '')));
         $level = strtoupper(trim((string) ($filters['level'] ?? '')));
+        $kind = strtolower(trim((string) ($filters['kind'] ?? '')));
         $from = $this->parseDate((string) ($filters['date_from'] ?? ''));
         $to = $this->parseDate((string) ($filters['date_to'] ?? ''), true);
 
-        $files = $this->listLogFiles($from, $to);
+        $files = $this->listLogFiles($from, $to, $kind);
         $matched = [];
         foreach ($files as $file) {
             $this->scanFile($file, $q, $level, $from, $to, $matched, 5000);
@@ -64,6 +65,13 @@ final class ApplicationLogReader
         if ($fh === false) {
             return;
         }
+        $base = basename($file);
+        $fileDay = $this->dayFromFilename($base);
+        $fallbackTs = $fileDay !== null
+            ? $fileDay . ' 12:00:00'
+            : date('Y-m-d H:i:s', (int) @filemtime($file));
+        $kind = $this->kindFromFilename($base);
+
         while (($line = fgets($fh)) !== false) {
             if (count($matched) >= $limit) {
                 break;
@@ -74,16 +82,11 @@ final class ApplicationLogReader
             }
             $entry = json_decode($line, true);
             if (!is_array($entry)) {
-                // Non-JSON lines (e.g. cron.log) — wrap safely.
-                $entry = [
-                    'ts' => date('Y-m-d H:i:s', (int) @filemtime($file)),
-                    'level' => 'INFO',
-                    'message' => $this->redactString(mb_substr($line, 0, 500)),
-                    'context' => ['source_file' => basename($file)],
-                ];
+                $parsed = $this->parsePlainLine($line, $fallbackTs, $kind);
+                $entry = $parsed;
             }
             $entryLevel = strtoupper((string) ($entry['level'] ?? 'INFO'));
-            $ts = (string) ($entry['ts'] ?? '');
+            $ts = (string) ($entry['ts'] ?? $fallbackTs);
             if ($level !== '' && $entryLevel !== $level) {
                 continue;
             }
@@ -96,7 +99,7 @@ final class ApplicationLogReader
             $message = $this->redactString((string) ($entry['message'] ?? ''));
             $context = is_array($entry['context'] ?? null) ? $this->redactContext($entry['context']) : [];
             if ($q !== '') {
-                $hay = strtolower($message . ' ' . json_encode($context));
+                $hay = strtolower($message . ' ' . json_encode($context) . ' ' . $base);
                 if (!str_contains($hay, $q)) {
                     continue;
                 }
@@ -107,37 +110,101 @@ final class ApplicationLogReader
                 'message' => $message,
                 'request_id' => (string) ($entry['request_id'] ?? ''),
                 'context' => $context,
-                'source' => 'application',
-                'source_file' => basename($file),
+                'source' => $kind,
+                'source_file' => $base,
             ];
         }
         fclose($fh);
     }
 
+    /** @return array{ts:string,level:string,message:string,context:array<string,mixed>} */
+    private function parsePlainLine(string $line, string $fallbackTs, string $kind): array
+    {
+        $ts = $fallbackTs;
+        $message = $line;
+        if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\s+[A-Za-z0-9_+\-]+)?\]\s*(.*)$/s', $line, $m)) {
+            $ts = $m[1];
+            $message = trim((string) $m[2]);
+        }
+
+        $upper = strtoupper($message);
+        $level = 'INFO';
+        if (str_contains($upper, 'ERROR') || str_contains($upper, 'FATAL')) {
+            $level = 'ERROR';
+        } elseif (str_contains($upper, 'WARN')) {
+            $level = 'WARNING';
+        } elseif (str_contains($upper, 'SECURITY')) {
+            $level = 'SECURITY';
+        }
+
+        return [
+            'ts' => $ts,
+            'level' => $level,
+            'message' => $this->redactString(mb_substr($message !== '' ? $message : $line, 0, 500)),
+            'context' => ['kind' => $kind],
+        ];
+    }
+
     /** @return list<string> */
-    private function listLogFiles(?string $from, ?string $to): array
+    private function listLogFiles(?string $from, ?string $to, string $kind = ''): array
     {
         if (!is_dir($this->logDir)) {
             return [];
         }
-        $files = glob($this->logDir . '/app-*.log') ?: [];
-        $files = array_merge($files, glob($this->logDir . '/cron.log') ?: []);
+
+        $files = [];
+        if ($kind === '' || $kind === 'application' || $kind === 'app') {
+            $files = array_merge($files, glob($this->logDir . '/app-*.log') ?: []);
+        }
+        if ($kind === '' || $kind === 'deploy') {
+            $files = array_merge($files, glob($this->logDir . '/deploy-*.log') ?: []);
+        }
+        if ($kind === '' || $kind === 'cron') {
+            $files = array_merge($files, glob($this->logDir . '/cron.log') ?: []);
+        }
+
         rsort($files, SORT_STRING);
         $out = [];
         foreach ($files as $file) {
             $base = basename($file);
-            if (preg_match('/^app-(\d{4}-\d{2}-\d{2})\.log$/', $base, $m)) {
-                $day = $m[1];
-                if ($from !== null && $day . ' 00:00:00' < substr($from, 0, 10) . ' 00:00:00' && $day < substr($from, 0, 10)) {
+            $day = $this->dayFromFilename($base);
+            if ($day !== null) {
+                if ($from !== null && $day < substr($from, 0, 10)) {
                     continue;
                 }
                 if ($to !== null && $day > substr($to, 0, 10)) {
                     continue;
                 }
+            } elseif ($from !== null || $to !== null) {
+                // Undated files (e.g. cron.log): keep and rely on per-line timestamps.
             }
             $out[] = $file;
         }
         return $out;
+    }
+
+    private function dayFromFilename(string $base): ?string
+    {
+        if (preg_match('/^app-(\d{4}-\d{2}-\d{2})\.log$/', $base, $m)) {
+            return $m[1];
+        }
+        if (preg_match('/^deploy-(\d{4})(\d{2})(\d{2})\.log$/', $base, $m)) {
+            return $m[1] . '-' . $m[2] . '-' . $m[3];
+        }
+
+        return null;
+    }
+
+    private function kindFromFilename(string $base): string
+    {
+        if (str_starts_with($base, 'deploy-')) {
+            return 'deploy';
+        }
+        if ($base === 'cron.log' || str_starts_with($base, 'cron')) {
+            return 'cron';
+        }
+
+        return 'application';
     }
 
     private function parseDate(string $value, bool $endOfDay = false): ?string

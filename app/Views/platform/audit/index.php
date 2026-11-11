@@ -1,8 +1,8 @@
 <?= view('partials/page-header', [
     'title' => ($filters['source'] ?? 'audit') === 'application' ? 'Application logs' : 'Audit trail',
     'description' => ($filters['source'] ?? 'audit') === 'application'
-        ? 'Live JSON logs from storage/logs (passwords and secrets redacted).'
-        : 'Domain audit events across stokvels. Switch source to open application logs from storage/logs.',
+        ? 'Application, deploy (deploy-YYYYMMDD.log), and cron logs from storage/logs (secrets redacted). Use From/To to filter by date.'
+        : 'Domain audit events across stokvels. Switch source to open application and deploy logs from storage/logs.',
 ], null) ?>
 <form method="get" class="filter-bar" action="<?= e(url('/platform/audit')) ?>">
     <div class="form-group">
@@ -16,6 +16,16 @@
     </div>
     <div class="form-group"><label class="form-label" for="q">Search</label><input class="form-control" id="q" type="search" name="q" value="<?= e((string) ($filters['q'] ?? '')) ?>" placeholder="Message, action, email…"></div>
     <?php if (($filters['source'] ?? '') === 'application'): ?>
+        <div class="form-group"><label class="form-label" for="kind">Log kind</label>
+            <select class="form-control form-select" id="kind" name="kind">
+                <?php
+                $kind = (string) ($filters['kind'] ?? '');
+                foreach (['' => 'All', 'application' => 'Application', 'deploy' => 'Deploy', 'cron' => 'Cron'] as $val => $label):
+                ?>
+                    <option value="<?= e($val) ?>"<?= $kind === $val ? ' selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         <div class="form-group"><label class="form-label" for="level">Severity</label>
             <select class="form-control form-select" id="level" name="level">
                 <option value="">All</option>
@@ -43,7 +53,7 @@
     <?php else: ?>
         <div class="table-wrap">
         <table class="table">
-            <thead><tr><th>When</th><th>Severity</th><th>Message</th><th>Request</th><th>File</th></tr></thead>
+            <thead><tr><th>When</th><th>Kind</th><th>Severity</th><th>Message</th><th>Request</th><th>File</th></tr></thead>
             <tbody>
             <?php foreach ($appLogItems as $row): ?>
                 <?php
@@ -53,6 +63,7 @@
                         'WARNING' => 'badge-warning',
                         default => '',
                     };
+                    $rowKind = (string) ($row['source'] ?? 'application');
                     $context = $row['context'] ?? [];
                     $contextJson = is_array($context) && $context !== []
                         ? json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
@@ -60,6 +71,7 @@
                 ?>
                 <tr>
                     <td><?= e(sa_datetime($row['ts'] ?? '')) ?></td>
+                    <td><span class="badge"><?= e($rowKind) ?></span></td>
                     <td><span class="badge <?= e($sevClass) ?>"><?= e($level) ?></span></td>
                     <td>
                         <div><?= e($row['message'] ?? '') ?></div>

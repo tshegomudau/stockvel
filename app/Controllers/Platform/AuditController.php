@@ -125,6 +125,7 @@ final class AuditController extends Controller
         $filters = [
             'q' => trim((string) $request->query('q', '')),
             'level' => trim((string) $request->query('level', '')),
+            'kind' => trim((string) $request->query('kind', '')),
             'date_from' => trim((string) $request->query('date_from', '')),
             'date_to' => trim((string) $request->query('date_to', '')),
         ];
