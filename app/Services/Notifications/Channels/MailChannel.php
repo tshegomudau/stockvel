@@ -66,6 +66,7 @@ final class MailChannel
             'Date: ' . gmdate('D, d M Y H:i:s') . ' GMT',
             'Content-Type: text/plain; charset=UTF-8',
             '',
+            $body,
             '',
             '-- payload --',
             json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),

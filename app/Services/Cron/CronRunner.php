@@ -195,6 +195,22 @@ final class CronRunner
         }
         return $removed;
     }
+    private function cleanupEmailLog(): int
+    {
+        $path = dirname(__DIR__, 3) . '/storage/sessions';
+        if (!is_dir($path)) {
+            return 0;
+        }
+        $removed = 0;
+        $maxAge =  60;
+        foreach (glob($path . '/20*') ?: [] as $file) {
+            if (filemtime($file) < time() - $maxAge) {
+                @unlink($file);
+                $removed++;
+            }
+        }
+        return $removed;
+    }
 
     private function cleanupLogs(): int
     {
