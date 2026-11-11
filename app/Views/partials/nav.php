@@ -7,8 +7,26 @@ $loansEnabled = function_exists('module_enabled')
     ? module_enabled('loans')
     : (!empty($stokvel['loans_enabled']) || !empty($settings['loans_enabled']));
 
+$setupIncomplete = false;
+try {
+    $activeSid = (int) (($stokvel['id'] ?? 0) ?: (Session::get('active_stokvel_id') ?? 0));
+    if ($activeSid > 0 && function_exists('can') && can('settings.manage')) {
+        $setupIncomplete = app()->container()
+            ->get(\App\Services\Onboarding\OnboardingService::class)
+            ->needsSetup($activeSid);
+    }
+} catch (\Throwable) {
+    $setupIncomplete = false;
+}
+
 $appLinks = [
     'dashboard' => ['label' => 'Dashboard', 'url' => route('app.dashboard')],
+    'onboarding' => [
+        'label' => 'Setup wizard',
+        'url' => route('app.onboarding'),
+        'permission' => 'settings.manage',
+        'show' => $setupIncomplete,
+    ],
     'members' => ['label' => 'Members', 'url' => route('app.members'), 'permission' => 'members.view'],
     'beneficiaries' => ['label' => 'Beneficiaries', 'url' => route('app.beneficiaries'), 'permission' => 'beneficiaries.view'],
     'contributions' => ['label' => 'Contributions', 'url' => route('app.contributions'), 'permission' => 'contributions.view'],

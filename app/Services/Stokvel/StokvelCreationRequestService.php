@@ -491,7 +491,7 @@ final class StokvelCreationRequestService
     {
         $now = now_utc();
         try {
-            return (int) $this->db->insert(
+            $stokvelId = (int) $this->db->insert(
                 'INSERT INTO stokvels (
                     uuid, name, slug, stokvel_type, status, timezone, currency_code,
                     created_by_user_id, created_via, creation_approved_by_user_id, approval_bypassed,
@@ -520,7 +520,7 @@ final class StokvelCreationRequestService
             );
         } catch (\Throwable) {
             // Pre-migration fallback without provenance columns.
-            return $this->stokvels->create([
+            $stokvelId = $this->stokvels->create([
                 'name' => $data['name'],
                 'slug' => $data['slug'],
                 'stokvel_type' => $data['stokvel_type'] ?? 'general_savings',
@@ -528,6 +528,15 @@ final class StokvelCreationRequestService
                 'created_by_user_id' => $data['created_by_user_id'] ?? null,
             ]);
         }
+
+        // New stokvels must complete the setup wizard (legacy tenants without a row are grandfathered).
+        try {
+            app()->container()->get(\App\Services\Onboarding\OnboardingService::class)->ensureStarted($stokvelId);
+        } catch (\Throwable) {
+            // Keep creation resilient if onboarding table is unavailable mid-migrate.
+        }
+
+        return $stokvelId;
     }
 
     private function ensureChairpersonMembership(int $stokvelId, int $userId): int

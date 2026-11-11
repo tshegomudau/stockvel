@@ -472,8 +472,21 @@ function home_path_for_user(?array $user): string
             $codes = $permissions->codesForMembership($membership);
             foreach ($adminPerms as $perm) {
                 if (in_array($perm, $codes, true)) {
-                    Session::set('active_stokvel_id', (int) $membership['stokvel_id']);
-                    Session::set('stokvel_id', (int) $membership['stokvel_id']);
+                    $stokvelId = (int) $membership['stokvel_id'];
+                    Session::set('active_stokvel_id', $stokvelId);
+                    Session::set('stokvel_id', $stokvelId);
+                    // Chairperson / settings managers land on the setup wizard until it is marked complete.
+                    if (in_array('*', $codes, true) || in_array('settings.manage', $codes, true)) {
+                        try {
+                            /** @var \App\Services\Onboarding\OnboardingService $onboarding */
+                            $onboarding = app()->container()->get(\App\Services\Onboarding\OnboardingService::class);
+                            if ($onboarding->needsSetup($stokvelId)) {
+                                return '/app/onboarding';
+                            }
+                        } catch (\Throwable) {
+                            // Fall through to dashboard if onboarding status cannot be resolved.
+                        }
+                    }
                     return '/app';
                 }
             }

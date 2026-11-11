@@ -83,7 +83,8 @@ final class StokvelClaimController extends Controller
                 }
             }
             Session::flash('success', 'Welcome! Your stokvel is ready.');
-            return $this->redirect('/app');
+            $user = $this->user();
+            return $this->redirect($user ? home_path_for_user($user) : '/app');
         } catch (HttpException $e) {
             Session::flash('error', $e->getMessage());
             return $this->redirect('/stokvel-claims/' . rawurlencode($token));

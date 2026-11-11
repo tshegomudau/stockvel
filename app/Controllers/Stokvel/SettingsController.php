@@ -90,11 +90,16 @@ final class SettingsController extends Controller
                 "UPDATE stokvels SET status = 'active', activated_at = COALESCE(activated_at, :aa), updated_at = :ua WHERE id = :id",
                 ['aa' => $now, 'ua' => $now, 'id' => $sid]
             );
-            $this->db()->exec(
-                'UPDATE stokvel_onboarding SET completed_at = COALESCE(completed_at, :ca), current_step = 99, updated_at = :ua
-                 WHERE stokvel_id = :sid',
-                ['ca' => $now, 'ua' => $now, 'sid' => $sid]
-            );
+            try {
+                app()->container()->get(\App\Services\Onboarding\OnboardingService::class)
+                    ->markComplete($sid, (int) $this->userId());
+            } catch (\Throwable) {
+                $this->db()->exec(
+                    'UPDATE stokvel_onboarding SET completed_at = COALESCE(completed_at, :ca), current_step = 99, updated_at = :ua
+                     WHERE stokvel_id = :sid',
+                    ['ca' => $now, 'ua' => $now, 'sid' => $sid]
+                );
+            }
         }
 
         $joiningFeeAmount = '0.00';

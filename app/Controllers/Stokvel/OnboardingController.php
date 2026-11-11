@@ -11,67 +11,67 @@ use App\Core\Session;
 use App\Exceptions\HttpException;
 use App\Repositories\StokvelRepository;
 use App\Services\Onboarding\OnboardingService;
+use App\Support\StokvelTypeCatalog;
 
 final class OnboardingController extends Controller
 {
-    private const STEPS = [
-        1 => 'organisation',
-        2 => 'contact',
-        3 => 'banking',
-        4 => 'contributions',
-        5 => 'fees',
-        6 => 'loans',
-        7 => 'payouts',
-        8 => 'rules',
-        9 => 'invite',
-        10 => 'review',
-        11 => 'branding',
-        12 => 'activate',
-    ];
-
     public function index(Request $request): Response
     {
         $this->requireAuth();
-        $sid = $this->stokvelId();
-        $step = 1;
-        $progressData = [];
+        $this->requirePermission('settings.manage');
+        $sid = $this->requireStokvel();
 
-        if ($sid) {
-            /** @var OnboardingService $onboarding */
-            $onboarding = app()->container()->get(OnboardingService::class);
-            $progress = $onboarding->progress($sid);
-            $step = (int) ($progress['step'] ?? 1);
-            $progressData = is_array($progress['data'] ?? null) ? $progress['data'] : [];
-        } else {
-            $step = (int) (Session::get('onboarding_step') ?? 1);
+        /** @var OnboardingService $onboarding */
+        $onboarding = app()->container()->get(OnboardingService::class);
+
+        // Completed setup — hide wizard and send them to the dashboard.
+        if ($onboarding->isComplete($sid)) {
+            Session::flash('success', 'Setup is already complete. Manage your stokvel from Settings.');
+            return $this->redirect('/app');
         }
 
-        $step = max(1, min(count(self::STEPS), $step));
+        $onboarding->ensureStarted($sid);
+        $progress = $onboarding->progress($sid);
+        $step = (int) $request->query('step', (string) ($progress['step'] ?? 1));
+        $step = max(1, min(OnboardingService::MAX_STEP, $step));
+
+        $stokvel = $this->db()->fetch('SELECT * FROM stokvels WHERE id = :id LIMIT 1', ['id' => $sid]) ?? [];
 
         return $this->render('stokvel/onboarding/wizard', [
             'title' => 'Stokvel setup',
             'activeNav' => 'onboarding',
             'navContext' => 'app',
             'step' => $step,
-            'steps' => self::STEPS,
-            'progress' => $progressData,
+            'steps' => OnboardingService::STEPS,
+            'progress' => is_array($progress['data'] ?? null) ? $progress['data'] : [],
+            'stepsCompleted' => $progress['steps_completed'] ?? [],
+            'percent' => (int) ($progress['percent'] ?? 0),
+            'stokvel' => $stokvel,
+            'stokvelTypeOptions' => StokvelTypeCatalog::activeOptions($this->db()),
         ]);
     }
 
     public function saveStep(Request $request, string $step): Response
     {
         $this->requireAuth();
+        $this->requirePermission('settings.manage');
         $stepNum = (int) $step;
-        if (!isset(self::STEPS[$stepNum])) {
+        if (!isset(OnboardingService::STEPS[$stepNum])) {
             return $this->redirect('/app/onboarding');
+        }
+
+        $sid = $this->requireStokvel();
+        /** @var OnboardingService $onboarding */
+        $onboarding = app()->container()->get(OnboardingService::class);
+        if ($onboarding->isComplete($sid)) {
+            return $this->redirect('/app');
         }
 
         $payload = $request->all();
         unset($payload['_token'], $payload['_method']);
 
-        $sid = (int) ($this->stokvelId() ?? 0);
-
-        if ($stepNum === 1 && $sid === 0 && !empty($payload['name'])) {
+        // Brand-new draft path (no tenant yet) — rare; keep for legacy deep-links.
+        if ($stepNum === 1 && (int) ($this->stokvelId() ?? 0) === 0 && !empty($payload['name'])) {
             /** @var StokvelRepository $stokvels */
             $stokvels = app()->container()->get(StokvelRepository::class);
             $name = trim((string) $payload['name']);
@@ -83,6 +83,7 @@ final class OnboardingController extends Controller
                 'status' => 'draft',
                 'created_by_user_id' => $this->userId(),
             ]);
+            $onboarding->ensureStarted($sid);
 
             $memberNumber = sprintf('M-%05d', 1);
             $membershipId = (int) $this->db()->insert(
@@ -121,54 +122,39 @@ final class OnboardingController extends Controller
             Session::set('stokvel_id', $sid);
         }
 
-        if ($sid > 0) {
-            /** @var OnboardingService $onboarding */
-            $onboarding = app()->container()->get(OnboardingService::class);
-            $onboarding->saveStep($sid, $stepNum, $payload, (int) $this->userId());
-        } else {
-            Session::set('onboarding_step', min($stepNum + 1, count(self::STEPS)));
+        try {
+            $state = $onboarding->saveStep($sid, $stepNum, $payload, (int) $this->userId());
+        } catch (HttpException $e) {
+            Session::flash('error', $e->getMessage());
+            return $this->redirect('/app/onboarding?step=' . $stepNum);
         }
 
         Session::flash('success', 'Step saved.');
-        return $this->redirect('/app/onboarding');
+        $next = (int) ($state['step'] ?? min(OnboardingService::MAX_STEP, $stepNum + 1));
+        return $this->redirect('/app/onboarding?step=' . $next);
     }
 
     public function complete(Request $request): Response
     {
         $this->requireAuth();
-        $sid = $this->stokvelId();
-        if (!$sid) {
-            Session::flash('error', 'Create a stokvel before activating.');
-            return $this->redirect('/app/onboarding');
+        $this->requirePermission('settings.manage');
+        $sid = $this->requireStokvel();
+
+        /** @var OnboardingService $onboarding */
+        $onboarding = app()->container()->get(OnboardingService::class);
+        if ($onboarding->isComplete($sid)) {
+            return $this->redirect('/app');
         }
 
         try {
-            /** @var OnboardingService $onboarding */
-            $onboarding = app()->container()->get(OnboardingService::class);
-            // Allow activation from review step for the 10-step UI while service tracks up to 12.
-            $progress = $onboarding->progress($sid);
-            $current = (int) ($progress['step'] ?? 1);
-            if ($current < 10) {
-                throw new HttpException(422, 'Complete all onboarding steps before activation.');
-            }
-            app()->container()->get(StokvelRepository::class)->activate($sid);
-            $this->db()->exec(
-                'UPDATE stokvel_onboarding SET completed_at = :completed_at, current_step = :step, updated_at = :updated_at
-                 WHERE stokvel_id = :stokvel_id',
-                [
-                    'completed_at' => now_utc(),
-                    'step' => OnboardingService::MAX_STEP,
-                    'updated_at' => now_utc(),
-                    'stokvel_id' => $sid,
-                ]
-            );
+            $onboarding->activate($sid, (int) $this->userId());
         } catch (HttpException $e) {
             Session::flash('error', $e->getMessage());
             return $this->redirect('/app/onboarding');
         }
 
         Session::forget('onboarding_step');
-        Session::flash('success', 'Your stokvel is ready.');
+        Session::flash('success', 'Setup complete. Your stokvel is ready.');
         return $this->redirect('/app');
     }
 }

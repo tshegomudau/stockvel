@@ -262,7 +262,8 @@ return static function (Container $container, string $basePath, array $dbConfig)
     ));
     $container->singleton(OnboardingService::class, static fn (Container $c) => new OnboardingService(
         $c->get(StokvelRepository::class),
-        $c->get(AuditService::class)
+        $c->get(AuditService::class),
+        $c->get(Database::class)
     ));
     $container->singleton(PaymentGatewayInterface::class, static fn () => new MockPaymentGateway());
     $container->singleton(PaymentWebhookService::class, static fn (Container $c) => new PaymentWebhookService(

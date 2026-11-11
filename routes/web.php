@@ -475,8 +475,7 @@ $router->post('/app/settings/roles/{roleCode}', [RoleManagementController::class
 $router->post('/app/settings/roles/{roleCode}/assign', [RoleManagementController::class, 'assign'], $appMut);
 $router->post('/app/settings/roles/{roleCode}/remove', [RoleManagementController::class, 'remove'], $appMut);
 
-// Setup wizard removed from day-to-day UI — configuration lives in Settings.
-$router->get('/app/onboarding', static fn () => Response::redirect(url('/app/settings')), $appRead);
+$router->get('/app/onboarding', [OnboardingController::class, 'index'], $appRead);
 $router->post('/app/onboarding/complete', [OnboardingController::class, 'complete'], $appMut);
 $router->post('/app/onboarding/{step}', [OnboardingController::class, 'saveStep'], $appMut);
 

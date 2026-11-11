@@ -19,6 +19,19 @@ final class DashboardController extends Controller
         $db = $this->db();
         $tenant = $this->tenant();
 
+        // Chairpersons with unfinished setup land on the wizard instead of the dashboard.
+        if ($tenant->can('settings.manage')) {
+            try {
+                /** @var \App\Services\Onboarding\OnboardingService $onboarding */
+                $onboarding = app()->container()->get(\App\Services\Onboarding\OnboardingService::class);
+                if ($onboarding->needsSetup($sid)) {
+                    return $this->redirect('/app/onboarding');
+                }
+            } catch (\Throwable) {
+                // Continue to dashboard if onboarding status cannot be resolved.
+            }
+        }
+
         $canMembers = $tenant->can('members.view');
         $canContributions = $tenant->can('contributions.view');
         $canApprovals = $tenant->can('approvals.view');

@@ -66,7 +66,7 @@ final class GetStartedController extends Controller
                 if ($claimed !== null) {
                     $auth->switchStokvel((int) $claimed['stokvel_id'], $userId);
                     Session::flash('success', 'Your stokvel was approved. You are signed in as chairperson.');
-                    return $this->redirect('/app');
+                    return $this->redirect(home_path_for_user($this->user()));
                 }
             } catch (HttpException $e) {
                 Session::flash('error', $e->getMessage());

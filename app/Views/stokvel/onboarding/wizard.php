@@ -1,7 +1,9 @@
 <?php
-$stepKeys = $steps ?? [];
+$stepKeys = $steps ?? \App\Services\Onboarding\OnboardingService::STEPS;
 $current = (int) ($step ?? 1);
 $total = max(1, count($stepKeys));
+$percent = (int) ($percent ?? 0);
+$stepsCompleted = $stepsCompleted ?? [];
 $labels = [
     'organisation' => 'Stokvel details',
     'type' => 'Stokvel type',
@@ -10,31 +12,29 @@ $labels = [
     'banking' => 'Banking',
     'contributions' => 'Contributions',
     'fees' => 'Fees & penalties',
-    'committee' => 'Committee roles',
     'rules' => 'Rules & approvals',
     'invite' => 'Invite members',
-    'review' => 'Review',
-    'activate' => 'Activate',
+    'review' => 'Review & finish',
 ];
+$stokvelRow = $stokvel ?? [];
 ?>
 <?= view('partials/page-header', [
     'title' => 'Stokvel setup wizard',
-    'description' => 'Complete each step to activate your organisation. Progress is saved as you go.',
+    'description' => 'Finish these steps to configure your stokvel. Progress is saved as you go — the wizard hides when setup is complete.',
 ], null) ?>
 
+<div class="alert alert-info" role="status">
+    Setup progress: <strong><?= (int) $percent ?>%</strong>
+    · Step <?= $current ?> of <?= $total ?>
+</div>
+
 <div class="wizard-steps" aria-label="Onboarding progress">
-    <?php foreach ($stepKeys as $num => $key): ?>
-        <?php
-        $n = (int) $num;
-        if ($n < 1) { $n = array_search($key, array_values($stepKeys), true); $n = $n === false ? 0 : $n + 1; }
-        // steps may be 1-indexed associative
-        ?>
-    <?php endforeach; ?>
     <?php
-    $i = 0;
-    foreach ($stepKeys as $key):
-        $i++;
-        $state = $i < $current ? 'is-done' : ($i === $current ? 'is-current' : '');
+    foreach ($stepKeys as $num => $key):
+        $i = (int) $num;
+        $state = in_array($i, $stepsCompleted, true) || $i < $current
+            ? 'is-done'
+            : ($i === $current ? 'is-current' : '');
         $label = $labels[$key] ?? ucfirst(str_replace('_', ' ', (string) $key));
         ?>
         <div class="wizard-step <?= e($state) ?>">
@@ -45,17 +45,28 @@ $labels = [
 </div>
 
 <div class="card">
-    <h2 class="card-title">Step <?= $current ?> of <?= $total ?>: <?= e($labels[$stepKeys[$current] ?? ($stepKeys[$current - 1] ?? '')] ?? 'Details') ?></h2>
     <?php
-    $stepKey = $stepKeys[$current] ?? ($stepKeys[$current - 1] ?? 'organisation');
-    if (!is_string($stepKey)) {
-        $stepKey = 'organisation';
+    $stepKey = is_string($stepKeys[$current] ?? null) ? (string) $stepKeys[$current] : 'organisation';
+    $saved = [];
+    if (isset($progress['step_' . $current]) && is_array($progress['step_' . $current])) {
+        $saved = $progress['step_' . $current];
+    } elseif (isset($progress[$stepKey]) && is_array($progress[$stepKey])) {
+        $saved = $progress[$stepKey];
     }
-    $saved = $progress[$current] ?? ($progress[$stepKey] ?? []);
+    // Prefill organisation from live stokvel when first visiting.
+    if ($stepKey === 'organisation') {
+        $saved['name'] = (string) ($saved['name'] ?? $stokvelRow['name'] ?? '');
+        $saved['description'] = (string) ($saved['description'] ?? $stokvelRow['description'] ?? '');
+        $saved['registration_number'] = (string) ($saved['registration_number'] ?? $stokvelRow['registration_number'] ?? '');
+    }
+    if ($stepKey === 'type') {
+        $saved['stokvel_type'] = (string) ($saved['stokvel_type'] ?? $stokvelRow['stokvel_type'] ?? 'general_savings');
+    }
     ?>
-    <form method="post" action="<?= e(url('/app/onboarding/step/' . $current)) ?>" class="form-stack mt-4">
+    <h2 class="card-title">Step <?= $current ?> of <?= $total ?>: <?= e($labels[$stepKey] ?? 'Details') ?></h2>
+    <form method="post" action="<?= e(url('/app/onboarding/' . $current)) ?>" class="form-stack mt-4">
         <?= csrf_field() ?>
-        <?php if (in_array($stepKey, ['organisation', 'details', 'stokvel_details'], true)): ?>
+        <?php if ($stepKey === 'organisation'): ?>
             <div class="form-grid two-col">
                 <div class="form-group">
                     <label class="form-label required" for="name">Official name</label>
@@ -87,13 +98,13 @@ $labels = [
                         <option value="<?= e($code) ?>"<?= $currentType === $code ? ' selected' : '' ?>><?= e($opt['name'] ?? $code) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <p class="help-text">Types are defined by the platform; you choose which applies to this stokvel.</p>
+                <p class="form-help">Types are defined by the platform; choose which applies to this stokvel.</p>
             </div>
         <?php elseif ($stepKey === 'branding'): ?>
             <div class="form-group">
                 <label class="form-label" for="primary_colour">Primary colour</label>
                 <input class="form-control" type="color" id="primary_colour" name="primary_colour" value="<?= e((string) ($saved['primary_colour'] ?? '#14532d')) ?>">
-                <p class="help-text">Used for navigation and accents. Ensure sufficient contrast for accessibility.</p>
+                <p class="form-help">Used for navigation and accents.</p>
             </div>
         <?php elseif ($stepKey === 'contact'): ?>
             <div class="form-grid two-col">
@@ -106,7 +117,7 @@ $labels = [
                 <div class="form-group"><label class="form-label" for="bank_name">Bank</label><input class="form-control" type="text" id="bank_name" name="bank_name" value="<?= e((string) ($saved['bank_name'] ?? '')) ?>"></div>
                 <div class="form-group"><label class="form-label" for="account_number">Account number</label><input class="form-control" type="text" id="account_number" name="account_number" autocomplete="off" value="<?= e((string) ($saved['account_number'] ?? '')) ?>"></div>
             </div>
-            <p class="help-text">Account numbers are masked in logs and most UI surfaces.</p>
+            <p class="form-help">Account numbers are masked in logs and most UI surfaces.</p>
         <?php elseif ($stepKey === 'contributions'): ?>
             <div class="form-grid two-col">
                 <div class="form-group">
@@ -115,7 +126,7 @@ $labels = [
                 </div>
                 <div class="form-group"><label class="form-label" for="contribution_day">Collection day</label><input class="form-control" type="number" min="1" max="28" id="contribution_day" name="contribution_day" value="<?= e((string) ($saved['contribution_day'] ?? '1')) ?>"></div>
             </div>
-        <?php elseif (in_array($stepKey, ['fees', 'penalties'], true)): ?>
+        <?php elseif ($stepKey === 'fees'): ?>
             <div class="form-grid two-col">
                 <div class="form-group"><label class="form-label" for="joining_fee">Joining fee</label><div class="input-prefix"><span>R</span><input class="form-control" type="number" step="0.01" id="joining_fee" name="joining_fee" value="<?= e((string) ($saved['joining_fee'] ?? '0')) ?>"></div></div>
                 <div class="form-group"><label class="form-label" for="late_penalty">Late-payment penalty</label><div class="input-prefix"><span>R</span><input class="form-control" type="number" step="0.01" id="late_penalty" name="late_penalty" value="<?= e((string) ($saved['late_penalty'] ?? '0')) ?>"></div></div>
@@ -124,16 +135,22 @@ $labels = [
             <div class="form-group"><label class="form-label" for="invite_email">Invite email</label><input class="form-control" type="email" id="invite_email" name="invite_email" value="<?= e((string) ($saved['invite_email'] ?? '')) ?>"></div>
             <div class="form-group"><label class="form-label" for="invite_role">Role</label>
                 <select class="form-control form-select" id="invite_role" name="invite_role">
-                    <?php foreach (['ordinary_member','committee_member','secretary','treasurer','chairperson'] as $role): ?>
-                        <option value="<?= e($role) ?>"><?= e(ucfirst(str_replace('_', ' ', $role))) ?></option>
+                    <?php foreach (['ordinary_member','committee_member','secretary','treasurer'] as $role): ?>
+                        <option value="<?= e($role) ?>"<?= (string) ($saved['invite_role'] ?? '') === $role ? ' selected' : '' ?>><?= e(ucfirst(str_replace('_', ' ', $role))) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
+            <p class="form-help">You can send formal invitations from Members after setup. This step records your plan.</p>
+        <?php elseif ($stepKey === 'rules'): ?>
+            <div class="form-group">
+                <label class="form-label" for="notes">Governance notes</label>
+                <textarea class="form-control form-textarea" id="notes" name="notes" rows="4" placeholder="Approval thresholds, meeting cadence, etc."><?= e((string) ($saved['notes'] ?? '')) ?></textarea>
+            </div>
+            <p class="form-help">Detailed rules and approval policies can be refined under Rules and Approvals after setup.</p>
         <?php elseif ($stepKey === 'review'): ?>
-            <div class="alert alert-info">Review your configuration carefully. Activation makes the stokvel available to invited members.</div>
-            <p class="text-muted">You can still update settings after activation from the Settings screen.</p>
+            <div class="alert alert-info">Review your configuration. Finishing the wizard marks setup complete and removes it from navigation.</div>
+            <p class="text-muted">You can still update settings anytime from the Settings screen.</p>
         <?php else: ?>
-            <p class="text-muted">Configure <?= e(str_replace('_', ' ', $stepKey)) ?> for your stokvel.</p>
             <div class="form-group"><label class="form-label" for="notes">Notes</label><textarea class="form-control form-textarea" id="notes" name="notes" rows="3"><?= e((string) ($saved['notes'] ?? '')) ?></textarea></div>
         <?php endif; ?>
 
@@ -141,14 +158,18 @@ $labels = [
             <?php if ($current > 1): ?>
                 <a class="btn btn-secondary" href="<?= e(url('/app/onboarding?step=' . ($current - 1))) ?>">Previous</a>
             <?php endif; ?>
-            <button type="submit" class="btn btn-primary"><?= $stepKey === 'review' ? 'Save review' : 'Save & continue' ?></button>
+            <?php if ($stepKey !== 'review'): ?>
+                <button type="submit" class="btn btn-primary">Save &amp; continue</button>
+            <?php else: ?>
+                <button type="submit" class="btn btn-secondary">Save review notes</button>
+            <?php endif; ?>
         </div>
     </form>
 
     <?php if ($stepKey === 'review' || $current >= $total): ?>
         <form method="post" action="<?= e(url('/app/onboarding/complete')) ?>" class="mt-4">
             <?= csrf_field() ?>
-            <button type="submit" class="btn btn-primary" data-confirm="Activate this stokvel now?">Activate stokvel</button>
+            <button type="submit" class="btn btn-primary" data-confirm="Mark setup complete and open the dashboard?">Finish setup</button>
         </form>
     <?php endif; ?>
 </div>
