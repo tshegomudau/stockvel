@@ -9,6 +9,7 @@
         'emptyMessage' => 'When your stokvel schedules meetings, they will appear here.',
     ], null) ?>
 <?php else: ?>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Meeting</th><th>When</th><th>Minutes</th><th></th></tr></thead>
     <tbody>
@@ -34,4 +35,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?php endif; ?>

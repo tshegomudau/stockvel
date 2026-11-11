@@ -2,6 +2,7 @@
     'title' => 'Failed jobs',
     'description' => 'Retry failed notification / queue jobs.',
 ], null) ?>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Channel</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Updated</th><th>Error</th><th></th></tr></thead>
     <tbody>
@@ -23,4 +24,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?= view('partials/pagination', ['paginator' => $paginator], null) ?>

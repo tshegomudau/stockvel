@@ -3,7 +3,15 @@
     'description' => 'Invite, create, and manage memberships for this stokvel.',
 ], null) ?>
 <div class="page-actions mb-4">
-    <a class="btn btn-primary" href="<?= e(url('/app/members/invite')) ?>">Invite member</a>
+    <?php if (!empty($canInvite) || !empty($canManage)): ?>
+        <a class="btn btn-primary" href="<?= e(url('/app/members/invite')) ?>">Invite member</a>
+    <?php endif; ?>
+    <a class="btn btn-secondary" href="<?= e(url('/app/members/invitations')) ?>">
+        Pending invitations<?= !empty($pendingInvitationCount) ? ' (' . (int) $pendingInvitationCount . ')' : '' ?>
+    </a>
+    <a class="btn btn-secondary" href="<?= e(url('/app/members?status=pending')) ?>">
+        Pending approval<?= !empty($pendingMembershipCount) ? ' (' . (int) $pendingMembershipCount . ')' : '' ?>
+    </a>
     <?php if (!empty($canManage)): ?>
         <a class="btn btn-secondary" href="<?= e(url('/app/members/create')) ?>">Create member</a>
         <a class="btn btn-secondary" href="<?= e(url('/app/members/import')) ?>">Bulk import</a>

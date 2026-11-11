@@ -13,16 +13,47 @@
 <?php endforeach; ?>
 
 <div class="grid grid-4">
-    <?= view('partials/stat-card', ['label' => 'Stokvels', 'value' => (string) ($metrics['stokvels'] ?? 0)], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Active', 'value' => (string) ($metrics['active_stokvels'] ?? 0)], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Suspended', 'value' => (string) ($metrics['suspended_stokvels'] ?? 0)], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Users', 'value' => (string) ($metrics['users'] ?? 0)], null) ?>
+    <?= view('partials/stat-card', [
+        'label' => 'Stokvels',
+        'value' => (string) ($metrics['stokvels'] ?? 0),
+        'url' => url('/platform/tenants'),
+    ], null) ?>
+    <?= view('partials/stat-card', [
+        'label' => 'Active',
+        'value' => (string) ($metrics['active_stokvels'] ?? 0),
+        'url' => url('/platform/tenants?status=active'),
+    ], null) ?>
+    <?= view('partials/stat-card', [
+        'label' => 'Suspended',
+        'value' => (string) ($metrics['suspended_stokvels'] ?? 0),
+        'url' => url('/platform/tenants?status=suspended'),
+    ], null) ?>
+    <?= view('partials/stat-card', [
+        'label' => 'Users',
+        'value' => (string) ($metrics['users'] ?? 0),
+        'url' => url('/platform/users'),
+    ], null) ?>
 </div>
 
 <div class="grid grid-3 mt-6">
-    <?= view('partials/stat-card', ['label' => 'Failed jobs', 'value' => (string) ($metrics['failed_jobs'] ?? 0), 'meta' => 'Notification queue failures'], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Open tickets', 'value' => (string) ($metrics['open_ticket_count'] ?? 0), 'meta' => 'Support queue'], null) ?>
-    <?= view('partials/stat-card', ['label' => 'Security events', 'value' => (string) ($metrics['security_events'] ?? 0), 'meta' => 'Auth-related audit entries'], null) ?>
+    <?= view('partials/stat-card', [
+        'label' => 'Failed jobs',
+        'value' => (string) ($metrics['failed_jobs'] ?? 0),
+        'meta' => 'Notification queue failures',
+        'url' => url('/platform/jobs'),
+    ], null) ?>
+    <?= view('partials/stat-card', [
+        'label' => 'Open tickets',
+        'value' => (string) ($metrics['open_ticket_count'] ?? 0),
+        'meta' => 'Support queue',
+        'url' => url('/platform/support'),
+    ], null) ?>
+    <?= view('partials/stat-card', [
+        'label' => 'Security events',
+        'value' => (string) ($metrics['security_events'] ?? 0),
+        'meta' => 'Auth-related audit entries',
+        'url' => !empty($canAudit) ? url('/platform/audit') : null,
+    ], null) ?>
 </div>
 
 <div class="quick-actions mt-6">

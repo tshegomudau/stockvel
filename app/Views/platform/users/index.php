@@ -7,6 +7,7 @@
 <section class="card mb-6">
     <h2>Stokvels without a chairperson</h2>
     <p class="text-muted mb-4">Appoint a chairperson from the stokvel’s member list.</p>
+    <div class="table-wrap">
     <table class="table">
         <thead><tr><th>Stokvel</th><th>Status</th><th>Members</th><th></th></tr></thead>
         <tbody>
@@ -22,6 +23,7 @@
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </section>
 <?php endif; ?>
 
@@ -29,6 +31,7 @@
     <input class="form-control" type="search" name="q" placeholder="Search chairpersons or stokvel" value="<?= e($search ?? '') ?>">
     <button type="submit" class="btn">Search</button>
 </form>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Name</th><th>Email</th><th>Stokvel</th><th>Verified</th><th></th></tr></thead>
     <tbody>
@@ -49,4 +52,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?= view('partials/pagination', ['paginator' => $paginator], null) ?>

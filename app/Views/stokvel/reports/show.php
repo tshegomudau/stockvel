@@ -11,6 +11,7 @@
 <?php if (empty($rows)): ?>
     <?= view('partials/empty', ['emptyTitle' => 'No data for this period'], null) ?>
 <?php else: ?>
+<div class="table-wrap">
 <table class="table">
     <thead>
         <tr>
@@ -29,4 +30,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?php endif; ?>

@@ -68,6 +68,7 @@ final class DashboardController extends Controller
             'activeNav' => 'platform-dashboard',
             'metrics' => $metrics,
             'alerts' => $alerts,
+            'canAudit' => platform_can('audit_logs.view'),
             'navContext' => 'platform',
         ]);
     }

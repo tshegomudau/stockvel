@@ -9,6 +9,7 @@
 </div>
 <?php else: ?>
 <div class="card">
+    <div class="table-wrap">
     <table class="data-table">
         <thead>
             <tr>
@@ -29,5 +30,6 @@
             <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
 <?php endif; ?>

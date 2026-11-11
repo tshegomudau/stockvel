@@ -1,4 +1,5 @@
 <h1>Statement — <?= e(trim(($member['first_name'] ?? '') . ' ' . ($member['last_name'] ?? ''))) ?></h1>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Date</th><th>Description</th><th>Amount</th></tr></thead>
     <tbody>
@@ -11,3 +12,4 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>

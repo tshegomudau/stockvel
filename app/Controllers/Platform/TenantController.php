@@ -28,12 +28,22 @@ final class TenantController extends Controller
         $page = $this->page($request);
         $perPage = $this->perPage($request);
         $search = trim((string) $request->query('q', ''));
+        $status = trim((string) $request->query('status', ''));
         $params = [];
         $where = '1=1';
         if ($search !== '') {
             $where .= ' AND (name LIKE :q OR registration_number LIKE :q)';
             $params['q'] = '%' . $search . '%';
         }
+        if ($status !== '' && in_array($status, ['active', 'suspended', 'draft', 'pending'], true)) {
+            $where .= ' AND status = :status';
+            $params['status'] = $status;
+        }
+
+        $filterQuery = array_filter([
+            'q' => $search !== '' ? $search : null,
+            'status' => $status !== '' ? $status : null,
+        ], static fn ($v) => $v !== null);
 
         $paginator = Paginator::fromQuery(
             $this->db(),
@@ -43,11 +53,12 @@ final class TenantController extends Controller
             $page,
             $perPage,
             url('/platform/tenants'),
-            $search !== '' ? ['q' => $search] : []
+            $filterQuery
         );
 
         return $this->render('platform/tenants/index', [
             'title' => 'Stokvels',
+            'statusFilter' => $status,
             'activeNav' => 'platform-tenants',
             'navContext' => 'platform',
             'paginator' => $paginator,

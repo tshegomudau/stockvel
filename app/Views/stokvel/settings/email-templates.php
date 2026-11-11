@@ -3,6 +3,7 @@
     'description' => 'Customise emails for this stokvel. Defaults include {{stokvel_name}}. Reset restores the sample message.',
 ], null) ?>
 <p><a href="<?= e(url('/app/settings')) ?>">← Settings</a></p>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Template</th><th>Customised</th><th></th></tr></thead>
     <tbody>
@@ -15,3 +16,4 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>

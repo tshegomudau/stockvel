@@ -3,7 +3,19 @@
   .app-topbar .page-title { padding-left: 3.25rem; }
   .topbar-inner { padding-left: 0.85rem; padding-right: 0.85rem; }
   .app-content { padding: 1rem 0.85rem 2rem; }
+  /* Clip page chrome, but never prevent .table-wrap from scrolling its own overflow. */
   body.app-layout { overflow-x: clip; }
+  .app-main,
+  .app-content {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+  .app-content .table-wrap,
+  .app-content .card,
+  .app-content .panel {
+    max-width: 100%;
+    min-width: 0;
+  }
   .filter-bar { align-items: stretch; }
   .filter-bar .form-group,
   .filter-bar .form-actions,

@@ -5,6 +5,7 @@
     'actionLabel' => 'Add admin',
 ], null) ?>
 <form method="get" class="filter-bar"><input class="form-control" type="search" name="q" value="<?= e($search ?? '') ?>" placeholder="Search email or name"><button class="btn btn-secondary" type="submit">Search</button></form>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -19,4 +20,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?= view('partials/pagination', ['paginator' => $paginator], null) ?>

@@ -217,6 +217,7 @@ $router->post('/app/beneficiaries/{id}/deactivate', [BeneficiaryController::clas
 $router->post('/app/beneficiaries/{id}/reactivate', [BeneficiaryController::class, 'reactivate'], $appMut);
 
 $router->get('/app/members', [MemberController::class, 'index'], $appRead);
+$router->get('/app/members/invitations', [MemberController::class, 'invitations'], $appRead);
 $router->get('/app/members/invite', [MemberController::class, 'inviteForm'], $appRead);
 $router->post('/app/members/invite', [MemberController::class, 'invite'], $appMut);
 $router->get('/app/members/create', [MemberController::class, 'createForm'], $appRead);

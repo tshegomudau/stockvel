@@ -8,9 +8,30 @@
 </div>
 <?php endif; ?>
 <div class="grid grid-3">
-<?= view('partials/stat-card', ['label' => 'Status', 'value' => ucfirst((string) ($membership['status'] ?? 'unknown'))], null) ?>
-<?= view('partials/stat-card', ['label' => 'Balance due', 'value' => money($balanceDue ?? 0), 'isMoney' => true], null) ?>
-<?= view('partials/stat-card', ['label' => 'Member number', 'value' => (string) ($membership['member_number'] ?? '—')], null) ?>
+<?= view('partials/stat-card', [
+    'label' => 'Status',
+    'value' => ucfirst((string) ($membership['status'] ?? 'unknown')),
+    'url' => url('/member/profile'),
+], null) ?>
+<?= view('partials/stat-card', [
+    'label' => 'Balance due',
+    'value' => money($balanceDue ?? 0),
+    'isMoney' => true,
+    'url' => url('/member/statement'),
+], null) ?>
+<?= view('partials/stat-card', [
+    'label' => 'Member number',
+    'value' => (string) ($membership['member_number'] ?? '—'),
+    'url' => url('/member/profile'),
+], null) ?>
+<?php if (!empty($pendingChangeCount)): ?>
+<?= view('partials/stat-card', [
+    'label' => 'Change requests',
+    'value' => (string) (int) $pendingChangeCount,
+    'meta' => 'Awaiting your approval',
+    'url' => url('/member/change-requests'),
+], null) ?>
+<?php endif; ?>
 </div>
 <?php if (!empty($pendingChangeCount)): ?>
 <div class="alert alert-warning mt-6">

@@ -80,6 +80,22 @@ final class MemberController extends Controller
             $owingByMember = [];
         }
 
+        $pendingInvitationCount = 0;
+        $pendingMembershipCount = 0;
+        try {
+            $pendingInvitationCount = (int) ($this->db()->fetch(
+                "SELECT COUNT(*) AS c FROM invitations WHERE stokvel_id = :sid AND status = 'pending'",
+                ['sid' => $sid]
+            )['c'] ?? 0);
+            $pendingMembershipCount = (int) ($this->db()->fetch(
+                "SELECT COUNT(*) AS c FROM memberships WHERE stokvel_id = :sid AND status IN ('pending', 'invited')",
+                ['sid' => $sid]
+            )['c'] ?? 0);
+        } catch (\Throwable) {
+            $pendingInvitationCount = 0;
+            $pendingMembershipCount = 0;
+        }
+
         return $this->render('stokvel/members/index', [
             'title' => 'Members',
             'activeNav' => 'members',
@@ -88,6 +104,31 @@ final class MemberController extends Controller
             'statusFilter' => $status,
             'q' => $q,
             'owingByMember' => $owingByMember,
+            'canManage' => $this->tenant()->can('members.manage'),
+            'canInvite' => $this->tenant()->can('members.invite'),
+            'pendingInvitationCount' => $pendingInvitationCount,
+            'pendingMembershipCount' => $pendingMembershipCount,
+        ]);
+    }
+
+    public function invitations(Request $request): Response
+    {
+        // Pending invites are visible to people who can view or invite members.
+        if (!$this->tenant()->can('members.view') && !$this->tenant()->can('members.invite')) {
+            $this->requirePermission('members.view');
+        }
+        $this->requireStokvel();
+
+        /** @var \App\Repositories\MembershipRepository $memberships */
+        $memberships = app()->container()->get(\App\Repositories\MembershipRepository::class);
+        $pendingInvitations = $memberships->listPendingInvitations(200);
+
+        return $this->render('stokvel/members/invitations', [
+            'title' => 'Pending invitations',
+            'activeNav' => 'members',
+            'navContext' => 'app',
+            'pendingInvitations' => $pendingInvitations,
+            'canInvite' => $this->tenant()->can('members.invite'),
             'canManage' => $this->tenant()->can('members.manage'),
         ]);
     }

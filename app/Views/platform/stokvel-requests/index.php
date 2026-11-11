@@ -12,6 +12,7 @@
         </select>
     </div>
 </form>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Stokvel</th><th>Requester</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
     <tbody>
@@ -26,4 +27,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?= view('partials/pagination', ['paginator' => $paginator], null) ?>

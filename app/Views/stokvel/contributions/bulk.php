@@ -2,6 +2,7 @@
     <h1>Bulk capture</h1>
     <form method="post" action="<?= e(url('/app/contributions/bulk')) ?>">
         <?= csrf_field() ?>
+        <div class="table-wrap">
         <table class="table">
             <thead><tr><th>Member</th><th>Amount</th><th>Date</th><th>Method</th></tr></thead>
             <tbody>
@@ -25,6 +26,7 @@
             <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
         <button type="submit" class="btn btn-primary">Save bulk entries</button>
     </form>
 </div>

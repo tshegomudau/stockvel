@@ -205,7 +205,10 @@ return static function (TestRunner $runner): void {
 
         test_assert(str_contains($tables, 'overflow-x: auto'), 'Tables must scroll horizontally inside wrap');
         test_assert(str_contains($tables, '.table-wrap'), 'table-wrap required');
+        test_assert(str_contains($tables, 'min-width: 0'), 'table-wrap must allow flex shrink on mobile');
+        test_assert(str_contains($tables, 'overscroll-behavior-x: contain'), 'Table scroll must not chain to page');
         test_assert(str_contains($tables, 'max-width: 719px') || str_contains($tables, 'mobile-cards'), 'Mobile card fallback required');
+        test_assert(str_contains($layout = (string) file_get_contents(dirname(__DIR__) . '/public/assets/css/layout.css'), 'min-width: 0'), 'app-content children need min-width 0');
         test_assert(str_contains($components, '.modal'), 'Modal component missing');
         test_assert(str_contains($components, 'width: min(32rem, 100%)'), 'Modal must cap to viewport');
         test_assert(str_contains($responsive, 'max-height: calc(100vh - 2rem)') || str_contains($responsive, '.modal'), 'Modal overflow at narrow width');

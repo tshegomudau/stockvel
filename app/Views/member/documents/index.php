@@ -9,6 +9,7 @@
         'emptyMessage' => 'Published documents will appear here.',
     ], null) ?>
 <?php else: ?>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Title</th><th>Category</th><th>Type</th><th></th></tr></thead>
     <tbody>
@@ -39,4 +40,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?php endif; ?>

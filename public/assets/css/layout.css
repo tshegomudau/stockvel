@@ -114,6 +114,11 @@ body.app-layout {
   margin: 0 auto;
   overflow-x: clip;
   box-sizing: border-box;
+  min-width: 0;
+}
+.app-content > * {
+  max-width: 100%;
+  min-width: 0;
 }
 @media (min-width: 960px) {
   .app-content { padding: 1.75rem 2rem 2.5rem; }

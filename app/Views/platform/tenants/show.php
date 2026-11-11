@@ -53,6 +53,7 @@
     </div>
     <div class="card">
         <h2>Members (recent)</h2>
+        <div class="table-wrap">
         <table class="table table-compact">
             <thead><tr><th>Name</th><th>Role</th><th>Status</th></tr></thead>
             <tbody>
@@ -65,6 +66,7 @@
             <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 

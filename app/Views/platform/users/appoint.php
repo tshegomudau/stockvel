@@ -20,6 +20,7 @@
         'emptyMessage' => 'This stokvel has no active members to appoint.',
     ], null) ?>
 <?php else: ?>
+<div class="table-wrap">
 <table class="table">
     <thead><tr><th>Name</th><th>Email</th><th>Member #</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -40,4 +41,5 @@
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
 <?php endif; ?>

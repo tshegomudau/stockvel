@@ -45,41 +45,77 @@ $pendingInvitations = is_array($pendingInvitations ?? null) ? $pendingInvitation
 <?php if ($hasAnyStat): ?>
 <div class="grid grid-4">
     <?php if (array_key_exists('members', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Active members', 'value' => (string) $stats['members']], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Active members',
+            'value' => (string) $stats['members'],
+            'url' => !empty($can['members']) ? url('/app/members') : null,
+        ], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('contributions_mtd', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Contributions (MTD)', 'value' => money($stats['contributions_mtd']), 'isMoney' => true], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Contributions (MTD)',
+            'value' => money($stats['contributions_mtd']),
+            'isMoney' => true,
+            'url' => !empty($can['contributions']) ? url('/app/contributions') : null,
+        ], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('arrears', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Outstanding', 'value' => money($stats['arrears']), 'isMoney' => true, 'meta' => 'Unpaid charges'], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Outstanding',
+            'value' => money($stats['arrears']),
+            'isMoney' => true,
+            'meta' => 'Unpaid charges',
+            'url' => !empty($can['contributions']) ? url('/app/contributions/arrears') : null,
+        ], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('pending_approvals', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Pending approvals', 'value' => (string) $stats['pending_approvals']], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Pending approvals',
+            'value' => (string) $stats['pending_approvals'],
+            'url' => !empty($can['approvals']) ? url('/app/approvals') : null,
+        ], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('pending_invitations', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Pending invitations', 'value' => (string) $stats['pending_invitations']], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Pending invitations',
+            'value' => (string) $stats['pending_invitations'],
+            'url' => (!empty($can['members']) || !empty($can['invite'])) ? url('/app/members/invitations') : null,
+        ], null) ?>
     <?php endif; ?>
 </div>
 
 <?php if (array_key_exists('upcoming_meetings', $stats) || array_key_exists('active_loans', $stats) || array_key_exists('admin_pocket_balance', $stats) || array_key_exists('group_health', $stats)): ?>
 <div class="grid grid-4 mt-6">
     <?php if (array_key_exists('upcoming_meetings', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Upcoming meetings', 'value' => (string) $stats['upcoming_meetings']], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Upcoming meetings',
+            'value' => (string) $stats['upcoming_meetings'],
+            'url' => !empty($can['meetings']) ? url('/app/meetings') : null,
+        ], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('active_loans', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Active loans', 'value' => (string) $stats['active_loans']], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Active loans',
+            'value' => (string) $stats['active_loans'],
+            'url' => !empty($can['loans']) ? url('/app/loans') : null,
+        ], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('admin_pocket_balance', $stats)): ?>
-        <?= view('partials/stat-card', ['label' => 'Admin pocket (ledger)', 'value' => money($stats['admin_pocket_balance']), 'isMoney' => true, 'meta' => 'Internal allocation'], null) ?>
+        <?= view('partials/stat-card', [
+            'label' => 'Admin pocket (ledger)',
+            'value' => money($stats['admin_pocket_balance']),
+            'isMoney' => true,
+            'meta' => 'Internal allocation',
+            'url' => !empty($can['fees']) ? url('/app/funds') : null,
+        ], null) ?>
     <?php endif; ?>
     <?php if (array_key_exists('group_health', $stats)): ?>
-        <a href="<?= e(url('/app/health')) ?>" style="text-decoration:none;color:inherit;">
-            <?= view('partials/stat-card', [
-                'label' => 'Group health',
-                'value' => (string) (int) $stats['group_health'] . ' / 100',
-                'meta' => trim((string) (($healthScore['band'] ?? '') . ' — not a credit rating')),
-            ], null) ?>
-        </a>
+        <?= view('partials/stat-card', [
+            'label' => 'Group health',
+            'value' => (string) (int) $stats['group_health'] . ' / 100',
+            'meta' => trim((string) (($healthScore['band'] ?? '') . ' — not a credit rating')),
+            'url' => !empty($can['reports']) ? url('/app/health') : null,
+        ], null) ?>
     <?php endif; ?>
 
 </div>
@@ -129,7 +165,7 @@ $pendingInvitations = is_array($pendingInvitations ?? null) ? $pendingInvitation
             <?php if (array_key_exists('pending_invitations', $stats)): ?>
             <li class="activity-item">
                 <div><strong>Pending invitations</strong></div>
-                <a href="<?= e(url('/app/members')) ?>"><?= (int) $stats['pending_invitations'] ?></a>
+                <a href="<?= e(url('/app/members/invitations')) ?>"><?= (int) $stats['pending_invitations'] ?></a>
             </li>
             <?php endif; ?>
             <?php if (array_key_exists('arrears', $stats)): ?>
@@ -156,9 +192,12 @@ $pendingInvitations = is_array($pendingInvitations ?? null) ? $pendingInvitation
             <h2 class="card-title">Pending invitations</h2>
             <p class="card-subtitle">Invited members who have not accepted yet</p>
         </div>
-        <?php if (!empty($can['invite'])): ?>
-            <a class="btn btn-secondary btn-sm" href="<?= e(url('/app/members/invite')) ?>">Invite more</a>
-        <?php endif; ?>
+        <div class="page-actions">
+            <a class="btn btn-secondary btn-sm" href="<?= e(url('/app/members/invitations')) ?>">View all</a>
+            <?php if (!empty($can['invite'])): ?>
+                <a class="btn btn-secondary btn-sm" href="<?= e(url('/app/members/invite')) ?>">Invite more</a>
+            <?php endif; ?>
+        </div>
     </div>
     <?php if ($pendingInvitations === []): ?>
         <?= view('partials/empty', [
@@ -178,7 +217,7 @@ $pendingInvitations = is_array($pendingInvitations ?? null) ? $pendingInvitation
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($pendingInvitations as $inv): ?>
+                    <?php foreach (array_slice($pendingInvitations, 0, 8) as $inv): ?>
                         <tr>
                             <td><?= e((string) ($inv['email'] ?? '—')) ?></td>
                             <td><?= e(ucfirst(str_replace('_', ' ', (string) ($inv['role_code'] ?? $inv['role_name'] ?? 'member')))) ?></td>
