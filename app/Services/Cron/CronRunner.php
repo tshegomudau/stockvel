@@ -208,24 +208,28 @@ final class CronRunner
         $cutoff = time() - ($retentionDays * 86400);
         $removed = 0;
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator(
-                $path,
-                \FilesystemIterator::SKIP_DOTS
-            )
+        $directory = new \RecursiveDirectoryIterator(
+            $path,
+            \FilesystemIterator::SKIP_DOTS
         );
 
-        foreach ($iterator as $file) {
-            if (!$file->isFile()) {
-                continue;
+        $filtered = new \RecursiveCallbackFilterIterator(
+            $directory,
+            static function (\SplFileInfo $file): bool {
+                return !in_array($file->getFilename(), ['.git', '.gitkeep'], true);
             }
+        );
 
-            $modifiedAt = $file->getMTime();
+        $iterator = new \RecursiveIteratorIterator($filtered);
 
-            if ($modifiedAt < $cutoff && @unlink($file->getPathname())) {
-                $removed++;
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getMTime() < $cutoff) {
+                if (@unlink($file->getPathname())) {
+                    $removed++;
+                }
             }
         }
+
         return $removed;
     }
 
