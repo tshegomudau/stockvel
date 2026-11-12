@@ -143,6 +143,11 @@ final class ApprovalService
         }
 
         $policy = $this->resolvePolicy($stokvelId, $requestType, $amount);
+        $required = $this->effectiveRequiredApprovals(
+            $stokvelId,
+            $requestedByUserId,
+            (int) $policy['min_approvals']
+        );
         $now = now_utc();
         $normalizedAmount = null;
         if ($amount !== null && $amount !== '') {
@@ -163,7 +168,7 @@ final class ApprovalService
                 'refid' => $referenceId,
                 'status' => 'pending',
                 'amount' => $normalizedAmount,
-                'req' => $policy['min_approvals'],
+                'req' => $required,
                 'by' => $requestedByUserId,
                 'ra' => $now,
                 'ca' => $now,
@@ -196,7 +201,7 @@ final class ApprovalService
     public function approve(int $stokvelId, int $requestId, int $userId, string $notes = ''): array
     {
         $row = $this->requirePending($stokvelId, $requestId);
-        $this->assertNotRequester($row, $userId);
+        $this->assertNotRequester($row, $userId, $stokvelId);
         $this->assertNoPriorDecision($stokvelId, $requestId, $userId);
 
         $now = now_utc();
@@ -217,15 +222,30 @@ final class ApprovalService
         );
 
         $approvalCount = $this->countApprovals($stokvelId, $requestId);
-        $required = max(1, (int) ($row['required_approvals'] ?? 1));
+        $required = $this->effectiveRequiredApprovals(
+            $stokvelId,
+            (int) ($row['requested_by_user_id'] ?? 0),
+            max(1, (int) ($row['required_approvals'] ?? 1))
+        );
 
         $this->db->exec(
-            'UPDATE approval_requests SET approval_count = :cnt, updated_at = :ua
+            'UPDATE approval_requests SET approval_count = :cnt, required_approvals = :req, updated_at = :ua
              WHERE id = :id AND stokvel_id = :sid',
-            ['cnt' => $approvalCount, 'ua' => $now, 'id' => $requestId, 'sid' => $stokvelId]
+            [
+                'cnt' => $approvalCount,
+                'req' => $required,
+                'ua' => $now,
+                'id' => $requestId,
+                'sid' => $stokvelId,
+            ]
         );
 
         $rolesOk = $this->requiredRolesSatisfied($stokvelId, $requestId, (string) ($row['request_type'] ?? ''), $row['amount'] ?? null);
+        // Role rules cannot block finalisation when the stokvel has no other eligible approvers.
+        $otherApprovers = $this->countEligibleApprovers($stokvelId, (int) ($row['requested_by_user_id'] ?? 0));
+        if ($otherApprovers < 1) {
+            $rolesOk = true;
+        }
         $finalised = $approvalCount >= $required && $rolesOk;
 
         if ($finalised) {
@@ -268,7 +288,7 @@ final class ApprovalService
         }
 
         $row = $this->requirePending($stokvelId, $requestId);
-        $this->assertNotRequester($row, $userId);
+        $this->assertNotRequester($row, $userId, $stokvelId);
         $this->assertNoPriorDecision($stokvelId, $requestId, $userId);
 
         $now = now_utc();
@@ -481,10 +501,62 @@ final class ApprovalService
     }
 
     /** @param array<string, mixed> $row */
-    private function assertNotRequester(array $row, int $userId): void
+    private function assertNotRequester(array $row, int $userId, int $stokvelId): void
     {
-        if ((int) ($row['requested_by_user_id'] ?? 0) === $userId) {
-            throw new FinanceException('You cannot approve or reject a request you submitted.');
+        $requesterId = (int) ($row['requested_by_user_id'] ?? 0);
+        if ($requesterId !== $userId) {
+            return;
+        }
+        // Solo-admin stokvels: allow the only eligible actor to decide on their own request.
+        if ($this->countEligibleApprovers($stokvelId, $requesterId) < 1) {
+            return;
+        }
+        throw new FinanceException('You cannot approve or reject a request you submitted.');
+    }
+
+    /**
+     * Cap policy thresholds to the number of people who can actually approve
+     * (excluding the requester). When nobody else can approve, require 1.
+     */
+    public function effectiveRequiredApprovals(int $stokvelId, int $requestedByUserId, int $policyMin): int
+    {
+        $policyMin = max(1, $policyMin);
+        $pool = $this->countEligibleApprovers($stokvelId, $requestedByUserId);
+        if ($pool < 1) {
+            return 1;
+        }
+
+        return max(1, min($policyMin, $pool));
+    }
+
+    /** Active members who can action approvals, excluding an optional user id. */
+    public function countEligibleApprovers(int $stokvelId, int $excludeUserId = 0): int
+    {
+        try {
+            $row = $this->db->fetch(
+                "SELECT COUNT(DISTINCT m.user_id) AS c
+                 FROM memberships m
+                 INNER JOIN membership_roles mr ON mr.membership_id = m.id AND mr.stokvel_id = m.stokvel_id
+                 INNER JOIN roles r ON r.id = mr.role_id
+                 LEFT JOIN role_permissions rp ON rp.role_id = r.id
+                 LEFT JOIN permissions p ON p.id = rp.permission_id
+                 WHERE m.stokvel_id = :sid
+                   AND m.status = 'active'
+                   AND (:exclude = 0 OR m.user_id <> :exclude2)
+                   AND (
+                        r.code IN ('chairperson', 'treasurer', 'secretary', 'committee_member')
+                        OR p.code IN ('*', 'approvals.action')
+                   )",
+                [
+                    'sid' => $stokvelId,
+                    'exclude' => $excludeUserId,
+                    'exclude2' => $excludeUserId,
+                ]
+            );
+
+            return max(0, (int) ($row['c'] ?? 0));
+        } catch (\Throwable) {
+            return 0;
         }
     }
 

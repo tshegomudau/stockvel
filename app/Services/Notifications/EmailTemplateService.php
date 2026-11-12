@@ -21,6 +21,12 @@ final class EmailTemplateService
             'body' => "Hello {{member_name}},\n\nYou have been invited to join {{stokvel_name}}.\n\nAccept your invitation:\n{{invite_url}}\n\nThis invitation expires on {{expires_at}}.\n\nIf you did not expect this email, you can ignore it.",
             'variables' => ['stokvel_name', 'member_name', 'invite_url', 'inviter_name', 'expires_at'],
         ],
+        'membership_approved' => [
+            'label' => 'Membership approved',
+            'subject' => 'Your membership of {{stokvel_name}} is approved',
+            'body' => "Hello {{member_name}},\n\nYour membership of {{stokvel_name}} has been approved.\n\nMember number: {{member_number}}\n\nYou can sign in and open the member portal:\n{{portal_url}}\n",
+            'variables' => ['stokvel_name', 'member_name', 'member_number', 'portal_url'],
+        ],
         'announcement' => [
             'label' => 'Announcement email',
             'subject' => '{{stokvel_name}}: {{announcement_title}}',

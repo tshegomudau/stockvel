@@ -167,7 +167,90 @@ final class MembershipService
             $this->joiningFees->chargeOnApproval($stokvelId, $membershipId, $approvedByUserId);
             $this->closePendingInviteApproval($stokvelId, $membershipId, $approvedByUserId, 'approved');
         }
-        return $this->memberships->findById($membershipId) ?? [];
+        $updated = $this->memberships->findById($membershipId) ?? [];
+        $this->notifyMemberApproved($updated, $stokvelId);
+
+        return $updated;
+    }
+
+    /** @param array<string, mixed> $membership */
+    private function notifyMemberApproved(array $membership, int $stokvelId): void
+    {
+        $userId = (int) ($membership['user_id'] ?? 0);
+        if ($userId < 1 || $stokvelId < 1) {
+            return;
+        }
+
+        $user = $this->users->findById($userId);
+        if ($user === null) {
+            return;
+        }
+
+        $memberName = trim((string) (($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')));
+        if ($memberName === '') {
+            $memberName = (string) ($user['email'] ?? 'Member');
+        }
+        $memberNumber = (string) ($membership['member_number'] ?? '—');
+        $stokvelName = (string) ($this->db->fetch(
+            'SELECT name FROM stokvels WHERE id = :id LIMIT 1',
+            ['id' => $stokvelId]
+        )['name'] ?? 'your stokvel');
+        $portalUrl = url('/member');
+
+        try {
+            $this->notifications->notifyInApp(
+                $userId,
+                'membership_approved',
+                'Membership approved',
+                'Your membership of ' . $stokvelName . ' is now active'
+                    . ($memberNumber !== '—' ? ' (member ' . $memberNumber . ').' : '.'),
+                $stokvelId,
+                ['membership_id' => (int) ($membership['id'] ?? 0), 'url' => '/member']
+            );
+        } catch (\Throwable) {
+            // In-app notify must not block approval.
+        }
+
+        $email = strtolower(trim((string) ($user['email'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        $subject = 'Your membership of ' . $stokvelName . ' is approved';
+        $body = "Hello {$memberName},\n\n"
+            . "Your membership of {$stokvelName} has been approved.\n\n"
+            . "Member number: {$memberNumber}\n\n"
+            . "Open the member portal:\n{$portalUrl}\n";
+
+        try {
+            $rendered = app()->container()
+                ->get(\App\Services\Notifications\EmailTemplateService::class)
+                ->render($stokvelId, 'membership_approved', [
+                    'stokvel_name' => $stokvelName,
+                    'member_name' => $memberName,
+                    'member_number' => $memberNumber,
+                    'portal_url' => $portalUrl,
+                ]);
+            $subject = $rendered['subject'];
+            $body = $rendered['body'];
+        } catch (\Throwable) {
+            // Keep plaintext fallback.
+        }
+
+        try {
+            $this->notifications->sendMailNow(
+                $email,
+                $subject,
+                $body,
+                [
+                    'type' => 'membership_approved',
+                    'membership_id' => (int) ($membership['id'] ?? 0),
+                    'stokvel_id' => $stokvelId,
+                ]
+            );
+        } catch (\Throwable) {
+            // Mail failures are audited via notification_jobs; approval must succeed.
+        }
     }
 
     public function suspend(int $membershipId, int $actorUserId, string $reason): array

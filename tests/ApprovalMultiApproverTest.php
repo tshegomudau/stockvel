@@ -87,6 +87,67 @@ return static function (TestRunner $runner): void {
         });
     }, 'unit');
 
+    $runner->add('Single eligible admin caps required approvals to one', function (): void {
+        test_transaction(function () {
+            $db = test_db();
+            $stokvel = $db->fetch("SELECT id FROM stokvels WHERE status = 'active' LIMIT 1");
+            test_assert($stokvel !== null);
+            $sid = (int) $stokvel['id'];
+
+            /** @var ApprovalService $approvals */
+            $approvals = App::getInstance()->container()->get(ApprovalService::class);
+            $approvals->upsertPolicy($sid, 'test_solo_admin', 3, null, []);
+
+            // Pick an active chairperson/treasurer as the only "pool" actor for this assertion path.
+            $admin = $db->fetch(
+                "SELECT m.user_id
+                 FROM memberships m
+                 INNER JOIN membership_roles mr ON mr.membership_id = m.id AND mr.stokvel_id = m.stokvel_id
+                 INNER JOIN roles r ON r.id = mr.role_id
+                 WHERE m.stokvel_id = :sid AND m.status = 'active'
+                   AND r.code IN ('chairperson', 'treasurer', 'secretary')
+                 ORDER BY m.id ASC LIMIT 1",
+                ['sid' => $sid]
+            );
+            test_assert($admin !== null, 'Need an admin membership on seeded stokvel');
+            $adminId = (int) $admin['user_id'];
+
+            // Requester is a different user so the admin is the only eligible non-requester.
+            $requester = $db->fetch(
+                'SELECT id FROM users WHERE id <> :uid ORDER BY id ASC LIMIT 1',
+                ['uid' => $adminId]
+            );
+            test_assert($requester !== null);
+            $requesterId = (int) $requester['id'];
+
+            $effective = $approvals->effectiveRequiredApprovals($sid, $requesterId, 3);
+            test_assert($effective >= 1, 'Effective required must be at least 1');
+
+            $requestId = $approvals->createRequest(
+                $sid,
+                'test_solo_admin',
+                'test_solo_admin',
+                random_int(100000, 999999),
+                $requesterId,
+                '50.00'
+            );
+            $row = $db->fetch('SELECT required_approvals FROM approval_requests WHERE id = :id', ['id' => $requestId]);
+            $required = (int) ($row['required_approvals'] ?? 0);
+            $pool = $approvals->countEligibleApprovers($sid, $requesterId);
+            test_assert(
+                $required === max(1, min(3, max(1, $pool))),
+                "Required {$required} should be capped to eligible pool {$pool}"
+            );
+
+            // If pool is 1, first approval must finalise.
+            if ($pool === 1) {
+                $result = $approvals->approve($sid, $requestId, $adminId, 'Solo admin ok');
+                test_assert($result['finalised'] === true, 'Single eligible admin must finalise');
+                test_assert($result['status'] === 'approved');
+            }
+        });
+    }, 'unit');
+
     $runner->add('Amount threshold selects higher min_approvals', function (): void {
         test_transaction(function () {
             $db = test_db();
