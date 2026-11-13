@@ -461,7 +461,10 @@ function home_path_for_user(?array $user): string
     try {
         /** @var \App\Services\Auth\AuthService $auth */
         $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
-        $memberships = $auth->membershipsForUser($userId);
+        $memberships = array_values(array_filter(
+            $auth->membershipsForUser($userId),
+            static fn (array $m): bool => in_array((string) ($m['status'] ?? ''), ['active', 'pending'], true)
+        ));
         if ($memberships === []) {
             if ($auth->hasOnlySuspendedStokvels($userId)) {
                 Session::forget('active_stokvel_id');
@@ -471,35 +474,56 @@ function home_path_for_user(?array $user): string
             return '/account/get-started';
         }
 
-        /** @var \App\Services\PermissionService $permissions */
-        $permissions = app()->container()->get(\App\Services\PermissionService::class);
-        $adminPerms = ['*', 'members.view', 'settings.manage', 'approvals.view', 'contributions.capture', 'fees.manage'];
-        foreach ($memberships as $membership) {
-            $codes = $permissions->codesForMembership($membership);
-            foreach ($adminPerms as $perm) {
-                if (in_array($perm, $codes, true)) {
-                    $stokvelId = (int) $membership['stokvel_id'];
-                    Session::set('active_stokvel_id', $stokvelId);
-                    Session::set('stokvel_id', $stokvelId);
-                    // Chairperson / settings managers land on the setup wizard until it is marked complete.
-                    if (in_array('*', $codes, true) || in_array('settings.manage', $codes, true)) {
-                        try {
-                            /** @var \App\Services\Onboarding\OnboardingService $onboarding */
-                            $onboarding = app()->container()->get(\App\Services\Onboarding\OnboardingService::class);
-                            if ($onboarding->needsSetup($stokvelId)) {
-                                return '/app/onboarding';
-                            }
-                        } catch (\Throwable) {
-                            // Fall through to dashboard if onboarding status cannot be resolved.
-                        }
-                    }
-                    return '/app';
+        $activeId = (int) (Session::get('active_stokvel_id') ?? Session::get('stokvel_id') ?? 0);
+        $selected = null;
+        if ($activeId > 0) {
+            foreach ($memberships as $membership) {
+                if ((int) ($membership['stokvel_id'] ?? 0) === $activeId) {
+                    $selected = $membership;
+                    break;
                 }
             }
         }
 
-        Session::set('active_stokvel_id', (int) $memberships[0]['stokvel_id']);
-        Session::set('stokvel_id', (int) $memberships[0]['stokvel_id']);
+        // Multi-stokvel users must choose explicitly when none is selected for this session.
+        if (count($memberships) > 1 && $selected === null) {
+            Session::forget('active_stokvel_id');
+            Session::forget('stokvel_id');
+            return '/account/select-stokvel';
+        }
+
+        $membership = $selected ?? $memberships[0];
+        $stokvelId = (int) $membership['stokvel_id'];
+        Session::set('active_stokvel_id', $stokvelId);
+        Session::set('stokvel_id', $stokvelId);
+
+        /** @var \App\Services\PermissionService $permissions */
+        $permissions = app()->container()->get(\App\Services\PermissionService::class);
+        $codes = $permissions->codesForMembership($membership);
+        $adminPerms = ['*', 'members.view', 'settings.manage', 'approvals.view', 'contributions.capture', 'fees.manage'];
+        $isAdmin = false;
+        foreach ($adminPerms as $perm) {
+            if (in_array($perm, $codes, true)) {
+                $isAdmin = true;
+                break;
+            }
+        }
+
+        if ($isAdmin) {
+            if (in_array('*', $codes, true) || in_array('settings.manage', $codes, true)) {
+                try {
+                    /** @var \App\Services\Onboarding\OnboardingService $onboarding */
+                    $onboarding = app()->container()->get(\App\Services\Onboarding\OnboardingService::class);
+                    if ($onboarding->needsSetup($stokvelId)) {
+                        return '/app/onboarding';
+                    }
+                } catch (\Throwable) {
+                    // Fall through to dashboard if onboarding status cannot be resolved.
+                }
+            }
+            return '/app';
+        }
+
         return '/member';
     } catch (\Throwable) {
         return '/account/get-started';

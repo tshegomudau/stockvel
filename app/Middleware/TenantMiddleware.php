@@ -32,10 +32,20 @@ final class TenantMiddleware implements MiddlewareInterface
 
         $stokvelId = $this->tenantContext->getActiveStokvelId();
         if ($stokvelId === null) {
-            $memberships = $this->auth->membershipsForUser((int) $this->auth->id());
+            $memberships = array_values(array_filter(
+                $this->auth->membershipsForUser((int) $this->auth->id()),
+                static fn (array $m): bool => in_array((string) ($m['status'] ?? ''), ['active', 'pending'], true)
+            ));
             if ($memberships === []) {
                 // New accounts without a membership land on get-started instead of a bare 403.
                 return \App\Core\Response::redirect(url('/account/get-started'));
+            }
+            if (count($memberships) > 1) {
+                $path = $request->path();
+                if ($path !== '/account/select-stokvel' && !str_starts_with($path, '/account/select-stokvel')) {
+                    \App\Core\Session::set('intended_url', '/' . ltrim($path, '/'));
+                }
+                return \App\Core\Response::redirect(url('/account/select-stokvel'));
             }
             $stokvelId = (int) $memberships[0]['stokvel_id'];
             $this->tenantContext->setActiveStokvelId($stokvelId);

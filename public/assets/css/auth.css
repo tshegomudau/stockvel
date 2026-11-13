@@ -28,3 +28,40 @@ body.guest-layout .auth-split > .card,
 body.guest-layout .auth-card {
   backdrop-filter: blur(2px);
 }
+
+.stokvel-picker {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.stokvel-picker-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+.stokvel-picker-item:hover,
+.stokvel-picker-item:focus-visible {
+  border-color: var(--color-primary);
+  outline: none;
+  background: color-mix(in srgb, var(--color-primary-soft) 55%, var(--color-surface));
+}
+.stokvel-picker-name {
+  font-weight: 650;
+  font-size: 1rem;
+}
+.stokvel-picker-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}

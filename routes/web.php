@@ -20,6 +20,7 @@ use App\Controllers\Member\ProfileController as MemberProfileController;
 use App\Controllers\Member\StatementController as MemberStatementController;
 use App\Controllers\Member\SupportController as MemberSupportController;
 use App\Controllers\Account\GetStartedController;
+use App\Controllers\Account\SelectStokvelController;
 use App\Controllers\Account\StokvelSuspendedController;
 use App\Controllers\Platform\AdminUserController as PlatformAdminUserController;
 use App\Controllers\Platform\AuditController as PlatformAuditController;
@@ -118,6 +119,8 @@ $router->get('/verify-email/notice', [AuthController::class, 'verifyNotice'], ar
 $router->post('/verify-email/resend', [AuthController::class, 'resendVerification'], array_merge($global, $auth, $csrf));
 
 $router->get('/account/get-started', [GetStartedController::class, 'index'], array_merge($global, $auth));
+$router->get('/account/select-stokvel', [SelectStokvelController::class, 'index'], array_merge($global, $auth));
+$router->post('/account/select-stokvel', [SelectStokvelController::class, 'select'], array_merge($global, $auth, $csrf));
 $router->get('/account/stokvel-suspended', [StokvelSuspendedController::class, 'index'], array_merge($global, $auth));
 
 $router->get('/invitations/{token}', [InvitationController::class, 'show'], $global);

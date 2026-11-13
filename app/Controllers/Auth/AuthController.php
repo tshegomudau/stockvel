@@ -63,6 +63,9 @@ final class AuthController extends Controller
         /** @var \App\Services\Auth\AuthService $auth */
         $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
         $auth->establishSession($user);
+        // Fresh login: multi-stokvel users must pick which tenant to open.
+        Session::forget('active_stokvel_id');
+        Session::forget('stokvel_id');
         if ($data['remember']) {
             try {
                 app()->container()->get(\App\Services\Auth\RememberTokenService::class)->create($userId);
@@ -73,12 +76,16 @@ final class AuthController extends Controller
         if (!empty($user['email_verified_at'])) {
             Session::flash('success', 'Welcome back, ' . ($user['first_name'] ?? 'member') . '.');
         }
+        $home = home_path_for_user($user);
+        if ($home === '/account/select-stokvel') {
+            return $this->redirect($home);
+        }
         $intended = Session::get('intended_url') ?? Session::getFlash('intended_url');
         Session::forget('intended_url');
         if (is_string($intended) && $intended !== '' && str_starts_with($intended, '/')) {
             return $this->redirect($intended);
         }
-        return $this->redirect(home_path_for_user($user));
+        return $this->redirect($home);
     }
 
     public function showRegister(Request $request): Response

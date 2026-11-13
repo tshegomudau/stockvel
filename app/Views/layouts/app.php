@@ -107,12 +107,18 @@ $topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/prof
                     <h1 class="page-title"><?= e($title ?? '') ?></h1>
                 </div>
                 <div class="topbar-actions">
-                    <?php if (!empty($memberships) && count($memberships) > 1): ?>
+                    <?php
+                    $switchableMemberships = array_values(array_filter(
+                        is_array($memberships) ? $memberships : [],
+                        static fn ($m): bool => is_array($m) && in_array((string) ($m['status'] ?? ''), ['active', 'pending'], true)
+                    ));
+                    ?>
+                    <?php if (count($switchableMemberships) > 1): ?>
                         <form method="post" action="<?= e(url('/app/switch-stokvel')) ?>" class="stokvel-switcher">
                             <?= csrf_field() ?>
                             <label class="sr-only" for="switch-stokvel">Switch stokvel</label>
                             <select class="form-control form-select" id="switch-stokvel" name="stokvel_id" onchange="this.form.submit()">
-                                <?php foreach ($memberships as $m): ?>
+                                <?php foreach ($switchableMemberships as $m): ?>
                                     <option value="<?= (int) $m['stokvel_id'] ?>" <?= ((int) ($stokvel['id'] ?? 0) === (int) $m['stokvel_id']) ? 'selected' : '' ?>>
                                         <?= e($m['stokvel_name'] ?? ('Stokvel #' . $m['stokvel_id'])) ?>
                                     </option>

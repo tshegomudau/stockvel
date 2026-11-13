@@ -234,6 +234,75 @@ return static function (TestRunner $runner): void {
         });
     }, 'integration');
 
+    $runner->add('Multi-stokvel user must select before home path resolves', function (): void {
+        test_transaction(function () {
+            $db = test_db();
+            $auth = App::getInstance()->container()->get(AuthService::class);
+            $email = 'multi_' . bin2hex(random_bytes(4)) . '@example.com';
+            $user = $auth->register([
+                'email' => $email,
+                'password' => 'Password123!',
+                'first_name' => 'Multi',
+                'last_name' => 'Link',
+            ]);
+            $userId = (int) $user['id'];
+            $now = now_utc();
+
+            $createMembership = static function (string $name) use ($db, $userId, $now): int {
+                $sid = (int) $db->insert(
+                    'INSERT INTO stokvels (uuid, name, slug, status, timezone, currency_code, created_at, updated_at)
+                     VALUES (:u, :n, :s, :st, :tz, :cc, :ca, :ua)',
+                    [
+                        'u' => bin2hex(random_bytes(8)),
+                        'n' => $name,
+                        's' => strtolower(preg_replace('/[^a-z0-9]+/i', '-', $name)) . '-' . bin2hex(random_bytes(2)),
+                        'st' => 'active',
+                        'tz' => 'Africa/Johannesburg',
+                        'cc' => 'ZAR',
+                        'ca' => $now,
+                        'ua' => $now,
+                    ]
+                );
+                $db->insert(
+                    'INSERT INTO memberships (stokvel_id, user_id, member_number, status, joined_at, approved_at, created_at, updated_at)
+                     VALUES (:sid, :uid, :mn, :st, :ja, :aa, :ca, :ua)',
+                    [
+                        'sid' => $sid,
+                        'uid' => $userId,
+                        'mn' => 'M-' . $sid,
+                        'st' => 'active',
+                        'ja' => $now,
+                        'aa' => $now,
+                        'ca' => $now,
+                        'ua' => $now,
+                    ]
+                );
+                return $sid;
+            };
+
+            $sidA = $createMembership('Alpha Circle ' . bin2hex(random_bytes(2)));
+            $sidB = $createMembership('Beta Circle ' . bin2hex(random_bytes(2)));
+
+            \App\Core\Session::forget('active_stokvel_id');
+            \App\Core\Session::forget('stokvel_id');
+            $fresh = $db->fetch('SELECT * FROM users WHERE id = :id', ['id' => $userId]);
+            test_assert(home_path_for_user($fresh) === '/account/select-stokvel', 'Multi link with no selection must pick stokvel');
+
+            $auth->switchStokvel($sidB, $userId);
+            test_assert((int) (\App\Core\Session::get('active_stokvel_id') ?? 0) === $sidB);
+            test_assert(home_path_for_user($fresh) === '/member', 'Selected membership without admin perms lands on member portal');
+
+            $auth->switchStokvel($sidA, $userId);
+            test_assert((int) (\App\Core\Session::get('active_stokvel_id') ?? 0) === $sidA);
+
+            $memberships = array_values(array_filter(
+                $auth->membershipsForUser($userId),
+                static fn (array $m): bool => in_array((string) ($m['status'] ?? ''), ['active', 'pending'], true)
+            ));
+            test_assert(count($memberships) === 2, 'Both active memberships must be switchable');
+        });
+    }, 'integration');
+
     $runner->add('Platform job retry uses scheduled_for not available_at', function (): void {
         test_transaction(function () {
             $db = test_db();

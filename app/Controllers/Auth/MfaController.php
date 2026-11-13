@@ -114,6 +114,9 @@ final class MfaController extends Controller
         /** @var AuthService $auth */
         $auth = app()->container()->get(AuthService::class);
         $auth->establishSession($user);
+        // Fresh login: multi-stokvel users must pick which tenant to open.
+        Session::forget('active_stokvel_id');
+        Session::forget('stokvel_id');
 
         $remember = (bool) Session::get('mfa_pending_remember');
         Session::forget('mfa_pending_user_id');
@@ -131,12 +134,16 @@ final class MfaController extends Controller
             Session::flash('success', 'Welcome back, ' . ($user['first_name'] ?? 'member') . '.');
         }
 
+        $home = home_path_for_user($user);
+        if ($home === '/account/select-stokvel') {
+            return $home;
+        }
         $intended = Session::get('intended_url') ?? Session::getFlash('intended_url');
         Session::forget('intended_url');
         if (is_string($intended) && $intended !== '' && str_starts_with($intended, '/')) {
             return $intended;
         }
-        return home_path_for_user($user);
+        return $home;
     }
 
     /** @return array<string, mixed> */
