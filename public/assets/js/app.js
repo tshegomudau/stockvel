@@ -752,6 +752,19 @@
     });
   }
 
+  function initStokvelSwitcher() {
+    // CSP blocks inline onchange handlers; bind from external JS instead.
+    qsa('[data-stokvel-switcher] [data-stokvel-switch], form.stokvel-switcher select[name="stokvel_id"]').forEach(function (select) {
+      if (select.dataset.switchBound === '1') return;
+      select.dataset.switchBound = '1';
+      select.addEventListener('change', function () {
+        if (select.form) {
+          select.form.submit();
+        }
+      });
+    });
+  }
+
   function initSelectAll() {
     qsa('[data-select-all]').forEach(function (master) {
       var scopeSel = master.getAttribute('data-select-all-scope') || '';
@@ -805,5 +818,6 @@
     initPasskeyLogin();
     initErrorGoBack();
     initSelectAll();
+    initStokvelSwitcher();
   });
 })();

@@ -118,10 +118,10 @@ $topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/prof
                         || ($isPlatformAdmin && (count($switchableMemberships) >= 1 || $navCtx === 'platform' || $activeSwitchId > 0));
                     ?>
                     <?php if ($showContextSwitcher): ?>
-                        <form method="post" action="<?= e(url('/app/switch-stokvel')) ?>" class="stokvel-switcher">
+                        <form method="post" action="<?= e(url('/app/switch-stokvel')) ?>" class="stokvel-switcher" data-stokvel-switcher>
                             <?= csrf_field() ?>
                             <label class="sr-only" for="switch-stokvel">Switch workspace</label>
-                            <select class="form-control form-select" id="switch-stokvel" name="stokvel_id" onchange="this.form.submit()">
+                            <select class="form-control form-select" id="switch-stokvel" name="stokvel_id" data-stokvel-switch>
                                 <?php if ($isPlatformAdmin): ?>
                                     <option value="platform" <?= ($navCtx === 'platform' || $activeSwitchId < 1) ? 'selected' : '' ?>>
                                         Platform console
@@ -134,6 +134,9 @@ $topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/prof
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <noscript>
+                                <button type="submit" class="btn btn-secondary btn-sm">Switch</button>
+                            </noscript>
                         </form>
                     <?php endif; ?>
 
