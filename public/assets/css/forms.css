@@ -218,6 +218,19 @@ select,
 }
 .form-check + .form-check { margin-top: 0.35rem; }
 
+.permission-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.permission-select-all input {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
 .form-actions {
   display: flex;
   gap: 0.65rem;

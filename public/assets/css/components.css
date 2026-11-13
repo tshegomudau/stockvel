@@ -469,3 +469,50 @@ body.wysiwyg-images-on .wysiwyg__editor img { display: inline-block !important; 
 }
 .prose-html p { margin: 0 0 0.75rem; }
 .prose-html ul, .prose-html ol { margin: 0.5rem 0 0.75rem 1.25rem; }
+
+/* Workspace / stokvel picker (also used on guest select page) */
+.stokvel-picker {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.stokvel-picker-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid var(--color-border, #d5dcd7);
+  border-radius: var(--radius-md, 0.75rem);
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #1c2a22);
+  cursor: pointer;
+  font: inherit;
+  box-shadow: 0 1px 2px rgba(28, 42, 34, 0.04);
+}
+.stokvel-picker-item:hover,
+.stokvel-picker-item:focus-visible {
+  border-color: var(--color-primary, #1a3d2b);
+  outline: none;
+  background: var(--color-primary-soft, #eef5f0);
+}
+.stokvel-picker-name {
+  font-weight: 650;
+  font-size: 1rem;
+}
+.stokvel-picker-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #5c6b63);
+}
+.stokvel-switcher {
+  min-width: 11rem;
+  max-width: 16rem;
+}
+.stokvel-switcher .form-select {
+  font-size: 0.875rem;
+  padding-block: 0.4rem;
+}

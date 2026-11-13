@@ -9,8 +9,12 @@
     <?php if (!empty($role['is_full_access'])): ?>
         <p class="text-muted">This role has full access and cannot be restricted.</p>
     <?php else: ?>
-    <form method="post" action="<?= e(url('/app/settings/roles/' . rawurlencode((string) ($role['code'] ?? '')))) ?>" class="form-stack">
+    <form method="post" action="<?= e(url('/app/settings/roles/' . rawurlencode((string) ($role['code'] ?? '')))) ?>" class="form-stack" id="role-permissions-form">
         <?= csrf_field() ?>
+        <label class="checkbox permission-select-all">
+            <input type="checkbox" data-select-all='input[type="checkbox"][name="permissions[]"]' data-select-all-scope="#role-permissions-form">
+            <span>Select all permissions</span>
+        </label>
         <div class="table-wrap">
             <table class="table">
                 <thead>

@@ -30,6 +30,9 @@ final class TenantMiddleware implements MiddlewareInterface
             throw new TenantException('Authentication required for tenant context.');
         }
 
+        $user = $this->auth->user();
+        $isPlatformAdmin = user_is_platform_admin(is_array($user) ? $user : null);
+
         $stokvelId = $this->tenantContext->getActiveStokvelId();
         if ($stokvelId === null) {
             $memberships = array_values(array_filter(
@@ -37,6 +40,9 @@ final class TenantMiddleware implements MiddlewareInterface
                 static fn (array $m): bool => in_array((string) ($m['status'] ?? ''), ['active', 'pending'], true)
             ));
             if ($memberships === []) {
+                if ($isPlatformAdmin) {
+                    return \App\Core\Response::redirect(url('/platform'));
+                }
                 // New accounts without a membership land on get-started instead of a bare 403.
                 return \App\Core\Response::redirect(url('/account/get-started'));
             }
@@ -55,18 +61,6 @@ final class TenantMiddleware implements MiddlewareInterface
             (int) $this->auth->id(),
             $stokvelId
         );
-        if ($membership === null) {
-            throw new TenantException('You are not a member of the selected stokvel.');
-        }
-
-        $membershipStatus = (string) ($membership['status'] ?? '');
-        // suspended members must not retain portal access; pending = invite accepted, awaiting activation.
-        if ($membershipStatus === 'suspended') {
-            throw new TenantException('Your membership is suspended for this stokvel.');
-        }
-        if (!in_array($membershipStatus, ['active', 'pending'], true)) {
-            throw new TenantException('Your membership is not active for this stokvel.');
-        }
 
         $stokvel = $this->tenantContext->getStokvel($stokvelId);
         if ($stokvel === null) {
@@ -76,22 +70,53 @@ final class TenantMiddleware implements MiddlewareInterface
         // Platform-suspended tenants cannot be used by members (platform admins use /platform).
         if ((string) ($stokvel['status'] ?? '') === 'suspended') {
             $this->tenantContext->setActiveStokvelId(null);
+            if ($isPlatformAdmin) {
+                return \App\Core\Response::redirect(url('/platform'));
+            }
             return \App\Core\Response::redirect(url('/account/stokvel-suspended'));
+        }
+
+        $this->coreTenant->setUser($user);
+
+        // Platform staff may open a tenant without a membership row.
+        if ($membership === null) {
+            if (!$isPlatformAdmin) {
+                throw new TenantException('You are not a member of the selected stokvel.');
+            }
+            $permissionCodes = $this->permissions->forPlatformRole((string) ($user['platform_role'] ?? ''));
+            $enabledModules = $this->loadEnabledModules($stokvelId);
+            $this->coreTenant->setTenant($stokvel, null, $permissionCodes, $enabledModules);
+            $request->setAttribute('stokvel_id', $stokvelId);
+            $request->setAttribute('membership', null);
+            $request->setAttribute('stokvel', $stokvel);
+            return $next($request);
+        }
+
+        $membershipStatus = (string) ($membership['status'] ?? '');
+        // suspended members must not retain portal access; pending = invite accepted, awaiting activation.
+        if ($membershipStatus === 'suspended' && !$isPlatformAdmin) {
+            throw new TenantException('Your membership is suspended for this stokvel.');
+        }
+        if (!in_array($membershipStatus, ['active', 'pending'], true) && !$isPlatformAdmin) {
+            throw new TenantException('Your membership is not active for this stokvel.');
         }
 
         // Pending members may only use the member portal — never /app management routes.
         $path = $request->path();
-        if ($membershipStatus === 'pending' && str_starts_with($path, '/app')) {
+        if ($membershipStatus === 'pending' && str_starts_with($path, '/app') && !$isPlatformAdmin) {
             return \App\Core\Response::redirect(url('/member'));
         }
 
         $permissionCodes = $this->permissions->codesForMembership($membership);
-        if ($membershipStatus === 'pending') {
+        if ($isPlatformAdmin) {
+            $platformCodes = $this->permissions->forPlatformRole((string) ($user['platform_role'] ?? ''));
+            $permissionCodes = array_values(array_unique(array_merge($permissionCodes, $platformCodes)));
+        }
+        if ($membershipStatus === 'pending' && !$isPlatformAdmin) {
             $permissionCodes = $this->limitPendingPermissions($permissionCodes);
         }
         $enabledModules = $this->loadEnabledModules($stokvelId);
 
-        $this->coreTenant->setUser($this->auth->user());
         $this->coreTenant->setTenant($stokvel, $membership, $permissionCodes, $enabledModules);
 
         $request->setAttribute('stokvel_id', $stokvelId);

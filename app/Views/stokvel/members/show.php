@@ -229,8 +229,12 @@ $defaultMinimumContribution = $defaultMinimumContribution ?? null;
 <div class="card">
     <h2>Extra permissions</h2>
     <p class="form-help mb-4">Grant or revoke app permissions beyond this member&apos;s role. Changes apply immediately.</p>
-    <form method="post" action="<?= e(url('/app/members/' . $memberId . '/permissions')) ?>">
+    <form method="post" action="<?= e(url('/app/members/' . $memberId . '/permissions')) ?>" id="member-permissions-form">
         <?= csrf_field() ?>
+        <label class="checkbox permission-select-all">
+            <input type="checkbox" data-select-all='input[type="checkbox"][name="permissions[]"]' data-select-all-scope="#member-permissions-form">
+            <span>Select all permissions</span>
+        </label>
         <div class="table-wrap">
             <table class="table table-compact">
                 <thead>

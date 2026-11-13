@@ -29,6 +29,23 @@ body.guest-layout .auth-card {
   backdrop-filter: blur(2px);
 }
 
+.stokvel-picker-card {
+  max-width: 36rem;
+  margin-inline: auto;
+}
+.brand-kicker--compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #5c6b63);
+}
+.brand-kicker--compact .brand-mark {
+  width: 2.1rem;
+  height: 2.1rem;
+  font-size: 0.95rem;
+}
 .stokvel-picker {
   list-style: none;
   margin: 1.25rem 0 0;
@@ -43,25 +60,29 @@ body.guest-layout .auth-card {
   align-items: flex-start;
   gap: 0.2rem;
   text-align: left;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
+  padding: 0.95rem 1.05rem;
+  border: 1px solid var(--color-border, #d5dcd7);
+  border-radius: var(--radius-md, 0.75rem);
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #1c2a22);
   cursor: pointer;
   font: inherit;
+  box-shadow: 0 1px 2px rgba(28, 42, 34, 0.04);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 .stokvel-picker-item:hover,
 .stokvel-picker-item:focus-visible {
-  border-color: var(--color-primary);
+  border-color: var(--color-primary, #1a3d2b);
   outline: none;
-  background: color-mix(in srgb, var(--color-primary-soft) 55%, var(--color-surface));
+  background: var(--color-primary-soft, #eef5f0);
+  box-shadow: 0 0 0 3px rgba(26, 61, 43, 0.12);
 }
 .stokvel-picker-name {
   font-weight: 650;
   font-size: 1rem;
+  color: var(--color-text, #1c2a22);
 }
 .stokvel-picker-meta {
   font-size: 0.85rem;
-  color: var(--color-text-muted);
+  color: var(--color-text-muted, #5c6b63);
 }

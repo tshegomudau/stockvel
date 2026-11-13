@@ -112,15 +112,25 @@ $topbarProfileUrl = $navCtx === 'platform' ? '/platform/profile' : '/member/prof
                         is_array($memberships) ? $memberships : [],
                         static fn ($m): bool => is_array($m) && in_array((string) ($m['status'] ?? ''), ['active', 'pending'], true)
                     ));
+                    $isPlatformAdmin = !empty($isPlatformAdmin) || (function_exists('user_is_platform_admin') && user_is_platform_admin(is_array($user ?? null) ? $user : null));
+                    $activeSwitchId = (int) (($stokvel['id'] ?? 0) ?: (\App\Core\Session::get('active_stokvel_id') ?? 0));
+                    $showContextSwitcher = count($switchableMemberships) > 1
+                        || ($isPlatformAdmin && (count($switchableMemberships) >= 1 || $navCtx === 'platform' || $activeSwitchId > 0));
                     ?>
-                    <?php if (count($switchableMemberships) > 1): ?>
+                    <?php if ($showContextSwitcher): ?>
                         <form method="post" action="<?= e(url('/app/switch-stokvel')) ?>" class="stokvel-switcher">
                             <?= csrf_field() ?>
-                            <label class="sr-only" for="switch-stokvel">Switch stokvel</label>
+                            <label class="sr-only" for="switch-stokvel">Switch workspace</label>
                             <select class="form-control form-select" id="switch-stokvel" name="stokvel_id" onchange="this.form.submit()">
+                                <?php if ($isPlatformAdmin): ?>
+                                    <option value="platform" <?= ($navCtx === 'platform' || $activeSwitchId < 1) ? 'selected' : '' ?>>
+                                        Platform console
+                                    </option>
+                                <?php endif; ?>
                                 <?php foreach ($switchableMemberships as $m): ?>
-                                    <option value="<?= (int) $m['stokvel_id'] ?>" <?= ((int) ($stokvel['id'] ?? 0) === (int) $m['stokvel_id']) ? 'selected' : '' ?>>
-                                        <?= e($m['stokvel_name'] ?? ('Stokvel #' . $m['stokvel_id'])) ?>
+                                    <?php $mid = (int) ($m['stokvel_id'] ?? 0); ?>
+                                    <option value="<?= $mid ?>" <?= ($navCtx !== 'platform' && $activeSwitchId === $mid) ? 'selected' : '' ?>>
+                                        <?= e($m['stokvel_name'] ?? ('Stokvel #' . $mid)) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>

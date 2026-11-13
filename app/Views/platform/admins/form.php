@@ -36,9 +36,15 @@ $canManage = $canManage ?? true;
                 <option value="<?= e($role) ?>"<?= (string) old('platform_role', $admin['platform_role'] ?? '') === $role ? ' selected' : '' ?>><?= e($role) ?></option>
             <?php endforeach; ?>
         </select></div>
-    <fieldset>
+    <fieldset id="admin-permissions">
         <legend class="h3">Additional permissions</legend>
         <p class="form-help">You can only grant permissions you hold. Super admins already have all access via role.</p>
+        <?php if ($canManage && !empty($permissionCatalog)): ?>
+            <label class="checkbox permission-select-all">
+                <input type="checkbox" data-select-all='input[type="checkbox"][name="permissions[]"]' data-select-all-scope="#admin-permissions">
+                <span>Select all permissions</span>
+            </label>
+        <?php endif; ?>
         <?php foreach (($permissionCatalog ?? []) as $code): ?>
             <label class="form-check">
                 <input type="checkbox" name="permissions[]" value="<?= e($code) ?>"

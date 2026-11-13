@@ -79,6 +79,7 @@ abstract class Controller
         $data['stokvel'] = $data['stokvel'] ?? $this->tenant()->stokvel();
         $data['activeNav'] = $data['activeNav'] ?? '';
         $data['navContext'] = $data['navContext'] ?? 'app';
+        $data['isPlatformAdmin'] = $data['isPlatformAdmin'] ?? $this->tenant()->isPlatformAdmin();
 
         if ($this->stokvelId() !== null) {
             try {

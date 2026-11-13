@@ -30,8 +30,12 @@
         <label class="form-label" for="description">Description</label>
         <textarea class="form-control form-textarea" id="description" name="description" rows="2"><?= e($role['description'] ?? '') ?></textarea>
     </div>
-    <fieldset class="form-section">
+    <fieldset class="form-section" id="platform-role-permissions">
         <legend>Permissions</legend>
+        <label class="checkbox permission-select-all">
+            <input type="checkbox" data-select-all='input[type="checkbox"][name="permissions[]"]' data-select-all-scope="#platform-role-permissions">
+            <span>Select all permissions</span>
+        </label>
         <div class="permission-grid">
             <?php foreach ($permissions as $perm): ?>
                 <?php $pid = (int) $perm['id']; ?>

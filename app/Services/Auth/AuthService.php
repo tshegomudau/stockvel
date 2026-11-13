@@ -261,20 +261,6 @@ final class AuthService
 
     public function switchStokvel(int $stokvelId, int $userId): void
     {
-        if ($this->tenant->isPlatformAdmin()) {
-            $stokvel = $this->db->fetch(
-                'SELECT * FROM stokvels WHERE id = :id LIMIT 1',
-                ['id' => $stokvelId]
-            );
-            if ($stokvel) {
-                Session::set('active_stokvel_id', $stokvelId);
-                Session::set('stokvel_id', $stokvelId);
-                $perms = $this->permissions->forPlatformRole((string) ($this->tenant->platformRole() ?? ''));
-                $this->tenant->setTenant($stokvel, null, $perms, $this->loadEnabledModules($stokvelId));
-            }
-            return;
-        }
-
         $membership = $this->db->fetch(
             'SELECT m.*, s.name, s.slug, s.status AS stokvel_status
              FROM memberships m
@@ -284,6 +270,30 @@ final class AuthService
              LIMIT 1',
             ['sid' => $stokvelId, 'uid' => $userId]
         );
+
+        if ($this->tenant->isPlatformAdmin()) {
+            $stokvel = $this->db->fetch(
+                'SELECT * FROM stokvels WHERE id = :id LIMIT 1',
+                ['id' => $stokvelId]
+            );
+            if ($stokvel === null) {
+                throw new HttpException(404, 'Stokvel not found.');
+            }
+            if ((string) ($stokvel['status'] ?? '') === 'suspended') {
+                Session::forget('active_stokvel_id');
+                Session::forget('stokvel_id');
+                throw new HttpException(403, 'This stokvel has been suspended.');
+            }
+
+            $platformPerms = $this->permissions->forPlatformRole((string) ($this->tenant->platformRole() ?? ''));
+            $memberPerms = $membership !== null ? $this->permissions->codesForMembership($membership) : [];
+            $perms = array_values(array_unique(array_merge($memberPerms, $platformPerms)));
+            Session::set('active_stokvel_id', $stokvelId);
+            Session::set('stokvel_id', $stokvelId);
+            $this->tenant->setTenant($stokvel, $membership, $perms, $this->loadEnabledModules($stokvelId));
+            return;
+        }
+
         if (!$membership) {
             throw new HttpException(403, 'Not a member of this stokvel.');
         }

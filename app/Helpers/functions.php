@@ -436,7 +436,27 @@ function module_enabled(string $moduleKey): bool
 }
 
 /**
+ * True when the user row has a platform console role.
+ *
+ * @param array<string, mixed>|null $user
+ */
+function user_is_platform_admin(?array $user): bool
+{
+    if ($user === null) {
+        return false;
+    }
+    return in_array((string) ($user['platform_role'] ?? ''), [
+        'platform_super_admin',
+        'platform_support',
+        'platform_auditor',
+        'super_admin',
+        'support',
+    ], true);
+}
+
+/**
  * Best landing path after auth for a user row (platform → /platform, committee → /app, else /member).
+ * When a stokvel is already selected in session (including for platform staff), prefer that workspace.
  *
  * @param array<string, mixed>|null $user
  */
@@ -446,18 +466,10 @@ function home_path_for_user(?array $user): string
         return '/login';
     }
 
-    $platformRole = (string) ($user['platform_role'] ?? '');
-    if (in_array($platformRole, [
-        'platform_super_admin',
-        'platform_support',
-        'platform_auditor',
-        'super_admin',
-        'support',
-    ], true)) {
-        return '/platform';
-    }
-
     $userId = (int) $user['id'];
+    $isPlatform = user_is_platform_admin($user);
+    $activeId = (int) (Session::get('active_stokvel_id') ?? Session::get('stokvel_id') ?? 0);
+
     try {
         /** @var \App\Services\Auth\AuthService $auth */
         $auth = app()->container()->get(\App\Services\Auth\AuthService::class);
@@ -465,16 +477,29 @@ function home_path_for_user(?array $user): string
             $auth->membershipsForUser($userId),
             static fn (array $m): bool => in_array((string) ($m['status'] ?? ''), ['active', 'pending'], true)
         ));
+
+        // Platform console when no tenant is selected — unless they also have multiple
+        // stokvel memberships and should pick a workspace first.
+        if ($isPlatform && $activeId < 1) {
+            if (count($memberships) > 1) {
+                return '/account/select-stokvel';
+            }
+            return '/platform';
+        }
+
         if ($memberships === []) {
+            if ($isPlatform && $activeId > 0) {
+                // Platform staff can open any tenant without a membership row.
+                return '/app';
+            }
             if ($auth->hasOnlySuspendedStokvels($userId)) {
                 Session::forget('active_stokvel_id');
                 Session::forget('stokvel_id');
                 return '/account/stokvel-suspended';
             }
-            return '/account/get-started';
+            return $isPlatform ? '/platform' : '/account/get-started';
         }
 
-        $activeId = (int) (Session::get('active_stokvel_id') ?? Session::get('stokvel_id') ?? 0);
         $selected = null;
         if ($activeId > 0) {
             foreach ($memberships as $membership) {
@@ -486,10 +511,15 @@ function home_path_for_user(?array $user): string
         }
 
         // Multi-stokvel users must choose explicitly when none is selected for this session.
-        if (count($memberships) > 1 && $selected === null) {
+        if (count($memberships) > 1 && $selected === null && $activeId < 1) {
             Session::forget('active_stokvel_id');
             Session::forget('stokvel_id');
             return '/account/select-stokvel';
+        }
+
+        // Platform staff selected a tenant they are not a member of.
+        if ($isPlatform && $activeId > 0 && $selected === null) {
+            return '/app';
         }
 
         $membership = $selected ?? $memberships[0];
@@ -501,7 +531,7 @@ function home_path_for_user(?array $user): string
         $permissions = app()->container()->get(\App\Services\PermissionService::class);
         $codes = $permissions->codesForMembership($membership);
         $adminPerms = ['*', 'members.view', 'settings.manage', 'approvals.view', 'contributions.capture', 'fees.manage'];
-        $isAdmin = false;
+        $isAdmin = $isPlatform;
         foreach ($adminPerms as $perm) {
             if (in_array($perm, $codes, true)) {
                 $isAdmin = true;
@@ -510,7 +540,7 @@ function home_path_for_user(?array $user): string
         }
 
         if ($isAdmin) {
-            if (in_array('*', $codes, true) || in_array('settings.manage', $codes, true)) {
+            if (!$isPlatform && (in_array('*', $codes, true) || in_array('settings.manage', $codes, true))) {
                 try {
                     /** @var \App\Services\Onboarding\OnboardingService $onboarding */
                     $onboarding = app()->container()->get(\App\Services\Onboarding\OnboardingService::class);
@@ -526,6 +556,6 @@ function home_path_for_user(?array $user): string
 
         return '/member';
     } catch (\Throwable) {
-        return '/account/get-started';
+        return $isPlatform ? '/platform' : '/account/get-started';
     }
 }

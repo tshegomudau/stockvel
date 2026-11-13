@@ -752,6 +752,42 @@
     });
   }
 
+  function initSelectAll() {
+    qsa('[data-select-all]').forEach(function (master) {
+      var scopeSel = master.getAttribute('data-select-all-scope') || '';
+      var itemSel = master.getAttribute('data-select-all') || 'input[type="checkbox"][name="permissions[]"]';
+      var scope = scopeSel ? qs(scopeSel) : (master.closest('form') || master.closest('fieldset') || doc);
+
+      function items() {
+        return qsa(itemSel, scope).filter(function (el) {
+          return el !== master && !el.disabled;
+        });
+      }
+
+      function syncMaster() {
+        var list = items();
+        if (!list.length) {
+          master.checked = false;
+          master.indeterminate = false;
+          return;
+        }
+        var checked = list.filter(function (el) { return el.checked; }).length;
+        master.checked = checked === list.length;
+        master.indeterminate = checked > 0 && checked < list.length;
+      }
+
+      master.addEventListener('change', function () {
+        var on = master.checked;
+        items().forEach(function (el) { el.checked = on; });
+        master.indeterminate = false;
+      });
+      items().forEach(function (el) {
+        el.addEventListener('change', syncMaster);
+      });
+      syncMaster();
+    });
+  }
+
   doc.addEventListener('DOMContentLoaded', function () {
     initDrawer();
     initDropdowns();
@@ -768,5 +804,6 @@
     initPasskeyRegister();
     initPasskeyLogin();
     initErrorGoBack();
+    initSelectAll();
   });
 })();
