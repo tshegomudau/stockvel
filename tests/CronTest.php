@@ -120,24 +120,34 @@ return static function (TestRunner $runner): void {
         test_transaction(function () {
             $db = test_db();
             $sid = (int) ($db->fetch('SELECT id FROM stokvels LIMIT 1')['id'] ?? 0);
+            $dueAt = (new DateTimeImmutable(now_utc(), new DateTimeZone(app_timezone())))
+                ->modify('-1 minute')
+                ->format('Y-m-d H:i:s');
             $jobId = (int) $db->insert(
                 'INSERT INTO notification_jobs (stokvel_id, channel, recipient, body, status, attempt_count, max_attempts, scheduled_for, created_at, updated_at)
                  VALUES (:sid, :ch, :rec, :body, :st, 0, 3, :sf, :ca, :ua)',
                 [
                     'sid' => $sid ?: null,
                     'ch' => 'invalid_channel',
-                    'rec' => 'test@example.co.za',
+                    'rec' => 'retry_' . bin2hex(random_bytes(3)) . '@example.co.za',
                     'body' => 'retry test',
                     'st' => 'pending',
-                    'sf' => now_utc(),
+                    'sf' => $dueAt,
                     'ca' => now_utc(),
                     'ua' => now_utc(),
                 ]
             );
+            test_assert($jobId > 0, 'Expected notification job insert id');
+
             $queue = App::getInstance()->container()->get(NotificationQueueService::class);
-            $queue->processDue(5);
-            $job = $db->fetch('SELECT attempt_count, status FROM notification_jobs WHERE id = :id', ['id' => $jobId]);
-            test_assert($job && (int) $job['attempt_count'] >= 1);
+            // Target this job directly so other due rows cannot starve the assertion.
+            $ok = $queue->processJobById($jobId);
+            test_assert($ok === false, 'Invalid channel must fail delivery');
+
+            $job = $db->fetch('SELECT attempt_count, status, last_error FROM notification_jobs WHERE id = :id', ['id' => $jobId]);
+            test_assert($job !== null, 'Notification job missing after process');
+            test_assert((int) $job['attempt_count'] >= 1, 'Failed delivery must increment attempt_count');
+            test_assert(in_array((string) $job['status'], ['failed', 'dead'], true), 'Failed delivery must mark job failed/dead');
         });
     });
 };

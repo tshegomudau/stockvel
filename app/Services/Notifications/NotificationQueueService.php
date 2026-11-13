@@ -59,7 +59,7 @@ final class NotificationQueueService
              WHERE status IN (\'pending\', \'failed\')
              AND scheduled_for <= :now
              AND attempt_count < max_attempts
-             ORDER BY scheduled_for ASC
+             ORDER BY scheduled_for ASC, id ASC
              LIMIT ' . (int) $limit,
             ['now' => now_utc()]
         );
@@ -93,7 +93,8 @@ final class NotificationQueueService
         $attempt = (int) $job['attempt_count'] + 1;
 
         try {
-            $ok = match ((string) $job['channel']) {
+            $channel = (string) $job['channel'];
+            $ok = match ($channel) {
                 'mail' => $this->mail->send(
                     (string) $job['recipient'],
                     (string) ($job['subject'] ?? 'Notification'),
@@ -110,7 +111,7 @@ final class NotificationQueueService
                     (string) $job['body'],
                     $this->decodePayload($job['payload_json'] ?? null)
                 ),
-                default => false,
+                default => throw new \RuntimeException('Unsupported notification channel: ' . $channel),
             };
 
             if (!$ok) {
