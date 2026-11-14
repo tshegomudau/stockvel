@@ -20,4 +20,9 @@ if ($path !== '/' && $path !== '') {
     }
 }
 
+
 require __DIR__ . '/index.php';
+
+http_response_code(403);
+echo "Forbidden\n";
+exit;

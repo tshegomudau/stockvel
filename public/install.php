@@ -1,4 +1,7 @@
 <?php
+http_response_code(403);
+echo "Forbidden\n";
+exit;
 
 declare(strict_types=1);
 
